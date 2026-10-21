@@ -179,6 +179,18 @@ namespace osu.Game.Beatmaps
                             case ModHidden:
                                 multiplier *= 1.035;
                                 break;
+
+                            case ModRelax:
+                                multiplier *= skillReductionFactor(baseStars, -0.2248, -0.0638);
+                                break;
+
+                            case ModTouchDevice:
+                                multiplier *= skillReductionFactor(baseStars, -0.1183, -0.0137);
+                                break;
+
+                            case IAffectsDifficulty:
+                                multiplier *= osuAffectsDifficultyFactor(mod, baseStars);
+                                break;
                         }
                     }
                     break;
@@ -186,6 +198,40 @@ namespace osu.Game.Beatmaps
 
             return baseStars * multiplier;
         }
+
+        // The Relax, Autopilot, Touch Device, Magnetised and Freeze Frame factors below were fitted to the osu! difficulty calculator,
+        // on log(exact / nomod) star rating against log(nomod star rating) across a sample of real beatmaps.
+        // They only depend on star rating, so they never change the nomod order.
+
+        /// <summary>
+        /// Autopilot, Magnetised and Freeze Frame are osu!-only mods, so they're matched by acronym.
+        /// </summary>
+        private static double osuAffectsDifficultyFactor(Mod mod, double baseStars)
+        {
+            switch (mod.Acronym)
+            {
+                case @"AP":
+                    return skillReductionFactor(baseStars, -0.9283, 0.1139);
+
+                case @"MG":
+                    // The calculator scales aim, reading and flashlight by (1 - attraction strength).
+                    float strength = mod.SettingsMap.TryGetValue(@"attraction_strength", out var setting) && setting is IBindable<float> bindable ? bindable.Value : 0.5f;
+                    return skillReductionFactor(baseStars, -0.6129, 0.1114, strength);
+
+                case @"FR":
+                    // Freeze Frame changes when objects appear, which never lowered star rating in the measured sample.
+                    return Math.Max(1, Math.Exp(0.2774 - 0.1044 * Math.Log(baseStars)));
+
+                default:
+                    return 1;
+            }
+        }
+
+        /// <summary>
+        /// Relax, Autopilot, Touch Device and Magnetised only scale skills down in the calculator, so they never raise star rating.
+        /// </summary>
+        private static double skillReductionFactor(double baseStars, double a, double b, double scale = 1)
+            => Math.Min(1, Math.Exp(scale * (a + b * Math.Log(baseStars))));
 
         private static bool tryGetDifficultySetting(ModDifficultyAdjust mod, string key, out float value)
         {
