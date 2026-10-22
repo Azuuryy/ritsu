@@ -705,6 +705,94 @@ namespace osu.Game.Tests.Beatmaps
             Assert.That(approximate(5, rateMod(1.5), difficultyAdjust) / approximate(5, difficultyAdjust), Is.EqualTo(approximate(10, rateMod(1.5)) / 5).Within(1e-9));
         }
 
+        private static readonly Mod[] speed_up_scaled_mods =
+        {
+            new OsuModDifficultyAdjust { ApproachRate = { Value = 7 } },
+            new OsuModDifficultyAdjust { ExtendedLimits = { Value = true }, ApproachRate = { Value = 3 } },
+            new OsuModRelax(),
+            new OsuModFreezeFrame(),
+        };
+
+        // Ranges are the 10th-90th percentile of the exact calculator's response relative to the same speed-up alone,
+        // measured on real beatmaps near that star rating and approach rate.
+        private static readonly object[] speed_up_scaled_ranges =
+        {
+            new object[] { new OsuModDifficultyAdjust { ApproachRate = { Value = 7 } }, 1.2, 5.0, 9f, 1.01, 1.06 },
+            new object[] { new OsuModDifficultyAdjust { ApproachRate = { Value = 7 } }, 1.5, 5.0, 9f, 1.00, 1.04 },
+            new object[] { new OsuModFreezeFrame(), 1.2, 3.0, 6f, 1.13, 1.39 },
+            new object[] { new OsuModFreezeFrame(), 2.0, 3.0, 6f, 1.05, 1.20 },
+            new object[] { new OsuModFreezeFrame(), 1.2, 5.0, 9.3f, 1.02, 1.13 },
+            new object[] { new OsuModFreezeFrame(), 2.0, 5.0, 9.3f, 0.97, 1.01 },
+            new object[] { new OsuModRelax(), 1.2, 2.0, 9f, 0.72, 0.81 },
+            new object[] { new OsuModRelax(), 2.0, 2.0, 9f, 0.71, 0.81 },
+            new object[] { new OsuModRelax(), 1.2, 7.0, 9f, 0.61, 0.76 },
+            new object[] { new OsuModRelax(), 2.0, 7.0, 9f, 0.53, 0.71 },
+        };
+
+        [TestCaseSource(nameof(speed_up_scaled_ranges))]
+        public void TestApproximateStarRatingSpeedUpScaledMods(Mod mod, double rate, double stars, float approachRate, double minimumRatio, double maximumRatio)
+        {
+            var bInfo = osuBeatmap(stars, approachRate);
+            double speedUpOnly = StarRatingApproximator.Approximate(bInfo, null, new[] { rateMod(rate) });
+
+            Assert.That(StarRatingApproximator.Approximate(bInfo, null, new[] { rateMod(rate), mod }) / speedUpOnly, Is.InRange(minimumRatio, maximumRatio));
+        }
+
+        [TestCaseSource(nameof(speed_up_scaled_mods))]
+        public void TestApproximateStarRatingSpeedUpScalingIsOffWithoutSpeedUp(Mod mod)
+        {
+            var bInfo = osuBeatmap(5, 9);
+            double factor = StarRatingApproximator.Approximate(bInfo, null, new[] { mod }) / 5;
+
+            foreach (double rate in new[] { 0.5, 0.75, 0.99 })
+            {
+                double slowDownOnly = StarRatingApproximator.Approximate(bInfo, null, new[] { rateMod(rate) });
+                Assert.That(StarRatingApproximator.Approximate(bInfo, null, new[] { rateMod(rate), mod }) / slowDownOnly, Is.EqualTo(factor).Within(1e-9));
+            }
+        }
+
+        [TestCase(7f)]
+        [TestCase(3f)]
+        public void TestApproximateStarRatingLoweredApproachRateUnderSpeedUp(float approachRate)
+        {
+            var bInfo = osuBeatmap(5, 9);
+            var difficultyAdjust = new OsuModDifficultyAdjust { ExtendedLimits = { Value = true }, ApproachRate = { Value = approachRate } };
+            double previous = StarRatingApproximator.Approximate(bInfo, null, new Mod[] { difficultyAdjust }) / 5;
+
+            // The boost from lowering approach rate shrinks as the rate goes up, but never turns into a reduction up to DT 2.0.
+            // The calculator does reduce star rating there for some beatmaps (lowering AR 9 to 7 at DT 2.0), which this doesn't follow.
+            for (int i = 101; i <= 200; i++)
+            {
+                double speedUpOnly = StarRatingApproximator.Approximate(bInfo, null, new[] { rateMod(i / 100.0) });
+                double boost = StarRatingApproximator.Approximate(bInfo, null, new[] { rateMod(i / 100.0), difficultyAdjust }) / speedUpOnly;
+
+                Assert.That(boost, Is.GreaterThan(1).And.LessThan(previous), $"at rate {i / 100.0}");
+                previous = boost;
+            }
+
+            // Raising approach rate isn't scaled.
+            var raised = new OsuModDifficultyAdjust { ApproachRate = { Value = 10 } };
+            Assert.That(StarRatingApproximator.Approximate(bInfo, null, new[] { rateMod(2.0), raised }) / StarRatingApproximator.Approximate(osuBeatmap(5, 10), null, new[] { rateMod(2.0) }),
+                Is.EqualTo(StarRatingApproximator.Approximate(bInfo, null, new Mod[] { raised }) / 5).Within(1e-9));
+        }
+
+        [Test]
+        public void TestApproximateStarRatingSpeedUpScaledModsKeepNomodOrder([Values(1.2, 2.0)] double rate, [Values(6f, 10f)] float approachRate)
+        {
+            foreach (var mod in speed_up_scaled_mods)
+            {
+                double previous = 0;
+
+                for (double baseStars = 0.1; baseStars <= 15; baseStars += 0.1)
+                {
+                    double stars = StarRatingApproximator.Approximate(osuBeatmap(baseStars, approachRate), null, new[] { rateMod(rate), mod });
+
+                    Assert.That(stars, Is.GreaterThan(previous), $"order changed at {baseStars}★ with {mod.Acronym}");
+                    previous = stars;
+                }
+            }
+        }
+
         [Test]
         public void TestInitialValueUsesEffectiveStarRating()
         {

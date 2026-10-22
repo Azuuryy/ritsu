@@ -106,6 +106,10 @@ namespace osu.Game.Beatmaps
                     double cs = diff?.CircleSize ?? 4f;
                     double approachRate = diff?.ApproachRate ?? IBeatmapDifficultyInfo.DEFAULT_DIFFICULTY;
 
+                    // log(rate) on a speed-up, 0 otherwise. Lowered Difficulty Adjust approach rate, Relax and Freeze Frame don't multiply with a speed-up
+                    // in the calculator, so below their factors are raised to a power fitted on DT 1.2-2.0 (a power of 1 at or below rate 1).
+                    double speedUp = rate - 1.0 > 0.001 ? Math.Log(rate) : 0;
+
                     // Clock rate scaling
                     if (Math.Abs(rate - 1.0) > 0.001)
                     {
@@ -164,7 +168,15 @@ namespace osu.Game.Beatmaps
                                     if (tryGetDifficultySetting(da, "circle_size", out float csVal))
                                         multiplier *= difficultyAdjustCircleSizeFactor(diff.CircleSize, csVal);
                                     if (tryGetDifficultySetting(da, "approach_rate", out float arVal))
-                                        multiplier *= difficultyAdjustApproachRateFactor(diff.ApproachRate, arVal, baseStars);
+                                    {
+                                        double arFactor = difficultyAdjustApproachRateFactor(diff.ApproachRate, arVal, baseStars);
+
+                                        // A speed-up already shortens the preempt, so lowering approach rate adds less reading difficulty.
+                                        if (arVal < diff.ApproachRate)
+                                            arFactor = Math.Pow(arFactor, 1 - 1.3320 * speedUp);
+
+                                        multiplier *= arFactor;
+                                    }
                                     if (tryGetDifficultySetting(da, "overall_difficulty", out float odVal))
                                         multiplier *= difficultyAdjustOverallDifficultyFactor(diff.OverallDifficulty, odVal);
                                 }
@@ -182,7 +194,8 @@ namespace osu.Game.Beatmaps
                                 break;
 
                             case ModRelax:
-                                multiplier *= skillReductionFactor(baseStars, -0.2248, -0.0638);
+                                // Under a speed-up Relax removes less on low star rating beatmaps and more on high ones.
+                                multiplier *= Math.Pow(skillReductionFactor(baseStars, -0.2248, -0.0638), 1 - (0.4396 - 0.5380 * Math.Log(baseStars)) * speedUp);
                                 break;
 
                             case ModTouchDevice:
@@ -190,8 +203,16 @@ namespace osu.Game.Beatmaps
                                 break;
 
                             case IAffectsDifficulty:
-                                multiplier *= osuAffectsDifficultyFactor(mod, baseStars);
+                            {
+                                double factor = osuAffectsDifficultyFactor(mod, baseStars);
+
+                                // Under a speed-up Freeze Frame adds less, and above about AR 9 at high rates it lowers star rating, as in the calculator.
+                                if (mod.Acronym == @"FR")
+                                    factor = Math.Pow(factor, 1 - (0.5326 + 0.5044 * Math.Max(0, approachRate - 7)) * speedUp);
+
+                                multiplier *= factor;
                                 break;
+                            }
                         }
                     }
                     break;
