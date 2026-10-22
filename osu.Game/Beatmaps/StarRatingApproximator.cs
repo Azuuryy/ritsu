@@ -133,6 +133,9 @@ namespace osu.Game.Beatmaps
                         }
                     }
 
+                    bool hidden = false;
+                    bool flashlight = false;
+
                     // Additional mod multipliers
                     foreach (var mod in flattenedMods)
                     {
@@ -177,13 +180,11 @@ namespace osu.Game.Beatmaps
                             }
 
                             case ModFlashlight:
-                            {
-                                multiplier *= 1.15;
+                                flashlight = true;
                                 break;
-                            }
 
                             case ModHidden:
-                                multiplier *= 1.035;
+                                hidden = true;
                                 break;
 
                             case ModRelax:
@@ -208,6 +209,17 @@ namespace osu.Game.Beatmaps
                             }
                         }
                     }
+
+                    // Hidden depends on the estimate with every other mod applied, so it goes last.
+                    if (hidden)
+                    {
+                        double preemptSeconds = osuPreempt(adjustedApproachRate(approachRate, flattenedMods)) / rate / 1000;
+                        multiplier *= hiddenFactor(baseStars * multiplier, preemptSeconds, objectCountTerm(beatmapInfo));
+                    }
+
+                    if (flashlight)
+                        multiplier *= 1.15;
+
                     break;
             }
 
@@ -229,18 +241,27 @@ namespace osu.Game.Beatmaps
         /// </summary>
         private static double speedUpExponentCorrection(double rate, double approachRate, IReadOnlyList<Mod> mods)
         {
-            double adjustedApproachRate = approachRate;
+            double highApproachRate = Math.Max(0, adjustedApproachRate(approachRate, mods) - 9);
+            return rateExponentCorrection(rate) + highApproachRate * highApproachRate * (-0.0455 + 0.2468 * (rate - 1));
+        }
+
+        /// <summary>
+        /// The approach rate after Hard Rock, Easy or Difficulty Adjust.
+        /// </summary>
+        private static double adjustedApproachRate(double approachRate, IReadOnlyList<Mod> mods)
+        {
+            double adjusted = approachRate;
 
             foreach (var mod in mods)
             {
                 switch (mod)
                 {
                     case ModHardRock:
-                        adjustedApproachRate = Math.Min(10, approachRate * 1.4);
+                        adjusted = Math.Min(10, approachRate * 1.4);
                         break;
 
                     case ModEasy:
-                        adjustedApproachRate = approachRate * 0.5;
+                        adjusted = approachRate * 0.5;
                         break;
                 }
             }
@@ -249,11 +270,10 @@ namespace osu.Game.Beatmaps
             foreach (var mod in mods)
             {
                 if (mod is ModDifficultyAdjust da && tryGetDifficultySetting(da, "approach_rate", out float daApproachRate))
-                    adjustedApproachRate = daApproachRate;
+                    adjusted = daApproachRate;
             }
 
-            double highApproachRate = Math.Max(0, adjustedApproachRate - 9);
-            return rateExponentCorrection(rate) + highApproachRate * highApproachRate * (-0.0455 + 0.2468 * (rate - 1));
+            return adjusted;
         }
 
         /// <summary>
@@ -307,6 +327,30 @@ namespace osu.Game.Beatmaps
         /// </summary>
         private static double skillReductionFactor(double baseStars, double a, double b, double scale = 1)
             => Math.Min(1, Math.Exp(scale * (a + b * Math.Log(baseStars))));
+
+        // The Hidden factor below was fitted to the osu! difficulty calculator, on log(log(exact with Hidden / exact without)) star rating
+        // across nomod, rate changes, Hard Rock and Easy on a sample of real beatmaps.
+
+        /// <summary>
+        /// Hidden adds reading difficulty, which grows the longer objects are visible for and shrinks as star rating rises.
+        /// It's capped at double the star rating, which also keeps the result rising with star rating (the product would only fall above ×2.09).
+        /// </summary>
+        /// <param name="stars">The estimate with every other mod applied. Below 2★ it's held at 2★, as the fit blows up on tiny star ratings.</param>
+        /// <param name="preemptSeconds">The preempt after approach rate and rate changes, in seconds.</param>
+        /// <param name="objectCountTerm">See <see cref="objectCountTerm(IBeatmapInfo)"/>.</param>
+        private static double hiddenFactor(double stars, double preemptSeconds, double objectCountTerm)
+        {
+            // Held at the longest in-game preempt (AR 0 at rate 0.5); extended Difficulty Adjust and slower rates go beyond it.
+            double p = Math.Log(Math.Min(preemptSeconds, 3.6));
+
+            return Math.Min(2, Math.Exp(Math.Exp(0.0071 + 1.0417 * p - 0.2776 * p * p - 1.3605 * Math.Log(Math.Max(stars, 2)) + 0.3782 * objectCountTerm)));
+        }
+
+        /// <summary>
+        /// log(object count / 500), 0 when the object count isn't known.
+        /// </summary>
+        private static double objectCountTerm(IBeatmapInfo beatmapInfo)
+            => beatmapInfo.TotalObjectCount >= 0 ? Math.Log(Math.Max(beatmapInfo.TotalObjectCount, 10) / 500.0) : 0;
 
         private static bool tryGetDifficultySetting(ModDifficultyAdjust mod, string key, out float value)
         {

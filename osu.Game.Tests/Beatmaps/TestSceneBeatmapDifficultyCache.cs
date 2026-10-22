@@ -380,9 +380,9 @@ namespace osu.Game.Tests.Beatmaps
             double flStars = StarRatingApproximator.Approximate(bInfo, null, new Mod[] { new OsuModFlashlight() });
             Assert.That(flStars, Is.GreaterThan(4.4).And.LessThan(5.0));
 
-            // Hidden: slight reading increase
+            // Hidden: reading increase, 13-22% on real ~4★ beatmaps with CS, AR and OD 4-6 (10th-90th percentile of the exact calculator)
             double hdStars = StarRatingApproximator.Approximate(bInfo, null, new Mod[] { new OsuModHidden() });
-            Assert.That(hdStars, Is.GreaterThan(4.1).And.LessThan(4.2));
+            Assert.That(hdStars, Is.GreaterThan(4.5).And.LessThan(4.9));
 
             // DoubleTime: scaled by SR physics
             double dtStars = StarRatingApproximator.Approximate(bInfo, null, new Mod[] { new OsuModDoubleTime() });
@@ -793,6 +793,55 @@ namespace osu.Game.Tests.Beatmaps
                     previous = stars;
                 }
             }
+        }
+
+        private static readonly Mod[][] hidden_companion_mods =
+        {
+            Array.Empty<Mod>(),
+            new[] { rateMod(0.5) },
+            new[] { rateMod(2.0) },
+            new Mod[] { new OsuModHardRock() },
+            new Mod[] { new OsuModEasy() },
+            new Mod[] { new OsuModDifficultyAdjust { ExtendedLimits = { Value = true }, ApproachRate = { Value = -10 } } },
+        };
+
+        [Test]
+        public void TestApproximateStarRatingHiddenKeepsOrderAndBounds([Values(0f, 5f, 9f, 10f)] float approachRate)
+        {
+            foreach (var companions in hidden_companion_mods)
+            {
+                var mods = companions.Append(new OsuModHidden()).ToArray();
+                double previous = 0;
+
+                for (double baseStars = 0.1; baseStars <= 15; baseStars += 0.1)
+                {
+                    var bInfo = osuBeatmap(baseStars, approachRate);
+                    double withoutHidden = StarRatingApproximator.Approximate(bInfo, null, companions);
+                    double stars = StarRatingApproximator.Approximate(bInfo, null, mods);
+
+                    // The Hidden factor never lowers star rating, at most doubles it, and keeps the order without it.
+                    Assert.That(stars / withoutHidden, Is.InRange(1, 2), $"at {baseStars}★ with {string.Join(", ", companions.Select(m => m.Acronym))}");
+                    Assert.That(stars, Is.GreaterThan(previous), $"order changed at {baseStars}★ with {string.Join(", ", companions.Select(m => m.Acronym))}");
+                    previous = stars;
+                }
+            }
+        }
+
+        [Test]
+        public void TestApproximateStarRatingUnknownObjectCount()
+        {
+            var unknown = osuBeatmap(5, 9);
+            var known = osuBeatmap(5, 9);
+            known.TotalObjectCount = 500;
+
+            Assert.That(unknown.TotalObjectCount, Is.EqualTo(-1));
+            Assert.That(StarRatingApproximator.Approximate(unknown, null, new Mod[] { new OsuModHidden() }),
+                Is.EqualTo(StarRatingApproximator.Approximate(known, null, new Mod[] { new OsuModHidden() })));
+
+            // More objects means more Hidden reading difficulty.
+            known.TotalObjectCount = 2000;
+            Assert.That(StarRatingApproximator.Approximate(known, null, new Mod[] { new OsuModHidden() }),
+                Is.GreaterThan(StarRatingApproximator.Approximate(unknown, null, new Mod[] { new OsuModHidden() })));
         }
 
         [Test]
