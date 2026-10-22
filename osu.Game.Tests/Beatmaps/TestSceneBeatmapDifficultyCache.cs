@@ -604,6 +604,107 @@ namespace osu.Game.Tests.Beatmaps
             Assert.That(sr15, Is.LessThan(sr18));
         }
 
+        private static Mod rateMod(double rate) => rate > 1
+            ? new OsuModDoubleTime { SpeedChange = { Value = rate } }
+            : new OsuModHalfTime { SpeedChange = { Value = rate } };
+
+        private static BeatmapInfo osuBeatmap(double stars, float approachRate) => new BeatmapInfo
+        {
+            StarRating = stars,
+            Difficulty = new BeatmapDifficulty { CircleSize = 4, ApproachRate = approachRate, OverallDifficulty = 8 },
+        };
+
+        // Ranges are the 10th-90th percentile of the exact calculator's response, measured on real beatmaps near that star rating and approach rate.
+        private static readonly object[] rate_ranges =
+        {
+            new object[] { new[] { rateMod(1.2) }, 5.0, 9f, 1.16, 1.18 },
+            new object[] { new[] { rateMod(1.5) }, 2.5, 6f, 1.34, 1.40 },
+            new object[] { new[] { rateMod(1.5) }, 5.0, 9f, 1.41, 1.49 },
+            new object[] { new[] { rateMod(1.5) }, 7.0, 10f, 1.55, 1.71 },
+            new object[] { new[] { rateMod(2.0) }, 5.0, 9f, 1.96, 2.14 },
+            new object[] { new[] { rateMod(2.0) }, 7.0, 10f, 2.23, 2.57 },
+            new object[] { new[] { rateMod(0.75) }, 5.0, 9f, 0.78, 0.80 },
+            new object[] { new[] { rateMod(0.5) }, 5.0, 9f, 0.56, 0.60 },
+            new object[] { new Mod[] { rateMod(1.5), new OsuModHardRock() }, 5.0, 9f, 1.63, 1.75 },
+            new object[] { new Mod[] { rateMod(1.5), new OsuModHardRock() }, 7.0, 10f, 1.65, 1.82 },
+            new object[] { new Mod[] { rateMod(1.5), new OsuModEasy() }, 3.0, 6f, 1.25, 1.36 },
+            new object[] { new Mod[] { rateMod(1.5), new OsuModEasy() }, 7.0, 10f, 1.38, 1.58 },
+        };
+
+        [TestCaseSource(nameof(rate_ranges))]
+        public void TestApproximateStarRatingRate(Mod[] mods, double stars, float approachRate, double minimumRatio, double maximumRatio)
+            => Assert.That(StarRatingApproximator.Approximate(osuBeatmap(stars, approachRate), null, mods) / stars, Is.InRange(minimumRatio, maximumRatio));
+
+        private static readonly Mod[][] rate_companion_mods =
+        {
+            Array.Empty<Mod>(),
+            new Mod[] { new OsuModHardRock() },
+            new Mod[] { new OsuModEasy() },
+            new Mod[] { new OsuModDifficultyAdjust { ExtendedLimits = { Value = true }, ApproachRate = { Value = 11 } } },
+        };
+
+        [Test]
+        public void TestApproximateStarRatingIsMonotonicInRate([Values(1.0, 5.0, 10.0)] double baseStars, [Values(0f, 5f, 9f, 9.5f, 10f)] float approachRate)
+        {
+            var bInfo = osuBeatmap(baseStars, approachRate);
+
+            foreach (var companions in rate_companion_mods)
+            {
+                double previous = 0;
+
+                for (int i = 50; i <= 200; i++)
+                {
+                    var mods = i == 100 ? companions : companions.Append(rateMod(i / 100.0)).ToArray();
+                    double stars = StarRatingApproximator.Approximate(bInfo, null, mods);
+
+                    Assert.That(stars, Is.GreaterThan(previous), $"star rating went down at rate {i / 100.0} with {string.Join(", ", companions.Select(m => m.Acronym))}");
+                    previous = stars;
+                }
+            }
+        }
+
+        [TestCase(1.2, 9f)]
+        [TestCase(2.0, 10f)]
+        [TestCase(0.5, 10f)]
+        public void TestApproximateStarRatingRateKeepsNomodOrder(double rate, float approachRate)
+        {
+            foreach (var companions in rate_companion_mods)
+            {
+                double previous = 0;
+
+                for (double baseStars = 0.1; baseStars <= 15; baseStars += 0.1)
+                {
+                    double stars = StarRatingApproximator.Approximate(osuBeatmap(baseStars, approachRate), null, companions.Append(rateMod(rate)).ToArray());
+
+                    Assert.That(stars, Is.GreaterThan(previous), $"order changed at {baseStars}★");
+                    previous = stars;
+                }
+            }
+        }
+
+        [Test]
+        public void TestApproximateStarRatingRateApproachRateTerm()
+        {
+            double approximate(float approachRate, params Mod[] mods) => StarRatingApproximator.Approximate(osuBeatmap(5, approachRate), null, mods);
+
+            // Up to AR 9 only the rate matters.
+            Assert.That(approximate(0, rateMod(1.5)), Is.EqualTo(approximate(9, rateMod(1.5))));
+
+            // Above it a speed-up raises star rating further, increasingly so at higher rates.
+            double highApproachRateBoost(double rate) => approximate(10, rateMod(rate)) / approximate(9, rateMod(rate));
+            Assert.That(highApproachRateBoost(1.5), Is.GreaterThan(1));
+            Assert.That(highApproachRateBoost(2.0), Is.GreaterThan(highApproachRateBoost(1.5)));
+
+            // Half time ignores approach rate.
+            Assert.That(approximate(10, rateMod(0.75)), Is.EqualTo(approximate(5, rateMod(0.75))));
+
+            // The term uses the approach rate after Hard Rock (AR 7.5 -> 10, AR 6 -> 8.4) and Difficulty Adjust.
+            Assert.That(approximate(7.5f, rateMod(1.5), new OsuModHardRock()) / approximate(6, rateMod(1.5), new OsuModHardRock()), Is.EqualTo(highApproachRateBoost(1.5)).Within(1e-9));
+
+            var difficultyAdjust = new OsuModDifficultyAdjust { ApproachRate = { Value = 10 } };
+            Assert.That(approximate(5, rateMod(1.5), difficultyAdjust) / approximate(5, difficultyAdjust), Is.EqualTo(approximate(10, rateMod(1.5)) / 5).Within(1e-9));
+        }
+
         [Test]
         public void TestInitialValueUsesEffectiveStarRating()
         {

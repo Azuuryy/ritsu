@@ -104,6 +104,7 @@ namespace osu.Game.Beatmaps
                 default:
                     var diff = beatmapInfo.Difficulty;
                     double cs = diff?.CircleSize ?? 4f;
+                    double approachRate = diff?.ApproachRate ?? IBeatmapDifficultyInfo.DEFAULT_DIFFICULTY;
 
                     // Clock rate scaling
                     if (Math.Abs(rate - 1.0) > 0.001)
@@ -117,13 +118,13 @@ namespace osu.Game.Beatmaps
                                 ? 0.45 + 0.12 * Math.Max(0, 1.5 - baseStars) / 1.5
                                 : 0.45 + 0.52 * (1.0 - Math.Exp(-0.28 * (baseStars - 1.5)));
 
-                            multiplier *= Math.Pow(rate, rateExp);
+                            multiplier *= Math.Pow(rate, rateExp + speedUpExponentCorrection(rate, approachRate, flattenedMods));
                         }
                         else
                         {
                             // HT scaling (rate < 1.0): drops faster for high star maps due to collapsing speed/reading strains
                             double rateExp = 0.58 + 0.35 * Math.Clamp((baseStars - 1.5) / 7.0, 0.0, 1.0);
-                            multiplier *= Math.Pow(rate, rateExp);
+                            multiplier *= Math.Pow(rate, rateExp + rateExponentCorrection(rate));
                         }
                     }
 
@@ -197,6 +198,56 @@ namespace osu.Game.Beatmaps
             }
 
             return baseStars * multiplier;
+        }
+
+        // The clock rate corrections below were fitted to the osu! difficulty calculator, on log(exact / approximate) star rating
+        // across DT 1.1-2.0 and HT 0.5-0.95 on a sample of real beatmaps, and checked on a second library.
+        // Without them the exponent above under-estimated speed-ups at every approach rate, by about 5-8% at DT 1.5 and 15-20% at DT 2.0.
+
+        /// <summary>
+        /// Correction to the clock rate exponent that only depends on the rate.
+        /// </summary>
+        private static double rateExponentCorrection(double rate) => 0.0955 + 0.1383 * (rate - 1);
+
+        /// <summary>
+        /// Correction to the speed-up exponent. On top of <see cref="rateExponentCorrection"/>, reading difficulty grows faster under a speed-up
+        /// above AR 9, using the approach rate after Hard Rock, Easy or Difficulty Adjust.
+        /// Easy's own factor doesn't compose with a speed-up (too low on low-AR beatmaps, too high on high-AR ones), so it gets its own term.
+        /// </summary>
+        private static double speedUpExponentCorrection(double rate, double approachRate, IReadOnlyList<Mod> mods)
+        {
+            double adjustedApproachRate = approachRate;
+            bool easy = false;
+
+            foreach (var mod in mods)
+            {
+                switch (mod)
+                {
+                    case ModHardRock:
+                        adjustedApproachRate = Math.Min(10, approachRate * 1.4);
+                        break;
+
+                    case ModEasy:
+                        adjustedApproachRate = approachRate * 0.5;
+                        easy = true;
+                        break;
+                }
+            }
+
+            // Difficulty Adjust overrides the approach rate.
+            foreach (var mod in mods)
+            {
+                if (mod is ModDifficultyAdjust da && tryGetDifficultySetting(da, "approach_rate", out float daApproachRate))
+                    adjustedApproachRate = daApproachRate;
+            }
+
+            double highApproachRate = Math.Max(0, adjustedApproachRate - 9);
+            double correction = rateExponentCorrection(rate) + highApproachRate * highApproachRate * (-0.0455 + 0.2468 * (rate - 1));
+
+            if (easy)
+                correction += 0.2223 - 0.1823 * Math.Max(0, approachRate - 7);
+
+            return correction;
         }
 
         // The Relax, Autopilot, Touch Device, Magnetised and Freeze Frame factors below were fitted to the osu! difficulty calculator,
