@@ -828,6 +828,28 @@ namespace osu.Game.Tests.Beatmaps
         }
 
         [Test]
+        public void TestApproximateStarRatingFlashlightKeepsOrderAndBounds([Values(0f, 5f, 9f, 10f)] float approachRate)
+        {
+            foreach (var companions in hidden_companion_mods.Append(new Mod[] { new OsuModHidden() }).Append(new Mod[] { rateMod(1.5), new OsuModHidden() }))
+            {
+                var mods = companions.Append(new OsuModFlashlight()).ToArray();
+                double previous = 0;
+
+                for (double baseStars = 0.1; baseStars <= 15; baseStars += 0.1)
+                {
+                    var bInfo = osuBeatmap(baseStars, approachRate);
+                    double withoutFlashlight = StarRatingApproximator.Approximate(bInfo, null, companions);
+                    double stars = StarRatingApproximator.Approximate(bInfo, null, mods);
+
+                    // Flashlight adds a skill, so it never lowers star rating. The largest measured ratio was ×1.64.
+                    Assert.That(stars / withoutFlashlight, Is.InRange(1, 1.65), $"at {baseStars}★ with {string.Join(", ", companions.Select(m => m.Acronym))}");
+                    Assert.That(stars, Is.GreaterThan(previous), $"order changed at {baseStars}★ with {string.Join(", ", companions.Select(m => m.Acronym))}");
+                    previous = stars;
+                }
+            }
+        }
+
+        [Test]
         public void TestApproximateStarRatingUnknownObjectCount()
         {
             var unknown = osuBeatmap(5, 9);
@@ -842,6 +864,10 @@ namespace osu.Game.Tests.Beatmaps
             known.TotalObjectCount = 2000;
             Assert.That(StarRatingApproximator.Approximate(known, null, new Mod[] { new OsuModHidden() }),
                 Is.GreaterThan(StarRatingApproximator.Approximate(unknown, null, new Mod[] { new OsuModHidden() })));
+
+            known.TotalObjectCount = 500;
+            Assert.That(StarRatingApproximator.Approximate(unknown, null, new Mod[] { new OsuModFlashlight() }),
+                Is.EqualTo(StarRatingApproximator.Approximate(known, null, new Mod[] { new OsuModFlashlight() })));
         }
 
         [Test]

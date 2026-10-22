@@ -210,15 +210,18 @@ namespace osu.Game.Beatmaps
                         }
                     }
 
-                    // Hidden depends on the estimate with every other mod applied, so it goes last.
-                    if (hidden)
+                    if (hidden || flashlight)
                     {
                         double preemptSeconds = osuPreempt(adjustedApproachRate(approachRate, flattenedMods)) / rate / 1000;
-                        multiplier *= hiddenFactor(baseStars * multiplier, preemptSeconds, objectCountTerm(beatmapInfo));
-                    }
+                        double objects = objectCountTerm(beatmapInfo);
 
-                    if (flashlight)
-                        multiplier *= 1.15;
+                        // Hidden depends on the estimate with every other mod applied, so it goes last.
+                        if (hidden)
+                            multiplier *= hiddenFactor(baseStars * multiplier, preemptSeconds, objects);
+
+                        if (flashlight)
+                            multiplier *= flashlightFactor(baseStars, rate, preemptSeconds, objects, hidden);
+                    }
 
                     break;
             }
@@ -344,6 +347,24 @@ namespace osu.Game.Beatmaps
             double p = Math.Log(Math.Min(preemptSeconds, 3.6));
 
             return Math.Min(2, Math.Exp(Math.Exp(0.0071 + 1.0417 * p - 0.2776 * p * p - 1.3605 * Math.Log(Math.Max(stars, 2)) + 0.3782 * objectCountTerm)));
+        }
+
+        // The Flashlight factor below was fitted the same way, on log(exact with Flashlight / exact without) across nomod, DT, Hidden and Hard Rock.
+
+        /// <summary>
+        /// Flashlight adds a skill of its own, so it never lowers star rating. It adds most on long, low star rating beatmaps.
+        /// Without Hidden it adds less under a speed-up; with Hidden it adds less the longer objects are visible for.
+        /// The largest ratio measured was ×1.64.
+        /// </summary>
+        private static double flashlightFactor(double baseStars, double rate, double preemptSeconds, double objectCountTerm, bool hidden)
+        {
+            double p = Math.Log(preemptSeconds);
+            double l = 0.2628 - 0.0788 * Math.Log(baseStars) + 0.0885 * objectCountTerm - 0.0417 * p - 0.1575 * Math.Log(rate);
+
+            if (hidden)
+                l += -0.0615 - 0.1242 * p;
+
+            return Math.Clamp(Math.Exp(l), 1, 1.65);
         }
 
         /// <summary>
