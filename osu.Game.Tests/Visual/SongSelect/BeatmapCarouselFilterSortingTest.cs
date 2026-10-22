@@ -271,7 +271,7 @@ namespace osu.Game.Tests.Visual.SongSelect
         public async Task TestSortByDifficultyCompoundMods()
         {
             // DT + HR: HR scales with circle size, so a slightly easier high-CS map overtakes a low-CS map.
-            // setA: 4.9 base, CS 9 ≈ 7.56; setB: 5.0 base, CS 2 ≈ 7.46.
+            // setA: 4.9 base, CS 9 ≈ 8.96; setB: 5.0 base, CS 2 ≈ 7.48.
             var setA = TestResources.CreateTestBeatmapSetInfo(1);
             setA.Beatmaps[0].StarRating = 4.9;
             setA.Beatmaps[0].Difficulty.CircleSize = 9;

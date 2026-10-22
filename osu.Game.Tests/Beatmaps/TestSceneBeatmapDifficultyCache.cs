@@ -699,7 +699,9 @@ namespace osu.Game.Tests.Beatmaps
             Assert.That(approximate(10, rateMod(0.75)), Is.EqualTo(approximate(5, rateMod(0.75))));
 
             // The term uses the approach rate after Hard Rock (AR 7.5 -> 10, AR 6 -> 8.4) and Difficulty Adjust.
-            Assert.That(approximate(7.5f, rateMod(1.5), new OsuModHardRock()) / approximate(6, rateMod(1.5), new OsuModHardRock()), Is.EqualTo(highApproachRateBoost(1.5)).Within(1e-9));
+            // Hard Rock's own factor depends on approach rate too, so it's divided out.
+            double hardRockSpeedUp(float approachRate) => approximate(approachRate, rateMod(1.5), new OsuModHardRock()) / approximate(approachRate, new OsuModHardRock());
+            Assert.That(hardRockSpeedUp(7.5f) / hardRockSpeedUp(6), Is.EqualTo(highApproachRateBoost(1.5)).Within(1e-9));
 
             var difficultyAdjust = new OsuModDifficultyAdjust { ApproachRate = { Value = 10 } };
             Assert.That(approximate(5, rateMod(1.5), difficultyAdjust) / approximate(5, difficultyAdjust), Is.EqualTo(approximate(10, rateMod(1.5)) / 5).Within(1e-9));

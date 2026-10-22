@@ -105,6 +105,7 @@ namespace osu.Game.Beatmaps
                     var diff = beatmapInfo.Difficulty;
                     double cs = diff?.CircleSize ?? 4f;
                     double approachRate = diff?.ApproachRate ?? IBeatmapDifficultyInfo.DEFAULT_DIFFICULTY;
+                    double overallDifficulty = diff?.OverallDifficulty ?? IBeatmapDifficultyInfo.DEFAULT_DIFFICULTY;
 
                     // log(rate) on a speed-up, 0 otherwise. Lowered Difficulty Adjust approach rate, Relax and Freeze Frame don't multiply with a speed-up
                     // in the calculator, so below their factors are raised to a power fitted on DT 1.2-2.0 (a power of 1 at or below rate 1).
@@ -138,11 +139,12 @@ namespace osu.Game.Beatmaps
                         switch (mod)
                         {
                             case ModHardRock:
-                            {
-                                double hrFactor = 1.05 + 0.008 * Math.Min(8.0, baseStars) + 0.01 * Math.Max(0, cs - 5.0);
-                                multiplier *= hrFactor;
+                                // Hard Rock raises circle size by 30% and approach rate and overall difficulty by 40% (capped at 10),
+                                // which the Difficulty Adjust factors already cover.
+                                multiplier *= difficultyAdjustCircleSizeFactor(cs, Math.Min(10, cs * 1.3))
+                                              * difficultyAdjustApproachRateFactor(approachRate, Math.Min(10, approachRate * 1.4), baseStars)
+                                              * difficultyAdjustOverallDifficultyFactor(overallDifficulty, Math.Min(10, overallDifficulty * 1.4));
                                 break;
-                            }
 
                             case ModEasy:
                             {
