@@ -707,6 +707,20 @@ namespace osu.Game.Tests.Beatmaps
             Assert.That(approximate(5, rateMod(1.5), difficultyAdjust) / approximate(5, difficultyAdjust), Is.EqualTo(approximate(10, rateMod(1.5)) / 5).Within(1e-9));
         }
 
+        [TestCase(1.2)]
+        [TestCase(1.5)]
+        [TestCase(2.0)]
+        public void TestApproximateStarRatingRateApproachRateTermByStarRating(double rate)
+        {
+            double highApproachRateBoost(double stars) => StarRatingApproximator.Approximate(osuBeatmap(stars, 10), null, new[] { rateMod(rate) })
+                                                          / StarRatingApproximator.Approximate(osuBeatmap(stars, 9), null, new[] { rateMod(rate) });
+
+            // Below 6★ the boost grows as star rating falls; from 6★ up it's the same.
+            Assert.That(highApproachRateBoost(2), Is.GreaterThan(highApproachRateBoost(4)));
+            Assert.That(highApproachRateBoost(4), Is.GreaterThan(highApproachRateBoost(6)));
+            Assert.That(highApproachRateBoost(6), Is.EqualTo(highApproachRateBoost(10)).Within(1e-9));
+        }
+
         private static readonly Mod[] speed_up_scaled_mods =
         {
             new OsuModDifficultyAdjust { ApproachRate = { Value = 7 } },

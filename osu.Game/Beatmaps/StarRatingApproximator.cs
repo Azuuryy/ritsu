@@ -123,7 +123,7 @@ namespace osu.Game.Beatmaps
                                 ? 0.45 + 0.12 * Math.Max(0, 1.5 - baseStars) / 1.5
                                 : 0.45 + 0.52 * (1.0 - Math.Exp(-0.28 * (baseStars - 1.5)));
 
-                            multiplier *= Math.Pow(rate, rateExp + speedUpExponentCorrection(rate, approachRate, flattenedMods) + easyExponentCorrection(rate, approachRate, flattenedMods));
+                            multiplier *= Math.Pow(rate, rateExp + speedUpExponentCorrection(rate, approachRate, baseStars, flattenedMods) + easyExponentCorrection(rate, approachRate, flattenedMods));
                         }
                         else
                         {
@@ -242,10 +242,16 @@ namespace osu.Game.Beatmaps
         /// Correction to the speed-up exponent. On top of <see cref="rateExponentCorrection"/>, reading difficulty grows faster under a speed-up
         /// above AR 9, using the approach rate after Hard Rock, Easy or Difficulty Adjust.
         /// </summary>
-        private static double speedUpExponentCorrection(double rate, double approachRate, IReadOnlyList<Mod> mods)
+        private static double speedUpExponentCorrection(double rate, double approachRate, double baseStars, IReadOnlyList<Mod> mods)
         {
             double highApproachRate = Math.Max(0, adjustedApproachRate(approachRate, mods) - 9);
-            return rateExponentCorrection(rate) + highApproachRate * highApproachRate * (-0.0455 + 0.2468 * (rate - 1));
+
+            // Below 6★ the calculator's boost is larger, the lower the star rating. Natively high-AR beatmaps are rare there,
+            // so this mostly matters when Hard Rock or Difficulty Adjust raise the approach rate.
+            double lowStarRating = Math.Max(0, Math.Log(6 / baseStars));
+
+            return rateExponentCorrection(rate)
+                   + highApproachRate * highApproachRate * (-0.0455 + 0.2468 * (rate - 1) + lowStarRating * (0.6077 - 0.3560 * (rate - 1)));
         }
 
         /// <summary>
