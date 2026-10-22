@@ -261,7 +261,7 @@ namespace osu.Game.Tests.Visual.SongSelect
             Assert.That(nomodResults[0], Is.EqualTo(setA.Beatmaps[0]));
             Assert.That(nomodResults[1], Is.EqualTo(setB.Beatmaps[0]));
 
-            // Easy raises high-AR maps relative to low-AR maps: setA ≈ 5.08, setB ≈ 4.42, so the order flips.
+            // Easy raises high-AR maps relative to low-AR maps: setA ≈ 5.31, setB ≈ 4.84, so the order flips.
             var ezResults = (await runSorting(SortMode.Difficulty, new List<BeatmapSetInfo> { setA, setB }, new[] { new OsuModEasy() })).ToList();
             Assert.That(ezResults[0], Is.EqualTo(setB.Beatmaps[0]));
             Assert.That(ezResults[1], Is.EqualTo(setA.Beatmaps[0]));
@@ -286,7 +286,7 @@ namespace osu.Game.Tests.Visual.SongSelect
             Assert.That(resultsDtHr[1], Is.EqualTo(setA.Beatmaps[0]));
 
             // EZ + HT: EZ keeps more difficulty on high-AR maps, so a high-AR map overtakes a harder low-AR map.
-            // setC: 4.0 base, AR 10 ≈ 3.22; setD: 4.5 base, AR 5 ≈ 3.10.
+            // setC: 4.0 base, AR 10 ≈ 3.75; setD: 4.5 base, AR 5 ≈ 3.37.
             var setC = TestResources.CreateTestBeatmapSetInfo(1);
             setC.Beatmaps[0].StarRating = 4.0;
             setC.Beatmaps[0].Difficulty.ApproachRate = 10;

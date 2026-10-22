@@ -123,13 +123,13 @@ namespace osu.Game.Beatmaps
                                 ? 0.45 + 0.12 * Math.Max(0, 1.5 - baseStars) / 1.5
                                 : 0.45 + 0.52 * (1.0 - Math.Exp(-0.28 * (baseStars - 1.5)));
 
-                            multiplier *= Math.Pow(rate, rateExp + speedUpExponentCorrection(rate, approachRate, flattenedMods));
+                            multiplier *= Math.Pow(rate, rateExp + speedUpExponentCorrection(rate, approachRate, flattenedMods) + easyExponentCorrection(rate, approachRate, flattenedMods));
                         }
                         else
                         {
                             // HT scaling (rate < 1.0): drops faster for high star maps due to collapsing speed/reading strains
                             double rateExp = 0.58 + 0.35 * Math.Clamp((baseStars - 1.5) / 7.0, 0.0, 1.0);
-                            multiplier *= Math.Pow(rate, rateExp + rateExponentCorrection(rate));
+                            multiplier *= Math.Pow(rate, rateExp + rateExponentCorrection(rate) + easyExponentCorrection(rate, approachRate, flattenedMods));
                         }
                     }
 
@@ -147,21 +147,12 @@ namespace osu.Game.Beatmaps
                                 break;
 
                             case ModEasy:
-                            {
-                                if (diff != null && diff.ApproachRate >= 7.0f)
-                                {
-                                    // In Torii pp-dev, EZ halves AR. On higher-AR and higher-star maps, dense overlapping objects
-                                    // produce heavy reading strain (raising star rating), whereas low-AR/starter maps see a difficulty reduction.
-                                    double ar = diff.ApproachRate;
-                                    double ezFactor = 0.85 + 0.03 * Math.Clamp(baseStars - 2.0, 0.0, 5.0) + 0.025 * (ar - 7.0);
-                                    multiplier *= ezFactor;
-                                }
-                                else
-                                {
-                                    multiplier *= 0.85;
-                                }
+                                // Easy halves circle size, approach rate and overall difficulty. The Difficulty Adjust factors for those values
+                                // don't multiply out when all three change at once, so each is raised to a fitted weight.
+                                multiplier *= Math.Pow(difficultyAdjustCircleSizeFactor(cs, cs * 0.5), 0.9647)
+                                              * Math.Pow(difficultyAdjustApproachRateFactor(approachRate, approachRate * 0.5, baseStars), 0.8791)
+                                              * Math.Pow(difficultyAdjustOverallDifficultyFactor(overallDifficulty, overallDifficulty * 0.5), 1.6603);
                                 break;
-                            }
 
                             case ModDifficultyAdjust da:
                             {
@@ -235,12 +226,10 @@ namespace osu.Game.Beatmaps
         /// <summary>
         /// Correction to the speed-up exponent. On top of <see cref="rateExponentCorrection"/>, reading difficulty grows faster under a speed-up
         /// above AR 9, using the approach rate after Hard Rock, Easy or Difficulty Adjust.
-        /// Easy's own factor doesn't compose with a speed-up (too low on low-AR beatmaps, too high on high-AR ones), so it gets its own term.
         /// </summary>
         private static double speedUpExponentCorrection(double rate, double approachRate, IReadOnlyList<Mod> mods)
         {
             double adjustedApproachRate = approachRate;
-            bool easy = false;
 
             foreach (var mod in mods)
             {
@@ -252,7 +241,6 @@ namespace osu.Game.Beatmaps
 
                     case ModEasy:
                         adjustedApproachRate = approachRate * 0.5;
-                        easy = true;
                         break;
                 }
             }
@@ -265,12 +253,25 @@ namespace osu.Game.Beatmaps
             }
 
             double highApproachRate = Math.Max(0, adjustedApproachRate - 9);
-            double correction = rateExponentCorrection(rate) + highApproachRate * highApproachRate * (-0.0455 + 0.2468 * (rate - 1));
+            return rateExponentCorrection(rate) + highApproachRate * highApproachRate * (-0.0455 + 0.2468 * (rate - 1));
+        }
 
-            if (easy)
-                correction += 0.2223 - 0.1823 * Math.Max(0, approachRate - 7);
+        /// <summary>
+        /// Easy's own factor doesn't compose with a rate change: with a speed-up the product comes out too high and with a slow-down too low,
+        /// increasingly so above AR 7. So Easy gets its own term on the rate exponent, fitted separately for speed-ups and slow-downs.
+        /// </summary>
+        private static double easyExponentCorrection(double rate, double approachRate, IReadOnlyList<Mod> mods)
+        {
+            foreach (var mod in mods)
+            {
+                if (mod is not ModEasy)
+                    continue;
 
-            return correction;
+                double highApproachRate = Math.Max(0, approachRate - 7);
+                return rate > 1 ? -0.0845 - 0.0663 * highApproachRate : -0.0374 - 0.1010 * highApproachRate;
+            }
+
+            return 0;
         }
 
         // The Relax, Autopilot, Touch Device, Magnetised and Freeze Frame factors below were fitted to the osu! difficulty calculator,

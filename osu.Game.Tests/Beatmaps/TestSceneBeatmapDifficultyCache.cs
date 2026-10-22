@@ -372,9 +372,9 @@ namespace osu.Game.Tests.Beatmaps
             double hrStars = StarRatingApproximator.Approximate(bInfo, null, new Mod[] { new OsuModHardRock() });
             Assert.That(hrStars, Is.GreaterThan(4.3).And.LessThan(4.7));
 
-            // Easy: decreases difficulty
+            // Easy: decreases difficulty, by 0-10% on real ~4★ beatmaps with CS, AR and OD 4-6 (10th-90th percentile of the exact calculator)
             double ezStars = StarRatingApproximator.Approximate(bInfo, null, new Mod[] { new OsuModEasy() });
-            Assert.That(ezStars, Is.GreaterThan(3.1).And.LessThan(3.5));
+            Assert.That(ezStars, Is.GreaterThan(3.55).And.LessThan(4.0));
 
             // Flashlight: increases difficulty
             double flStars = StarRatingApproximator.Approximate(bInfo, null, new Mod[] { new OsuModFlashlight() });
