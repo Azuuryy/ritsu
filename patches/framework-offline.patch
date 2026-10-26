@@ -1,0 +1,67 @@
+diff --git a/osu.Framework/IO/Network/WebRequest.cs b/osu.Framework/IO/Network/WebRequest.cs
+index 4f530c3..866e2c4 100644
+--- a/osu.Framework/IO/Network/WebRequest.cs
++++ b/osu.Framework/IO/Network/WebRequest.cs
+@@ -23,6 +23,14 @@ namespace osu.Framework.IO.Network
+ {
+     public class WebRequest : IDisposable
+     {
++        private static int networkAccessDisabled;
++
++        /// <summary>Whether the host has permanently disabled HTTP for this process.</summary>
++        public static bool NetworkAccessDisabled => Volatile.Read(ref networkAccessDisabled) != 0;
++
++        /// <summary>Disable HTTP before loading an offline application. Cannot be re-enabled.</summary>
++        public static void DisableNetworkAccess() => Interlocked.Exchange(ref networkAccessDisabled, 1);
++
+         public const int DEFAULT_TIMEOUT = 10000;
+ 
+         internal const int MAX_RETRIES = 1;
+@@ -300,6 +308,9 @@ private async Task internalPerform(CancellationToken cancellationToken = default
+             {
+                 try
+                 {
++                    if (NetworkAccessDisabled)
++                        throw new InvalidOperationException("The host has disabled network access for this process.");
++
+                     PrePerform();
+ 
+                     HttpRequestMessage request;
+diff --git a/osu.Framework/IO/Stores/OnlineStore.cs b/osu.Framework/IO/Stores/OnlineStore.cs
+index 9dbc227..20d0db9 100644
+--- a/osu.Framework/IO/Stores/OnlineStore.cs
++++ b/osu.Framework/IO/Stores/OnlineStore.cs
+@@ -17,6 +17,9 @@ public class OnlineStore : IResourceStore<byte[]>
+     {
+         public async Task<byte[]> GetAsync(string url, CancellationToken cancellationToken = default)
+         {
++            if (WebRequest.NetworkAccessDisabled)
++                return null;
++
+             if (!validateScheme(url))
+                 return null;
+ 
+@@ -38,6 +41,9 @@ public async Task<byte[]> GetAsync(string url, CancellationToken cancellationTok
+ 
+         public virtual byte[] Get(string url)
+         {
++            if (WebRequest.NetworkAccessDisabled)
++                return null;
++
+             if (!validateScheme(url))
+                 return null;
+ 
+diff --git a/osu.Framework/Platform/DesktopGameHost.cs b/osu.Framework/Platform/DesktopGameHost.cs
+index b816040..0c3238f 100644
+--- a/osu.Framework/Platform/DesktopGameHost.cs
++++ b/osu.Framework/Platform/DesktopGameHost.cs
+@@ -77,6 +77,9 @@ public override bool OpenFileExternally(string filename)
+ 
+         public override void OpenUrlExternally(string url)
+         {
++            if (IO.Network.WebRequest.NetworkAccessDisabled)
++                return;
++
+             if (!url.CheckIsValidUrl())
+                 throw new ArgumentException("The provided URL must be one of either http://, https:// or mailto: protocols.", nameof(url));
+ 

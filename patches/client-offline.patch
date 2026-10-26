@@ -1,0 +1,1540 @@
+diff --git a/.github/workflows/_diffcalc_processor.yml b/.github/workflows/_diffcalc_processor.yml.disabled
+similarity index 100%
+rename from .github/workflows/_diffcalc_processor.yml
+rename to .github/workflows/_diffcalc_processor.yml.disabled
+diff --git a/.github/workflows/auto-tag.yml b/.github/workflows/auto-tag.yml.disabled
+similarity index 100%
+rename from .github/workflows/auto-tag.yml
+rename to .github/workflows/auto-tag.yml.disabled
+diff --git a/.github/workflows/build-dev.yml b/.github/workflows/build-dev.yml.disabled
+similarity index 100%
+rename from .github/workflows/build-dev.yml
+rename to .github/workflows/build-dev.yml.disabled
+diff --git a/.github/workflows/build-gu.yml b/.github/workflows/build-gu.yml.disabled
+similarity index 100%
+rename from .github/workflows/build-gu.yml
+rename to .github/workflows/build-gu.yml.disabled
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml.disabled
+similarity index 100%
+rename from .github/workflows/ci.yml
+rename to .github/workflows/ci.yml.disabled
+diff --git a/.github/workflows/diffcalc.yml b/.github/workflows/diffcalc.yml.disabled
+similarity index 100%
+rename from .github/workflows/diffcalc.yml
+rename to .github/workflows/diffcalc.yml.disabled
+diff --git a/.github/workflows/sentry-release.yml b/.github/workflows/sentry-release.yml.disabled
+similarity index 100%
+rename from .github/workflows/sentry-release.yml
+rename to .github/workflows/sentry-release.yml.disabled
+diff --git a/.github/workflows/update-web-mod-definitions.yml b/.github/workflows/update-web-mod-definitions.yml.disabled
+similarity index 100%
+rename from .github/workflows/update-web-mod-definitions.yml
+rename to .github/workflows/update-web-mod-definitions.yml.disabled
+diff --git a/README.Torii.md b/README.Torii.md
+new file mode 100644
+index 0000000000..aef0e23ce8
+--- /dev/null
++++ b/README.Torii.md
+@@ -0,0 +1,302 @@
++<p align="center">
++  <img width="220" alt="Torii" src="assets/torii-512.png">
++</p>
++
++<h1 align="center">Torii</h1>
++
++<p align="center">
++  <em>A community fork of <a href="https://github.com/ppy/osu">osu! (lazer)</a> with a private server and some extra
++  client polish.</em>
++</p>
++
++<p align="center">
++  <a href="https://github.com/ShikkesoraSIM/torii-osu/releases/latest">
++    <img alt="Latest stable" src="https://img.shields.io/github/v/release/ShikkesoraSIM/torii-osu?label=stable&color=ff66ab">
++  </a>
++  <a href="https://github.com/ShikkesoraSIM/torii-osu/releases">
++    <img alt="Torii downloads" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ShikkesoraSIM/torii-osu/master/assets/badges/torii-downloads.json">
++  </a>
++  <a href="https://github.com/ShikkesoraSIM/torii-osu/releases?q=prerelease%3Atrue">
++    <img alt="Nova downloads" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ShikkesoraSIM/torii-osu/master/assets/badges/nova-downloads.json">
++  </a>
++</p>
++
++---
++
++> [!IMPORTANT]
++> **Torii is an unofficial fork of [osu!](https://github.com/ppy/osu).**
++>
++> - We are **not affiliated with, endorsed by, or supported by ppy Pty Ltd**, peppy, or the osu! development team.
++> - **osu!**, the **"osu!"** name, the **"lazer"** codename, and all related branding are trademarks of **ppy Pty Ltd**. Torii is a separately-named project; the May 2026 binary rebrand drops the "osu!" prefix from distributed binaries to stay clear of that trademark.
++> - **Please support the original project.** osu! is free, lovingly maintained, and the only reason this fork can exist. If you enjoy playing rhythm games, the best thing you can do is:
++>   - Play on the [official osu! servers](https://osu.ppy.sh) (your scores there count for the real leaderboards).
++>   - Become an [osu! supporter](https://osu.ppy.sh/home/support) — it directly funds upstream development.
++>   - File issues / PRs on the [upstream repo](https://github.com/ppy/osu) instead of pinging the upstream team about Torii.
++> - Torii exists to experiment with ideas that may not fit upstream's roadmap, run a small community server, and to learn. **It is not a replacement for osu! and we do not want it to be.** If you're new to the game, please install [official osu!](https://osu.ppy.sh/home/download) first.
++
++---
++
++## What Torii is
++
++A buildable client + a small private server. The client is forked from osu! lazer with extra UI surfaces, a few new gameplay-adjacent systems, and performance work. The server is a separate project (`g0v0-server`) that hosts scores, leaderboards, multiplayer rooms, chat, and presence for users who choose to play there.
++
++**You do not need to use the Torii server to use the Torii client.** You can sign in against the official osu! server at any time — the client lets you switch via Settings → Torii → Server.
++
++## What it is **not**
++
++- It is not "modded osu!" or "cheat osu!". No anti-cheat relaxation, no rank-skipping, no PP injection. Submitting scores to the official osu! server while running this client is unsupported and explicitly discouraged by both us and upstream — the official server's anti-cheat will detect modified clients and restrict you.
++- It is not a "private osu!" replacement aimed at general players. We do not advertise the server, we do not link the client in upstream issues / Discord, and we don't try to pull anyone away from official osu!. If you found Torii on your own and want to make it your main rhythm-game home, that's entirely your call — we just won't be the ones recruiting people here.
++
++---
++
++## Release streams
++
++Torii ships two parallel streams, picked via **Settings → General → Updates → Release stream**:
++
++| Stream | Tag suffix | What you get |
++|---|---|---|
++| **Torii** (default, stable) | `vYYYY.MDD.N-torii` | The stream this README describes. Conservative, close to upstream, the path the majority of users should be on. |
++| **Torii Nova** (experimental) | `vYYYY.MDD.N-nova` | An opt-in faster-moving stream that tests platform / rendering changes before they reach stable. See [the Nova section](#torii-nova-experimental-stream) for what it adds. |
++
++The two streams share the same install — switching is a one-click in settings + a Velopack-managed restart. Your data (beatmaps, scores, configs, skins) carries over either way.
++
++---
++
++## Features (stable stream, top-to-bottom)
++
++### Client identity & UI
++
++- **Torii brand**: gradient torii-gate logo across the window, taskbar, file associations, badges, and shortcuts. The executable is `torii.exe` and the displayed product name is "Torii Nova" across window chrome and file associations.
++- **Torii toolbar** — a Torii-themed alpha indicator and quick-access strip alongside the upstream toolbar.
++- **Settings → Torii section** where every Torii-specific knob lives instead of being scattered across upstream panels:
++  - Server selection (Torii vs. official) + auth flow
++  - Briefing overlay defaults (the daily-portal greeting screen)
++  - Aura presets (see below)
++  - Gameplay tweaks specific to Torii
++  - Storage management + Android-specific options
++  - Experimental flags (renderer choice, latency mode, etc.)
++
++### Auras
++
++Cosmetic effects rendered around your username + avatar in user panels. Currently registered presets:
++
++- **Admin / Dev / Mod / QAT** — staff-only auras, server-assigned
++- **Supporter** — for community supporters
++- **Bug Finder** — for users who land merged bug fixes / detailed reports
++- **Goof** — for the goofs
++
++Auras are server-attested. The client renders whatever the server says you're entitled to via `GET /api/v2/me/aura-catalog`; you can pick which one to display from the in-game settings picker.
++
++### Verified-client badge
++
++A small gradient torii-gate icon shown next to online users in the Friends / Online overlays — but **only** when the Torii server has matched their build hash to a CI-registered release. This means you can tell at a glance whether someone is on a verified Torii build vs. just any custom client connected to the server. The badge is not granted by self-attestation — it requires the executable's `osu.Game.dll` md5 to match a hash registered by CI on release.
++
++### Torii Briefing
++
++A daily portal overlay greeting users on first login of the day. Shows server status, what's new since last login, friend activity, and quick-jump entries. Designed so the home screen of a Torii session has more "warmth" than an empty Lazer main menu.
++
++### Results screen styles (Modern V2 & Stable)
++
++Torii gives players choice over their results screen presentation via **Settings → User Interface → Results Screen**:
++
++- **Modern V2 (g0v0)**: A sleek, modern results screen design conceptualized and created by **g0v0** ([GooGuTeam](https://github.com/GooGuTeam)). Features vector rank emblems, detailed hit-distribution statistics, score metric visualizers, local PP and if-FC estimates, and expandable leaderboard / score details drawers.
++- **Torii (Stable)**: A faithful rendition of the osu!stable results screen for players who prefer the classic layout.
++- **Lazer Classic**: Upstream's standard results screen.
++
++### Performance work
++
++- **Hiccup queue** — gameplay frame-time outliers are detected, snapshotted, and (with explicit opt-in) uploaded to the Torii server so we can see real-world stutter patterns instead of just our own profiles. Hiccup polling is paused during gameplay so we never *cause* a hiccup measuring one.
++- **Low latency providers** — NVIDIA Reflex (on RTX) and AMD Anti-Lag 2 (on RDNA) are wired into the Direct3D 11 backend, with a settings panel that shows which one applies to the current GPU.
++
++### Audio
++
++Audio packages are pinned to ppy's own `ppy.ManagedBass*` forks, matching official osu! 1-for-1 — meaning all of upstream's BASS audio fixes (WASAPI exclusive-mode handling, audio-device hot-plug, MIDI backend patches) ship in Torii too. We deliberately don't run on vanilla ManagedBass, because vanilla is missing those patches.
++
++### Skinning extras
++
++#### Per-combo-color circle textures (legacy skins)
++
++Drop numbered variants next to the standard skin files and Torii picks the one whose number matches the currently-active combo color slot from `skin.ini`'s `[Colours]` section.
++
++| Standard file | Numbered variants | Used by |
++|---|---|---|
++| `hitcircle.png` | `hitcircle1.png` … `hitcircle8.png` | Regular hit circles |
++| `hitcircleoverlay.png` | `hitcircleoverlay1.png` … `hitcircleoverlay8.png` | Overlay ring on hit circles |
++| `approachcircle.png` | `approachcircle1.png` … `approachcircle8.png` | Approach circles |
++| `sliderstartcircle.png` (+ overlay) | `sliderstartcircle1.png` … `sliderstartcircle8.png` (+ overlay variants) | Slider start circle |
++| `sliderendcircle.png` (+ overlay) | `sliderendcircle1.png` … `sliderendcircle8.png` (+ overlay variants) | Slider end circle |
++
++The number matches the Combo slot — `hitcircle1.png` ↔ `Combo1`, `hitcircle2.png` ↔ `Combo2`, etc.
++
++- The combo color is still applied as a tint over the variant — paint your variants in white/grayscale to let `skin.ini`'s combo colors show through, or in pre-tinted mid-tones for a colored-on-colored effect. Hidden / Flashlight / dim / fade animations all keep working because the tint pipeline is unchanged.
++- `@2x` HD textures work the same way they do everywhere else in legacy skins (`hitcircle1@2x.png`, `approachcircle1@2x.png`, etc.). No extra config.
++- **Missing slots cycle through the variants that DO exist** instead of dropping back to plain `hitcircle.png`. If you ship `hitcircle1.png` + `hitcircle2.png` against a `skin.ini` defining four combo colors, Combo3 uses `hitcircle1.png` again and Combo4 uses `hitcircle2.png` — so a skin with custom variants always shows variants, never a plain fallback halfway through the cycle. If the skin ships **zero** numbered variants (the today-default), every combo renders the regular `hitcircle.png` with its combo-color tint exactly like before.
++- The cycling works independently per element family — you can ship only `approachcircle1..4.png` and leave hitcircles alone, or only `hitcircle1.png` + `approachcircle1.png` + `approachcircle2.png` and everything else fallbacks normally. Each layer (`hitcircle`, `hitcircleoverlay`, `approachcircle`, slider start/end + their overlays) is resolved independently.
++- This is purely additive — skins that don't ship any numbered variants render exactly as they always have.
++
++The slot index for the active hit object resolves the same way the combo color itself does: `comboIndexWithOffsets mod (number of Combo entries in skin.ini)`. The variant lookup then either uses the variant for that slot (if shipped) or cycles through the present variants by ordered index. Worked example: `skin.ini` with `Combo1..Combo4` + skin shipping `hitcircle1` + `hitcircle3` → Combo1 = hc1, Combo2 = hc3 (next available variant by cycle), Combo3 = hc3, Combo4 = hc3. Ship contiguous variants (1..N for the N colors you defined) for the most predictable look.
++
++#### Distinct image for the layout-dim layer
++
++Drop `layout-background.png` into your skin folder to use a different image for the dimmed background that appears behind menus / settings (when the layout-scaling kicks in) than the one used as the main-menu background:
++
++| File | Used by |
++|---|---|
++| `menu-background.png` (or .jpg) | Main menu background. Shown full-screen on the welcome / song-select / browse screens. |
++| `layout-background.png` (or .jpg) | The dimmed background behind menus when the Settings → Graphics → Layout scaling is active. Falls back to `menu-background` if not shipped. |
++
++This is paired with a wider `Background dim` slider range — the slider in Settings → Graphics → Layout now goes from 0% to 100% (was 50%-100%) so the layout-background image can be pushed all the way to invisible if you only want the menu-background visible during the scale-down transition.
++
++Both elements still get the regular skin-lookup chain (`@2x` HD textures, per-beatmap skin overrides, fallback through the user skin → default skin) — no extra config required.
++
++### Mod policy (ranked surface)
++
++Two upstream rate-altering mods don't yield PP on Torii because the difficulty calculator can't see their effect — it runs against the base beatmap rate only, with no "realtime / per-window rate" hook:
++
++| Mod | Acronym | Why it's unranked |
++|---|---|---|
++| Adaptive Speed | `AS` | Rate adapts mid-play to user accuracy. A player effectively averaging 0.5x would still be scored against the base rate. |
++| Wind Down | `WD` | Rate ramps from `InitialRate` down to `FinalRate` over the map. A 2.0x → 0.5x wind-down has an average rate well below 1.0 but gets scored as if played at base rate — net PP gain from an easier play. |
++
++Wind Up (`WU`) stays ranked because it only ever makes the play *harder* than baseline. Both client (the mod selector marks `AS` / `WD` as unranked) and server (`g0v0-server`'s `_mods_can_get_pp` rejects them across every ruleset) enforce this — submitting from a modified client that strips the client-side flag still doesn't get PP.
++
++This list will shrink the moment lazer grows realtime rate-aware diffcalc upstream; until then the gate exists to keep the PP economy honest.
++
++### Velopack updater with channel routing
++
++Torii uses [Velopack](https://github.com/velopack/velopack) for updates. The release pipeline tags releases with `-torii` for stable (master) and `-nova` for experimental (nova branch), and the in-client Updater pins users to their chosen stream — Nova users only see `-nova` prereleases, stable users only see `-torii` releases. Switching streams is one click in Settings.
++
++---
++
++## Torii Nova (experimental stream)
++
++Nova is where we test things that aren't safe to push to every Torii user yet. If you don't already know what's in Nova and why you want it, you almost certainly want to stay on stable.
++
++Switch via **Settings → General → Updates → Release stream → Torii Nova (Experimental)**. The client confirms before switching and downloads a fresh Nova build over your current install (data is preserved).
++
++What Nova currently adds on top of stable (everything else — the brand, icon, binary rename, audio fixes, badge, hidden D3D12 dropdown, config-migration — ships on stable too):
++
++- **`.NET 10` runtime chain** across the whole client. JIT improvements, lower-allocation GC, and SIMD path improvements that matter most for gameplay frame pacing. Stable is still on `.NET 8`.
++- **CoreCLR runtime** on Android, replacing Mono. Same JIT/GC improvements story as desktop.
++- **Deferred renderer as default** on first launch. Stable defaults to the framework's immediate renderer for safety; Nova flips this to Deferred so we can shake out edge cases at scale.
++- **Direct3D 12 backend (experimental, opt-in on both streams)** — a fully-wired D3D12 path in our Veldrid fork. **Deliberately hidden** from the in-settings renderer dropdown on both streams to keep curious users from picking it on a hunch; the backend can be opted into by editing `framework.ini` (`%APPDATA%\osu-torii\framework.ini`) and setting `Renderer = Deferred_Direct3D12`. Nova is where it gets dogfooded with the Deferred-default UX, while stable users on Direct3D 11 immediate keep their existing renderer untouched.
++- **Renderer dropdown re-labels** — Deferred entries display as `... (Nova)` (e.g. `Direct3D 11 (Nova)`) so you can tell which path you're on at a glance.
++
++When Nova features bed in, they get merged down to stable. Nothing in Nova is intended to live there forever — it's a buffer, not a separate product.
++
++---
++
++## The Torii server
++
++`g0v0-server` is a Python (FastAPI) server that talks osu!'s v2 API + spectator + chat protocols. It hosts:
++
++- Scores + leaderboards (per-beatmap + global + country, with daily-challenge support)
++- Multiplayer rooms (osu!, taiko, catch, mania)
++- Chat (channels + PMs)
++- User presence + spectator
++- Beatmap proxy + tag/rating systems
++- A small admin dashboard for restriction / moderation
++
++The server is **private** and **invite-only** at the moment. If you have an account, you can sign in by switching the server endpoint in `Settings → Torii → Server`. We do not advertise the server publicly and do not accept open signups via the client.
++
++---
++
++## Download
++
++> [!WARNING]
++> **Do NOT install Torii if you have not already played osu!.** This is a fork, not the real thing. Install [official osu!](https://osu.ppy.sh/home/download) first. If you decide you want Torii anyway, install it *alongside* official osu! — they use separate data directories and don't conflict.
++
++Grab the latest release from the [Releases page](https://github.com/ShikkesoraSIM/torii-osu/releases). Each release ships:
++
++| Platform | File |
++|---|---|
++| Windows (x64) installer | `install-win-x64.exe` |
++| Windows (ARM64) installer | `install-win-arm64.exe` |
++| Windows portable | `portable-win-x64.zip` / `portable-win-arm64.zip` |
++| Linux AppImage | `torii-linux-x64.AppImage` / `torii-linux-arm64.AppImage` |
++| Linux portable tarball | `portable-linux-x64.tar.gz` / `portable-linux-arm64.tar.gz` |
++
++macOS and Android are not part of the current release and will return in a later build.
++
++This release changes the application identity, so it installs alongside an older Torii rather than updating it in place. Your data directory is untouched and shared between both, so beatmaps, scores, replays, and settings carry over.
++
++---
++
++## Building from source
++
++This repository is a fork of [`ppy/osu`](https://github.com/ppy/osu). You need three sibling checkouts to build:
++
++```
++parent-dir/
++├── torii-osu          # this repository
++├── torii-framework    # https://github.com/ShikkesoraSIM/torii-framework  (osu-framework fork)
++└── torii-veldrid      # https://github.com/ShikkesoraSIM/torii-veldrid    (Veldrid fork)
++```
++
++`torii-resources` (a fork of `osu-resources`) is pulled as a NuGet package — you don't need a local checkout unless you're modifying resources.
++
++### Prerequisites
++
++- [.NET 8 SDK](https://dotnet.microsoft.com/download) for stable builds (Nova builds bump to .NET 10 — see [the Nova section](#torii-nova-experimental-stream) — and require both 8 and 10 installed)
++- An IDE that supports C# 12+ — [Visual Studio 2022 17.8+](https://visualstudio.microsoft.com/), [JetBrains Rider](https://www.jetbrains.com/rider/), or [VS Code](https://code.visualstudio.com/) with the C# Dev Kit
++- Windows is the primary supported dev platform. Linux + macOS builds work via the same `dotnet` CLI but get less day-to-day testing.
++
++### Quick start
++
++```shell
++git clone https://github.com/ShikkesoraSIM/torii-framework.git
++git clone https://github.com/ShikkesoraSIM/torii-veldrid.git
++git clone https://github.com/ShikkesoraSIM/torii-osu.git
++
++cd torii-veldrid
++dotnet pack src/Veldrid/Veldrid.csproj -c Release -o bin/Packages/Release
++dotnet pack src/Veldrid.MetalBindings/Veldrid.MetalBindings.csproj -c Release -o bin/Packages/Release
++dotnet pack src/Veldrid.OpenGLBindings/Veldrid.OpenGLBindings.csproj -c Release -o bin/Packages/Release
++
++cd ../torii-osu
++dotnet run --project osu.Desktop -c Debug
++```
++
++The first run takes a few minutes (restore + initial build). Subsequent runs are fast.
++
++To build the Nova experimental tree, check out the `nova` branch in `torii-osu` (and use the framework + veldrid commit hashes that branch's `build-gu.yml` env declares — those are pinned per-release).
++
++---
++
++## Contributing
++
++Contributions are welcome, but **please direct general osu! improvements at [upstream](https://github.com/ppy/osu) instead.** Anything that isn't Torii-specific (rulesets, beatmap features, mod logic, core gameplay) lands upstream first; Torii merges upstream regularly. Submitting it here means it only ever ships to Torii users, which isn't what most contributors want.
++
++**Torii-specific work is welcome here**: Torii settings, the briefing overlay, the aura system, performance telemetry, server integration tweaks. Nova-specific (D3D12, .NET 10, Deferred-default) PRs target the `nova` branch.
++
++Before opening a PR:
++
++- Run `dotnet format` on changed files.
++- Don't bump upstream-shared package versions without a good reason (we try to stay close to upstream so merges don't conflict).
++- If a change touches behaviour visible to a server, it probably needs a coordinated change in [`g0v0-server`](https://github.com/GooGuTeam/g0v0-server) — flag that in the PR.
++
++---
++
++## License
++
++The Torii client source is licensed under the [MIT License](LICENCE), inheriting from upstream osu!. See the [LICENCE](LICENCE) file for details.
++
++> [!NOTE]
++> **MIT does NOT cover the "osu!" / "ppy" / "lazer" branding** — those are trademarks of ppy Pty Ltd. The May 2026 binary rebrand exists precisely to stay clear of that trademark in distributed binaries. Please do not redistribute Torii under the osu! name.
++>
++> Game resources (sound effects, fonts, default skin assets) inherited from upstream are covered by the separate [ppy/osu-resources](https://github.com/ppy/osu-resources) license. Torii-original assets (the gradient torii-gate logo, Torii-specific UI graphics) are © Torii Team and available under the same MIT license as the source.
++
++---
++
++## Credits
++
++- [ppy](https://github.com/ppy) and the osu! lazer team — without their work, none of this would exist. Please support [osu!](https://osu.ppy.sh) and consider becoming a [supporter](https://osu.ppy.sh/home/support).
++- [shigetiro](https://github.com/shigetiro) — earlier fork work that Torii builds on.
++- [GooGuTeam](https://github.com/GooGuTeam) / **g0v0** — original **Modern V2 (g0v0)** results screen design and concept, `g0v0-server` upstream, and ongoing collaboration.
++- The Torii community — for bug reports, ideas, and putting up with experimental builds on the Nova stream.
++
++---
++
++<p align="center">
++  <sub>Made with respect for the original project. Please support <a href="https://osu.ppy.sh">osu!</a>.</sub>
++</p>
+diff --git a/README.md b/README.md
+index aef0e23ce8..35295923c9 100644
+--- a/README.md
++++ b/README.md
+@@ -1,302 +1,9 @@
+-<p align="center">
+-  <img width="220" alt="Torii" src="assets/torii-512.png">
+-</p>
++# Ritsu — Torii offline foundation
+ 
+-<h1 align="center">Torii</h1>
++This checkout is the local-only Ritsu foundation, based on Torii v2026.1026.0-torii. Torii names, visuals and skin component identifiers are intentionally retained.
+ 
+-<p align="center">
+-  <em>A community fork of <a href="https://github.com/ppy/osu">osu! (lazer)</a> with a private server and some extra
+-  client polish.</em>
+-</p>
++Run the portable package with Launch Ritsu.cmd. Runtime network access, authentication, updates, telemetry, external links and server integrations are disabled. User storage is isolated under %APPDATA%/Ritsu. Import local .osz, .osk and .osr files; original archives are preserved.
+ 
+-<p align="center">
+-  <a href="https://github.com/ShikkesoraSIM/torii-osu/releases/latest">
+-    <img alt="Latest stable" src="https://img.shields.io/github/v/release/ShikkesoraSIM/torii-osu?label=stable&color=ff66ab">
+-  </a>
+-  <a href="https://github.com/ShikkesoraSIM/torii-osu/releases">
+-    <img alt="Torii downloads" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ShikkesoraSIM/torii-osu/master/assets/badges/torii-downloads.json">
+-  </a>
+-  <a href="https://github.com/ShikkesoraSIM/torii-osu/releases?q=prerelease%3Atrue">
+-    <img alt="Nova downloads" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ShikkesoraSIM/torii-osu/master/assets/badges/nova-downloads.json">
+-  </a>
+-</p>
++Build instructions, validation and roadmap: see ../README.md, ../Build.ps1, ../VALIDATION.md and ../ROADMAP.md. The full original Torii README is retained in README.Torii.md.
+ 
+----
+-
+-> [!IMPORTANT]
+-> **Torii is an unofficial fork of [osu!](https://github.com/ppy/osu).**
+->
+-> - We are **not affiliated with, endorsed by, or supported by ppy Pty Ltd**, peppy, or the osu! development team.
+-> - **osu!**, the **"osu!"** name, the **"lazer"** codename, and all related branding are trademarks of **ppy Pty Ltd**. Torii is a separately-named project; the May 2026 binary rebrand drops the "osu!" prefix from distributed binaries to stay clear of that trademark.
+-> - **Please support the original project.** osu! is free, lovingly maintained, and the only reason this fork can exist. If you enjoy playing rhythm games, the best thing you can do is:
+->   - Play on the [official osu! servers](https://osu.ppy.sh) (your scores there count for the real leaderboards).
+->   - Become an [osu! supporter](https://osu.ppy.sh/home/support) — it directly funds upstream development.
+->   - File issues / PRs on the [upstream repo](https://github.com/ppy/osu) instead of pinging the upstream team about Torii.
+-> - Torii exists to experiment with ideas that may not fit upstream's roadmap, run a small community server, and to learn. **It is not a replacement for osu! and we do not want it to be.** If you're new to the game, please install [official osu!](https://osu.ppy.sh/home/download) first.
+-
+----
+-
+-## What Torii is
+-
+-A buildable client + a small private server. The client is forked from osu! lazer with extra UI surfaces, a few new gameplay-adjacent systems, and performance work. The server is a separate project (`g0v0-server`) that hosts scores, leaderboards, multiplayer rooms, chat, and presence for users who choose to play there.
+-
+-**You do not need to use the Torii server to use the Torii client.** You can sign in against the official osu! server at any time — the client lets you switch via Settings → Torii → Server.
+-
+-## What it is **not**
+-
+-- It is not "modded osu!" or "cheat osu!". No anti-cheat relaxation, no rank-skipping, no PP injection. Submitting scores to the official osu! server while running this client is unsupported and explicitly discouraged by both us and upstream — the official server's anti-cheat will detect modified clients and restrict you.
+-- It is not a "private osu!" replacement aimed at general players. We do not advertise the server, we do not link the client in upstream issues / Discord, and we don't try to pull anyone away from official osu!. If you found Torii on your own and want to make it your main rhythm-game home, that's entirely your call — we just won't be the ones recruiting people here.
+-
+----
+-
+-## Release streams
+-
+-Torii ships two parallel streams, picked via **Settings → General → Updates → Release stream**:
+-
+-| Stream | Tag suffix | What you get |
+-|---|---|---|
+-| **Torii** (default, stable) | `vYYYY.MDD.N-torii` | The stream this README describes. Conservative, close to upstream, the path the majority of users should be on. |
+-| **Torii Nova** (experimental) | `vYYYY.MDD.N-nova` | An opt-in faster-moving stream that tests platform / rendering changes before they reach stable. See [the Nova section](#torii-nova-experimental-stream) for what it adds. |
+-
+-The two streams share the same install — switching is a one-click in settings + a Velopack-managed restart. Your data (beatmaps, scores, configs, skins) carries over either way.
+-
+----
+-
+-## Features (stable stream, top-to-bottom)
+-
+-### Client identity & UI
+-
+-- **Torii brand**: gradient torii-gate logo across the window, taskbar, file associations, badges, and shortcuts. The executable is `torii.exe` and the displayed product name is "Torii Nova" across window chrome and file associations.
+-- **Torii toolbar** — a Torii-themed alpha indicator and quick-access strip alongside the upstream toolbar.
+-- **Settings → Torii section** where every Torii-specific knob lives instead of being scattered across upstream panels:
+-  - Server selection (Torii vs. official) + auth flow
+-  - Briefing overlay defaults (the daily-portal greeting screen)
+-  - Aura presets (see below)
+-  - Gameplay tweaks specific to Torii
+-  - Storage management + Android-specific options
+-  - Experimental flags (renderer choice, latency mode, etc.)
+-
+-### Auras
+-
+-Cosmetic effects rendered around your username + avatar in user panels. Currently registered presets:
+-
+-- **Admin / Dev / Mod / QAT** — staff-only auras, server-assigned
+-- **Supporter** — for community supporters
+-- **Bug Finder** — for users who land merged bug fixes / detailed reports
+-- **Goof** — for the goofs
+-
+-Auras are server-attested. The client renders whatever the server says you're entitled to via `GET /api/v2/me/aura-catalog`; you can pick which one to display from the in-game settings picker.
+-
+-### Verified-client badge
+-
+-A small gradient torii-gate icon shown next to online users in the Friends / Online overlays — but **only** when the Torii server has matched their build hash to a CI-registered release. This means you can tell at a glance whether someone is on a verified Torii build vs. just any custom client connected to the server. The badge is not granted by self-attestation — it requires the executable's `osu.Game.dll` md5 to match a hash registered by CI on release.
+-
+-### Torii Briefing
+-
+-A daily portal overlay greeting users on first login of the day. Shows server status, what's new since last login, friend activity, and quick-jump entries. Designed so the home screen of a Torii session has more "warmth" than an empty Lazer main menu.
+-
+-### Results screen styles (Modern V2 & Stable)
+-
+-Torii gives players choice over their results screen presentation via **Settings → User Interface → Results Screen**:
+-
+-- **Modern V2 (g0v0)**: A sleek, modern results screen design conceptualized and created by **g0v0** ([GooGuTeam](https://github.com/GooGuTeam)). Features vector rank emblems, detailed hit-distribution statistics, score metric visualizers, local PP and if-FC estimates, and expandable leaderboard / score details drawers.
+-- **Torii (Stable)**: A faithful rendition of the osu!stable results screen for players who prefer the classic layout.
+-- **Lazer Classic**: Upstream's standard results screen.
+-
+-### Performance work
+-
+-- **Hiccup queue** — gameplay frame-time outliers are detected, snapshotted, and (with explicit opt-in) uploaded to the Torii server so we can see real-world stutter patterns instead of just our own profiles. Hiccup polling is paused during gameplay so we never *cause* a hiccup measuring one.
+-- **Low latency providers** — NVIDIA Reflex (on RTX) and AMD Anti-Lag 2 (on RDNA) are wired into the Direct3D 11 backend, with a settings panel that shows which one applies to the current GPU.
+-
+-### Audio
+-
+-Audio packages are pinned to ppy's own `ppy.ManagedBass*` forks, matching official osu! 1-for-1 — meaning all of upstream's BASS audio fixes (WASAPI exclusive-mode handling, audio-device hot-plug, MIDI backend patches) ship in Torii too. We deliberately don't run on vanilla ManagedBass, because vanilla is missing those patches.
+-
+-### Skinning extras
+-
+-#### Per-combo-color circle textures (legacy skins)
+-
+-Drop numbered variants next to the standard skin files and Torii picks the one whose number matches the currently-active combo color slot from `skin.ini`'s `[Colours]` section.
+-
+-| Standard file | Numbered variants | Used by |
+-|---|---|---|
+-| `hitcircle.png` | `hitcircle1.png` … `hitcircle8.png` | Regular hit circles |
+-| `hitcircleoverlay.png` | `hitcircleoverlay1.png` … `hitcircleoverlay8.png` | Overlay ring on hit circles |
+-| `approachcircle.png` | `approachcircle1.png` … `approachcircle8.png` | Approach circles |
+-| `sliderstartcircle.png` (+ overlay) | `sliderstartcircle1.png` … `sliderstartcircle8.png` (+ overlay variants) | Slider start circle |
+-| `sliderendcircle.png` (+ overlay) | `sliderendcircle1.png` … `sliderendcircle8.png` (+ overlay variants) | Slider end circle |
+-
+-The number matches the Combo slot — `hitcircle1.png` ↔ `Combo1`, `hitcircle2.png` ↔ `Combo2`, etc.
+-
+-- The combo color is still applied as a tint over the variant — paint your variants in white/grayscale to let `skin.ini`'s combo colors show through, or in pre-tinted mid-tones for a colored-on-colored effect. Hidden / Flashlight / dim / fade animations all keep working because the tint pipeline is unchanged.
+-- `@2x` HD textures work the same way they do everywhere else in legacy skins (`hitcircle1@2x.png`, `approachcircle1@2x.png`, etc.). No extra config.
+-- **Missing slots cycle through the variants that DO exist** instead of dropping back to plain `hitcircle.png`. If you ship `hitcircle1.png` + `hitcircle2.png` against a `skin.ini` defining four combo colors, Combo3 uses `hitcircle1.png` again and Combo4 uses `hitcircle2.png` — so a skin with custom variants always shows variants, never a plain fallback halfway through the cycle. If the skin ships **zero** numbered variants (the today-default), every combo renders the regular `hitcircle.png` with its combo-color tint exactly like before.
+-- The cycling works independently per element family — you can ship only `approachcircle1..4.png` and leave hitcircles alone, or only `hitcircle1.png` + `approachcircle1.png` + `approachcircle2.png` and everything else fallbacks normally. Each layer (`hitcircle`, `hitcircleoverlay`, `approachcircle`, slider start/end + their overlays) is resolved independently.
+-- This is purely additive — skins that don't ship any numbered variants render exactly as they always have.
+-
+-The slot index for the active hit object resolves the same way the combo color itself does: `comboIndexWithOffsets mod (number of Combo entries in skin.ini)`. The variant lookup then either uses the variant for that slot (if shipped) or cycles through the present variants by ordered index. Worked example: `skin.ini` with `Combo1..Combo4` + skin shipping `hitcircle1` + `hitcircle3` → Combo1 = hc1, Combo2 = hc3 (next available variant by cycle), Combo3 = hc3, Combo4 = hc3. Ship contiguous variants (1..N for the N colors you defined) for the most predictable look.
+-
+-#### Distinct image for the layout-dim layer
+-
+-Drop `layout-background.png` into your skin folder to use a different image for the dimmed background that appears behind menus / settings (when the layout-scaling kicks in) than the one used as the main-menu background:
+-
+-| File | Used by |
+-|---|---|
+-| `menu-background.png` (or .jpg) | Main menu background. Shown full-screen on the welcome / song-select / browse screens. |
+-| `layout-background.png` (or .jpg) | The dimmed background behind menus when the Settings → Graphics → Layout scaling is active. Falls back to `menu-background` if not shipped. |
+-
+-This is paired with a wider `Background dim` slider range — the slider in Settings → Graphics → Layout now goes from 0% to 100% (was 50%-100%) so the layout-background image can be pushed all the way to invisible if you only want the menu-background visible during the scale-down transition.
+-
+-Both elements still get the regular skin-lookup chain (`@2x` HD textures, per-beatmap skin overrides, fallback through the user skin → default skin) — no extra config required.
+-
+-### Mod policy (ranked surface)
+-
+-Two upstream rate-altering mods don't yield PP on Torii because the difficulty calculator can't see their effect — it runs against the base beatmap rate only, with no "realtime / per-window rate" hook:
+-
+-| Mod | Acronym | Why it's unranked |
+-|---|---|---|
+-| Adaptive Speed | `AS` | Rate adapts mid-play to user accuracy. A player effectively averaging 0.5x would still be scored against the base rate. |
+-| Wind Down | `WD` | Rate ramps from `InitialRate` down to `FinalRate` over the map. A 2.0x → 0.5x wind-down has an average rate well below 1.0 but gets scored as if played at base rate — net PP gain from an easier play. |
+-
+-Wind Up (`WU`) stays ranked because it only ever makes the play *harder* than baseline. Both client (the mod selector marks `AS` / `WD` as unranked) and server (`g0v0-server`'s `_mods_can_get_pp` rejects them across every ruleset) enforce this — submitting from a modified client that strips the client-side flag still doesn't get PP.
+-
+-This list will shrink the moment lazer grows realtime rate-aware diffcalc upstream; until then the gate exists to keep the PP economy honest.
+-
+-### Velopack updater with channel routing
+-
+-Torii uses [Velopack](https://github.com/velopack/velopack) for updates. The release pipeline tags releases with `-torii` for stable (master) and `-nova` for experimental (nova branch), and the in-client Updater pins users to their chosen stream — Nova users only see `-nova` prereleases, stable users only see `-torii` releases. Switching streams is one click in Settings.
+-
+----
+-
+-## Torii Nova (experimental stream)
+-
+-Nova is where we test things that aren't safe to push to every Torii user yet. If you don't already know what's in Nova and why you want it, you almost certainly want to stay on stable.
+-
+-Switch via **Settings → General → Updates → Release stream → Torii Nova (Experimental)**. The client confirms before switching and downloads a fresh Nova build over your current install (data is preserved).
+-
+-What Nova currently adds on top of stable (everything else — the brand, icon, binary rename, audio fixes, badge, hidden D3D12 dropdown, config-migration — ships on stable too):
+-
+-- **`.NET 10` runtime chain** across the whole client. JIT improvements, lower-allocation GC, and SIMD path improvements that matter most for gameplay frame pacing. Stable is still on `.NET 8`.
+-- **CoreCLR runtime** on Android, replacing Mono. Same JIT/GC improvements story as desktop.
+-- **Deferred renderer as default** on first launch. Stable defaults to the framework's immediate renderer for safety; Nova flips this to Deferred so we can shake out edge cases at scale.
+-- **Direct3D 12 backend (experimental, opt-in on both streams)** — a fully-wired D3D12 path in our Veldrid fork. **Deliberately hidden** from the in-settings renderer dropdown on both streams to keep curious users from picking it on a hunch; the backend can be opted into by editing `framework.ini` (`%APPDATA%\osu-torii\framework.ini`) and setting `Renderer = Deferred_Direct3D12`. Nova is where it gets dogfooded with the Deferred-default UX, while stable users on Direct3D 11 immediate keep their existing renderer untouched.
+-- **Renderer dropdown re-labels** — Deferred entries display as `... (Nova)` (e.g. `Direct3D 11 (Nova)`) so you can tell which path you're on at a glance.
+-
+-When Nova features bed in, they get merged down to stable. Nothing in Nova is intended to live there forever — it's a buffer, not a separate product.
+-
+----
+-
+-## The Torii server
+-
+-`g0v0-server` is a Python (FastAPI) server that talks osu!'s v2 API + spectator + chat protocols. It hosts:
+-
+-- Scores + leaderboards (per-beatmap + global + country, with daily-challenge support)
+-- Multiplayer rooms (osu!, taiko, catch, mania)
+-- Chat (channels + PMs)
+-- User presence + spectator
+-- Beatmap proxy + tag/rating systems
+-- A small admin dashboard for restriction / moderation
+-
+-The server is **private** and **invite-only** at the moment. If you have an account, you can sign in by switching the server endpoint in `Settings → Torii → Server`. We do not advertise the server publicly and do not accept open signups via the client.
+-
+----
+-
+-## Download
+-
+-> [!WARNING]
+-> **Do NOT install Torii if you have not already played osu!.** This is a fork, not the real thing. Install [official osu!](https://osu.ppy.sh/home/download) first. If you decide you want Torii anyway, install it *alongside* official osu! — they use separate data directories and don't conflict.
+-
+-Grab the latest release from the [Releases page](https://github.com/ShikkesoraSIM/torii-osu/releases). Each release ships:
+-
+-| Platform | File |
+-|---|---|
+-| Windows (x64) installer | `install-win-x64.exe` |
+-| Windows (ARM64) installer | `install-win-arm64.exe` |
+-| Windows portable | `portable-win-x64.zip` / `portable-win-arm64.zip` |
+-| Linux AppImage | `torii-linux-x64.AppImage` / `torii-linux-arm64.AppImage` |
+-| Linux portable tarball | `portable-linux-x64.tar.gz` / `portable-linux-arm64.tar.gz` |
+-
+-macOS and Android are not part of the current release and will return in a later build.
+-
+-This release changes the application identity, so it installs alongside an older Torii rather than updating it in place. Your data directory is untouched and shared between both, so beatmaps, scores, replays, and settings carry over.
+-
+----
+-
+-## Building from source
+-
+-This repository is a fork of [`ppy/osu`](https://github.com/ppy/osu). You need three sibling checkouts to build:
+-
+-```
+-parent-dir/
+-├── torii-osu          # this repository
+-├── torii-framework    # https://github.com/ShikkesoraSIM/torii-framework  (osu-framework fork)
+-└── torii-veldrid      # https://github.com/ShikkesoraSIM/torii-veldrid    (Veldrid fork)
+-```
+-
+-`torii-resources` (a fork of `osu-resources`) is pulled as a NuGet package — you don't need a local checkout unless you're modifying resources.
+-
+-### Prerequisites
+-
+-- [.NET 8 SDK](https://dotnet.microsoft.com/download) for stable builds (Nova builds bump to .NET 10 — see [the Nova section](#torii-nova-experimental-stream) — and require both 8 and 10 installed)
+-- An IDE that supports C# 12+ — [Visual Studio 2022 17.8+](https://visualstudio.microsoft.com/), [JetBrains Rider](https://www.jetbrains.com/rider/), or [VS Code](https://code.visualstudio.com/) with the C# Dev Kit
+-- Windows is the primary supported dev platform. Linux + macOS builds work via the same `dotnet` CLI but get less day-to-day testing.
+-
+-### Quick start
+-
+-```shell
+-git clone https://github.com/ShikkesoraSIM/torii-framework.git
+-git clone https://github.com/ShikkesoraSIM/torii-veldrid.git
+-git clone https://github.com/ShikkesoraSIM/torii-osu.git
+-
+-cd torii-veldrid
+-dotnet pack src/Veldrid/Veldrid.csproj -c Release -o bin/Packages/Release
+-dotnet pack src/Veldrid.MetalBindings/Veldrid.MetalBindings.csproj -c Release -o bin/Packages/Release
+-dotnet pack src/Veldrid.OpenGLBindings/Veldrid.OpenGLBindings.csproj -c Release -o bin/Packages/Release
+-
+-cd ../torii-osu
+-dotnet run --project osu.Desktop -c Debug
+-```
+-
+-The first run takes a few minutes (restore + initial build). Subsequent runs are fast.
+-
+-To build the Nova experimental tree, check out the `nova` branch in `torii-osu` (and use the framework + veldrid commit hashes that branch's `build-gu.yml` env declares — those are pinned per-release).
+-
+----
+-
+-## Contributing
+-
+-Contributions are welcome, but **please direct general osu! improvements at [upstream](https://github.com/ppy/osu) instead.** Anything that isn't Torii-specific (rulesets, beatmap features, mod logic, core gameplay) lands upstream first; Torii merges upstream regularly. Submitting it here means it only ever ships to Torii users, which isn't what most contributors want.
+-
+-**Torii-specific work is welcome here**: Torii settings, the briefing overlay, the aura system, performance telemetry, server integration tweaks. Nova-specific (D3D12, .NET 10, Deferred-default) PRs target the `nova` branch.
+-
+-Before opening a PR:
+-
+-- Run `dotnet format` on changed files.
+-- Don't bump upstream-shared package versions without a good reason (we try to stay close to upstream so merges don't conflict).
+-- If a change touches behaviour visible to a server, it probably needs a coordinated change in [`g0v0-server`](https://github.com/GooGuTeam/g0v0-server) — flag that in the PR.
+-
+----
+-
+-## License
+-
+-The Torii client source is licensed under the [MIT License](LICENCE), inheriting from upstream osu!. See the [LICENCE](LICENCE) file for details.
+-
+-> [!NOTE]
+-> **MIT does NOT cover the "osu!" / "ppy" / "lazer" branding** — those are trademarks of ppy Pty Ltd. The May 2026 binary rebrand exists precisely to stay clear of that trademark in distributed binaries. Please do not redistribute Torii under the osu! name.
+->
+-> Game resources (sound effects, fonts, default skin assets) inherited from upstream are covered by the separate [ppy/osu-resources](https://github.com/ppy/osu-resources) license. Torii-original assets (the gradient torii-gate logo, Torii-specific UI graphics) are © Torii Team and available under the same MIT license as the source.
+-
+----
+-
+-## Credits
+-
+-- [ppy](https://github.com/ppy) and the osu! lazer team — without their work, none of this would exist. Please support [osu!](https://osu.ppy.sh) and consider becoming a [supporter](https://osu.ppy.sh/home/support).
+-- [shigetiro](https://github.com/shigetiro) — earlier fork work that Torii builds on.
+-- [GooGuTeam](https://github.com/GooGuTeam) / **g0v0** — original **Modern V2 (g0v0)** results screen design and concept, `g0v0-server` upstream, and ongoing collaboration.
+-- The Torii community — for bug reports, ideas, and putting up with experimental builds on the Nova stream.
+-
+----
+-
+-<p align="center">
+-  <sub>Made with respect for the original project. Please support <a href="https://osu.ppy.sh">osu!</a>.</sub>
+-</p>
++Credits: ShikkesoraSIM and Torii contributors; ppy and osu!/osu!framework contributors. Modosu and its predecessor MOsu (p-720) are credited as the source of future practice features; their code is not integrated in this milestone. Existing notices and licenses remain in place.
+diff --git a/osu.Desktop/OsuGameDesktop.cs b/osu.Desktop/OsuGameDesktop.cs
+index 1b4072cdb9..05e733ccd0 100644
+--- a/osu.Desktop/OsuGameDesktop.cs
++++ b/osu.Desktop/OsuGameDesktop.cs
+@@ -45,6 +45,9 @@ public OsuGameDesktop(string[]? args = null)
+ 
+         public override StableStorage? GetStorageForStableInstall()
+         {
++            if (osu.Game.Offline.RitsuOffline.Enabled)
++                return null;
++
+             try
+             {
+                 if (Host is DesktopGameHost desktopHost)
+@@ -114,6 +117,9 @@ protected override UpdateManager CreateUpdateManager()
+             //
+             // This ensures that if a user is trying to recover from a failed startup, it will keep them
+             // on the stream which is imminently being reinstalled.
++            if (osu.Game.Offline.RitsuOffline.Enabled)
++                return new UpdateManager();
++
+             if (IsFirstRun)
+                 LocalConfig.SetValue(OsuSetting.ReleaseStream, ReleaseStream.Torii);
+ 
+@@ -125,7 +131,7 @@ protected override UpdateManager CreateUpdateManager()
+ 
+         public override bool RestartAppWhenExited()
+         {
+-            if (IsPackageManaged || !IsDeployedBuild)
++            if (osu.Game.Offline.RitsuOffline.Enabled || IsPackageManaged || !IsDeployedBuild)
+                 return false;
+ 
+             RestartOnExitAction = () =>
+@@ -161,7 +167,7 @@ public override bool RestartAppWhenExited()
+         protected override void LoadComplete()
+         {
+             // this is done before `base.LoadComplete` so that the game can immediately register data sources.
+-            if (EnableWebSocketServer)
++            if (!osu.Game.Offline.RitsuOffline.Enabled && EnableWebSocketServer)
+             {
+                 var provider = new OsuWebSocketProvider();
+                 Add(provider);
+@@ -170,7 +176,7 @@ protected override void LoadComplete()
+ 
+             base.LoadComplete();
+ 
+-            LoadComponentAsync(new DiscordRichPresence(), Add);
++            // Discord and other external integrations are disabled in the offline build.
+ 
+             switch (RuntimeInfo.OS)
+             {
+diff --git a/osu.Desktop/Program.cs b/osu.Desktop/Program.cs
+index 337b2beac4..18741dd769 100644
+--- a/osu.Desktop/Program.cs
++++ b/osu.Desktop/Program.cs
+@@ -22,12 +22,10 @@ namespace osu.Desktop
+     public static class Program
+     {
+ #if DEBUG
+-        private const string base_game_name = @"osu-development";
++        private const string base_game_name = @"Ritsu";
+ #else
+-        // torii nova: usamos la MISMA data dir que la Nova vieja (%APPDATA%/osu-torii)
+-        // asi el update es seamless: el usuario conserva skins, settings, mapas, scores,
+-        // collections, todo. toriirefresh REEMPLAZA a Nova, no convive con ella.
+-        private const string base_game_name = @"osu-torii";
++        // Keep this offline foundation separate from existing Torii and osu! data.
++        private const string base_game_name = @"Ritsu";
+ #endif
+ 
+         /// <summary>
+@@ -333,17 +331,7 @@ public static void Main(string[] args)
+ 
+             try
+             {
+-                // IMPORTANT DON'T IGNORE: For general sanity, velopack's setup needs to run before anything else.
+-                // This has bitten us in the rear before (bricked updater), and although the underlying issue from
+-                // last time has been fixed, let's not tempt fate.
+-                try
+-                {
+-                    setupVelopack(args);
+-                }
+-                catch (Exception ex)
+-                {
+-                    Logger.Log($"[Torii] Velopack setup failed: {ex.Message}", LoggingTarget.Runtime, LogLevel.Important);
+-                }
++                // Manual portable updates only; no Velopack hooks or file associations.
+ 
+             if (OperatingSystem.IsWindows())
+             {
+@@ -417,6 +405,7 @@ public static void Main(string[] args)
+ 
+             string gameName = base_game_name;
+             bool tournamentClient = false;
++            osu.Framework.IO.Network.WebRequest.DisableNetworkAccess();
+ 
+             foreach (string arg in args)
+             {
+@@ -428,8 +417,7 @@ public static void Main(string[] args)
+                 switch (key)
+                 {
+                     case "--tournament":
+-                        tournamentClient = true;
+-                        break;
++                        throw new NotSupportedException("The online tournament client is not available in this offline build.");
+ 
+                     case "--debug-client-id":
+                         if (!DebugUtils.IsDebugBuild)
+@@ -484,7 +472,7 @@ public static void Main(string[] args)
+                         }
+                     }
+ 
+-                    if (host.IsPrimaryInstance)
++                    if (host.IsPrimaryInstance && !osu.Game.Offline.RitsuOffline.Enabled)
+                     {
+                         try
+                         {
+@@ -505,7 +493,7 @@ public static void Main(string[] args)
+                         host.Run(new OsuGameDesktop(args)
+                         {
+                             IsFirstRun = isFirstRun,
+-                            EnableWebSocketServer = Environment.GetEnvironmentVariable("OSU_WEBSOCKET_SERVER") == "1",
++                            EnableWebSocketServer = false,
+                         });
+                     }
+                 }
+diff --git a/osu.Game/Beatmaps/BeatmapUpdater.cs b/osu.Game/Beatmaps/BeatmapUpdater.cs
+index 559ba64124..6e1bdc2c7c 100644
+--- a/osu.Game/Beatmaps/BeatmapUpdater.cs
++++ b/osu.Game/Beatmaps/BeatmapUpdater.cs
+@@ -48,7 +48,7 @@ public void Process(BeatmapSetInfo beatmapSet, MetadataLookupScope lookupScope =
+                 // Before we use below, we want to invalidate.
+                 workingBeatmapCache.Invalidate(beatmapSet);
+ 
+-                if (lookupScope != MetadataLookupScope.None)
++                if (!Offline.RitsuOffline.Enabled && lookupScope != MetadataLookupScope.None)
+                     metadataLookup.Update(beatmapSet, lookupScope == MetadataLookupScope.OnlineFirst);
+ 
+                 foreach (BeatmapInfo beatmap in beatmapSet.Beatmaps)
+diff --git a/osu.Game/Beatmaps/LocalCachedBeatmapMetadataSource.cs b/osu.Game/Beatmaps/LocalCachedBeatmapMetadataSource.cs
+index 18bdc442e1..ed4a39ca70 100644
+--- a/osu.Game/Beatmaps/LocalCachedBeatmapMetadataSource.cs
++++ b/osu.Game/Beatmaps/LocalCachedBeatmapMetadataSource.cs
+@@ -45,7 +45,7 @@ public LocalCachedBeatmapMetadataSource(Storage storage)
+ 
+             this.storage = storage;
+ 
+-            if (shouldFetchCache())
++            if (!Offline.RitsuOffline.Enabled && shouldFetchCache())
+                 FetchCache();
+         }
+ 
+diff --git a/osu.Game/Configuration/OsuConfigManager.cs b/osu.Game/Configuration/OsuConfigManager.cs
+index c06c47a219..24be0d9a9c 100644
+--- a/osu.Game/Configuration/OsuConfigManager.cs
++++ b/osu.Game/Configuration/OsuConfigManager.cs
+@@ -46,7 +46,7 @@ public class OsuConfigManager : IniConfigManager<OsuSetting>, IGameplaySettings
+         protected override string Filename => TORII_CONFIG_FILENAME;
+ 
+         public OsuConfigManager(Storage storage)
+-            : base(prepareMigratedStorage(storage))
++            : base(Offline.RitsuOffline.Enabled ? storage : prepareMigratedStorage(storage))
+         {
+         }
+ 
+@@ -266,7 +266,7 @@ protected override void InitialiseDefaults()
+             SetDefault(OsuSetting.Version, string.Empty);
+ 
+             // Torii: server pulse toolbar widget (live "currently playing" stats).
+-            SetDefault(OsuSetting.ToriiServerPulseEnabled, true);
++            SetDefault(OsuSetting.ToriiServerPulseEnabled, false);
+ 
+             // Torii: cosmetic UI theme. glass es el default nuevo; el look clasico quedo como "Torii Legacy".
+             SetDefault(OsuSetting.UITheme, UIThemeOption.LiquidGlass);
+@@ -388,7 +388,7 @@ protected override void InitialiseDefaults()
+             SetDefault(OsuSetting.ShowFirstRunSetup, true);
+             // torii: el wizard propio de torii corre DESPUES del first-run (o despues del reinicio por
+             // cambio de carpeta), asi que es una key aparte y no un paso mas del first-run de ppy.
+-            SetDefault(OsuSetting.ShowToriiWelcome, true);
++            SetDefault(OsuSetting.ShowToriiWelcome, false);
+             SetDefault(OsuSetting.ToriiWelcomeMigrated, false);
+             SetDefault(OsuSetting.ShowMobileDisclaimer, RuntimeInfo.IsMobile);
+ 
+diff --git a/osu.Game/Database/RealmArchiveModelImporter.cs b/osu.Game/Database/RealmArchiveModelImporter.cs
+index a5dd237be3..18ecbbc87d 100644
+--- a/osu.Game/Database/RealmArchiveModelImporter.cs
++++ b/osu.Game/Database/RealmArchiveModelImporter.cs
+@@ -270,7 +270,7 @@ public async Task<ExternalEditOperation<TModel>> BeginExternalEditing(TModel mod
+             // TODO: Add a check to prevent files from storage to be deleted.
+             try
+             {
+-                if (import != null && ShouldDeleteArchive(task.Path))
++                if (import != null && !Offline.RitsuOffline.Enabled && ShouldDeleteArchive(task.Path))
+                     task.DeleteFile();
+             }
+             catch (Exception e)
+diff --git a/osu.Game/Graphics/OnlineAssetCachingStore.cs b/osu.Game/Graphics/OnlineAssetCachingStore.cs
+index 2daa7899c7..13f885c386 100644
+--- a/osu.Game/Graphics/OnlineAssetCachingStore.cs
++++ b/osu.Game/Graphics/OnlineAssetCachingStore.cs
+@@ -43,7 +43,7 @@ public OnlineAssetCachingStore(GameHost host, RealmAccess realmAccess)
+ 
+         public Texture? Get(string url)
+         {
+-            if (string.IsNullOrWhiteSpace(url))
++            if (Offline.RitsuOffline.Enabled || string.IsNullOrWhiteSpace(url))
+                 return null;
+ 
+             return largeTextureStore.Get(url);
+diff --git a/osu.Game/Mapperatorinator/MapperatorinatorSetup.cs b/osu.Game/Mapperatorinator/MapperatorinatorSetup.cs
+index 8f5b38ad3b..72b89bfc9f 100644
+--- a/osu.Game/Mapperatorinator/MapperatorinatorSetup.cs
++++ b/osu.Game/Mapperatorinator/MapperatorinatorSetup.cs
+@@ -85,12 +85,18 @@ public static bool CanWriteInside(string root)
+ 
+         public static async Task DownloadAsync(Uri uri, string destination, CancellationToken cancellation)
+         {
++            if (Offline.RitsuOffline.Enabled)
++                throw new Offline.OfflineOperationException();
++
+             using var http = new HttpClient();
+             await DownloadAsync(http, uri, destination, cancellation).ConfigureAwait(false);
+         }
+ 
+         internal static async Task DownloadAsync(HttpClient http, Uri uri, string destination, CancellationToken cancellation)
+         {
++            if (Offline.RitsuOffline.Enabled)
++                throw new Offline.OfflineOperationException();
++
+             string partial = destination + $".{Guid.NewGuid():N}.download";
+             try
+             {
+diff --git a/osu.Game/Offline/OfflineAPIProvider.cs b/osu.Game/Offline/OfflineAPIProvider.cs
+new file mode 100644
+index 0000000000..a4fc4f1a51
+--- /dev/null
++++ b/osu.Game/Offline/OfflineAPIProvider.cs
+@@ -0,0 +1,101 @@
++// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
++using System;
++using System.Collections.Generic;
++using System.Threading;
++using System.Threading.Tasks;
++using osu.Framework.Bindables;
++using osu.Framework.Graphics;
++using osu.Framework.Graphics.Containers;
++using osu.Game.Configuration;
++using osu.Game.Localisation;
++using osu.Game.Online;
++using osu.Game.Online.API;
++using osu.Game.Online.API.Requests;
++using osu.Game.Online.API.Requests.Responses;
++using osu.Game.Online.Chat;
++using osu.Game.Online.Notifications.WebSocket;
++
++namespace osu.Game.Offline
++{
++    /// <summary>Production offline provider, with no authentication or transport objects.</summary>
++    public partial class OfflineAPIProvider : CompositeComponent, IAPIProvider
++    {
++        private readonly LocalUserState localUserState;
++        private readonly Bindable<APIState> state = new Bindable<APIState>(APIState.Offline);
++
++        public OfflineAPIProvider(OsuConfigManager config)
++        {
++            config.SetValue(OsuSetting.Token, string.Empty);
++            localUserState = new LocalUserState(this, config);
++            AddInternal(localUserState);
++        }
++
++        public IBindable<APIUser> LocalUser => localUserState.User;
++        public ILocalUserState LocalUserState => localUserState;
++        public string ScoreProcessingNoticeUrl => string.Empty;
++        public Language Language => Language.en;
++        public string AccessToken => string.Empty;
++        public Guid SessionIdentifier { get; } = Guid.NewGuid();
++        public bool IsLoggedIn => false;
++        public string ProvidedUsername => string.Empty;
++        public EndpointConfiguration Endpoints { get; } = new OfflineEndpointConfiguration();
++        public int APIVersion => 20220705;
++        public Exception? LastLoginError { get; private set; }
++        public IBindable<APIState> State => state;
++        public IBindable<string?> UserFacingOutageMessage { get; } = new Bindable<string?>();
++        public SessionVerificationMethod? SessionVerificationMethod => null;
++        public INotificationsClient NotificationsClient { get; } = new OfflineNotificationsClient();
++
++        public void Queue(APIRequest request) => reject(request);
++        public void Perform(APIRequest request) => reject(request);
++
++        public Task PerformAsync(APIRequest request)
++        {
++            reject(request);
++            // IAPIProvider reports request failure via APIRequest.Failure, including
++            // callers that intentionally do not await this dispatch task.
++            return Task.CompletedTask;
++        }
++
++        private void reject(APIRequest request)
++        {
++            request.AttachAPI(this);
++            request.Fail(new OfflineOperationException());
++        }
++
++        public void Login(string username, string password) => LastLoginError = new OfflineOperationException();
++        public void AuthenticateSecondFactor(string code) => LastLoginError = new OfflineOperationException();
++        public void Logout() { }
++        public void RefreshLocalUser() { }
++        void IAPIProvider.Schedule(Action action) => Schedule(action);
++        public IHubClientConnector? GetHubConnector(string clientName, string endpoint) => null;
++        public IChatClient GetChatClient() => new OfflineChatClient();
++        public RegistrationRequest.RegistrationRequestErrors? CreateAccount(string email, string username, string password) => throw new OfflineOperationException();
++
++        private sealed class OfflineNotificationsClient : INotificationsClient
++        {
++            public IBindable<bool> IsConnected { get; } = new BindableBool();
++            public event Action<SocketMessage>? MessageReceived { add { } remove { } }
++            public Task SendAsync(SocketMessage message, CancellationToken? cancellationToken = null) => Task.FromException(new OfflineOperationException());
++        }
++
++        private sealed class OfflineChatClient : IChatClient
++        {
++            public event Action<Channel>? ChannelJoined { add { } remove { } }
++            public event Action<Channel>? ChannelParted { add { } remove { } }
++            public event Action<List<Message>>? NewMessages { add { } remove { } }
++            public event Action? PresenceReceived;
++            public void RequestPresence() => PresenceReceived?.Invoke();
++            public void Dispose() => PresenceReceived = null;
++        }
++    }
++
++    public sealed class OfflineEndpointConfiguration : EndpointConfiguration
++    {
++        public OfflineEndpointConfiguration()
++        {
++            APIUrl = WebsiteUrl = SpectatorUrl = MultiplayerUrl = MetadataUrl = BeatmapSubmissionServiceUrl = "https://offline.invalid";
++            APIClientID = APIClientSecret = string.Empty;
++        }
++    }
++}
+diff --git a/osu.Game/Offline/RitsuOffline.cs b/osu.Game/Offline/RitsuOffline.cs
+new file mode 100644
+index 0000000000..c8b4957adb
+--- /dev/null
++++ b/osu.Game/Offline/RitsuOffline.cs
+@@ -0,0 +1,21 @@
++// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
++using System;
++
++namespace osu.Game.Offline
++{
++    /// <summary>The capabilities of this local-only distribution. Not a user preference.</summary>
++    public static class RitsuOffline
++    {
++        public static bool Enabled => true;
++        public const string StorageName = "Ritsu";
++        public const string PipeName = "ritsu-offline";
++    }
++
++    public sealed class OfflineOperationException : InvalidOperationException
++    {
++        public OfflineOperationException()
++            : base("This Ritsu build operates entirely offline. Online services are unavailable.")
++        {
++        }
++    }
++}
+diff --git a/osu.Game/Online/Chat/ExternalLinkOpener.cs b/osu.Game/Online/Chat/ExternalLinkOpener.cs
+index 708e9edefa..b0e499f189 100644
+--- a/osu.Game/Online/Chat/ExternalLinkOpener.cs
++++ b/osu.Game/Online/Chat/ExternalLinkOpener.cs
+@@ -1,4 +1,4 @@
+-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
++// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+ // See the LICENCE file in the repository root for full licence text.
+ 
+ using System;
+@@ -45,6 +45,12 @@ private void load(OsuConfigManager config)
+ 
+         public void OpenUrlExternally(string url, LinkWarnMode warnMode = LinkWarnMode.Default)
+         {
++            if (Offline.RitsuOffline.Enabled)
++            {
++                notificationOverlay?.Post(new SimpleNotification { Text = "This build is offline. External links are disabled." });
++                return;
++            }
++
+             bool isTrustedDomain;
+ 
+             if (url.StartsWith('/'))
+diff --git a/osu.Game/Online/TrustedDomainOnlineStore.cs b/osu.Game/Online/TrustedDomainOnlineStore.cs
+index f4326de89b..0b12a49e19 100644
+--- a/osu.Game/Online/TrustedDomainOnlineStore.cs
++++ b/osu.Game/Online/TrustedDomainOnlineStore.cs
+@@ -11,6 +11,9 @@ public sealed class TrustedDomainOnlineStore : OnlineStore
+     {
+         protected override string GetLookupUrl(string url)
+         {
++            if (Offline.RitsuOffline.Enabled)
++                return string.Empty;
++
+             // Trust the Torii server's file host (avatars, team flags, etc.) alongside ppy.sh.
+             // torii.local es el host del stack de dev; solo resuelve a 127.0.0.1 via el hosts, asi
+             // que confiarlo es inofensivo en prod (no resuelve en una maquina normal).
+diff --git a/osu.Game/OsuGame.cs b/osu.Game/OsuGame.cs
+index b3e44cc872..5390e01602 100644
+--- a/osu.Game/OsuGame.cs
++++ b/osu.Game/OsuGame.cs
+@@ -104,11 +104,11 @@ public partial class OsuGame : OsuGameBase, IKeyBindingHandler<GlobalAction>, IL
+     {
+ #if DEBUG
+         // Different port allows running release and debug builds alongside each other.
+-        public const string IPC_PIPE_NAME = "osu-lazer-debug";
++        public const string IPC_PIPE_NAME = "ritsu-offline-debug";
+ #else
+         // toriirefresh: unique IPC pipe so this fork's single-instance check doesn't
+         // collide with a running stock osu!lazer (which would make us hand off + exit).
+-        public const string IPC_PIPE_NAME = "osu-toriirefresh";
++        public const string IPC_PIPE_NAME = "ritsu-offline";
+ #endif
+ 
+         /// <summary>
+@@ -1513,7 +1513,7 @@ protected override void LoadComplete()
+             // per-frame work. The settings toggle prompts for a restart to apply a change.
+             osu.Game.Online.Server.ToriiServerPulse.SetFromConfig(LocalConfig.Get<bool>(OsuSetting.ToriiServerPulseEnabled));
+ 
+-            if (osu.Game.Online.Server.ToriiServerPulse.Enabled)
++            if (!Offline.RitsuOffline.Enabled && osu.Game.Online.Server.ToriiServerPulse.Enabled)
+                 loadComponentSingleFile(new osu.Game.Online.Server.ToriiServerPulseProvider(), Add, true);
+ 
+             // Torii: points-earned summary watcher. Hosts its own card layer; the
+@@ -1902,7 +1902,7 @@ private void forwardGeneralLogToNotifications(LogEntry entry)
+             {
+                 LocalisableString message;
+ 
+-                if (entry.Exception != null && IsDeployedBuild)
++                if (entry.Exception != null && IsDeployedBuild && !Offline.RitsuOffline.Enabled)
+                     message = LocalisableString.Interpolate($"{entry.Message.Truncate(256)}\n\n{NotificationsStrings.ErrorAutomaticallyReported}");
+                 else
+                     message = entry.Message.Truncate(256);
+diff --git a/osu.Game/OsuGameBase.cs b/osu.Game/OsuGameBase.cs
+index 7b981b567f..c4c113ccbf 100644
+--- a/osu.Game/OsuGameBase.cs
++++ b/osu.Game/OsuGameBase.cs
+@@ -106,10 +106,8 @@ public partial class OsuGameBase : Framework.Game, ICanAcceptFiles, IBeatSyncPro
+ 
+         public virtual bool UseDevelopmentServer => DebugUtils.IsDebugBuild;
+ 
+-        // toriirefresh: hard-locked to the Torii server. The official osu.ppy.sh
+-        // production / development endpoints are intentionally unreachable so the
+-        // client can only ever connect to Torii's API + hubs.
+-        public virtual EndpointConfiguration CreateEndpoints() => new ToriiEndpointConfiguration();
++        // Offline builds have no service endpoints or credentials.
++        public virtual EndpointConfiguration CreateEndpoints() => new Offline.OfflineEndpointConfiguration();
+ 
+         protected override OnlineStore CreateOnlineStore() => new TrustedDomainOnlineStore();
+ 
+@@ -267,6 +265,7 @@ public virtual string Version
+ 
+         public OsuGameBase()
+         {
++            osu.Framework.IO.Network.WebRequest.DisableNetworkAccess();
+             Name = GAME_NAME;
+ 
+             allowableExceptions = UnhandledExceptionsBeforeCrash;
+@@ -334,7 +333,7 @@ private void load(ReadableKeyCombinationProvider keyCombinationProvider, Framewo
+ 
+             CurrentLanguage.BindValueChanged(val => frameworkLocale.Value = val.NewValue.ToCultureCode());
+ 
+-            dependencies.CacheAs(API ??= new APIAccess(this, LocalConfig, endpoints, VersionHash));
++            dependencies.CacheAs(API ??= new Offline.OfflineAPIProvider(LocalConfig));
+ 
+             var defaultBeatmap = new DummyWorkingBeatmap(Audio, Textures);
+ 
+@@ -343,7 +342,7 @@ private void load(ReadableKeyCombinationProvider keyCombinationProvider, Framewo
+             // ordering is important here to ensure foreign keys rules are not broken in ModelStore.Cleanup()
+             dependencies.Cache(ScoreManager = new ScoreManager(RulesetStore, () => BeatmapManager, Storage, realm, API, LocalConfig));
+ 
+-            dependencies.Cache(BeatmapManager = new BeatmapManager(Storage, realm, API, Audio, Resources, Host, defaultBeatmap, difficultyCache, performOnlineLookups: true));
++            dependencies.Cache(BeatmapManager = new BeatmapManager(Storage, realm, API, Audio, Resources, Host, defaultBeatmap, difficultyCache, performOnlineLookups: false));
+             dependencies.CacheAs<IWorkingBeatmapCache>(BeatmapManager);
+ 
+             // Torii cosmetics / economy: app-wide owned/equipped/points state, shared by the
+@@ -434,59 +433,12 @@ private void load(ReadableKeyCombinationProvider keyCombinationProvider, Framewo
+ 
+             // Torii environment telemetry provider: supplies tablet model, active area,
+             // monitor refresh rate and audio offset for server anti-cheat correlation.
+-            EnvironmentTelemetry.Provider = () =>
+-            {
+-                try
+-                {
+-                    var sb = new System.Text.StringBuilder();
+-                    var tablet = Host?.AvailableInputHandlers.OfType<ITabletHandler>().FirstOrDefault(t => t.Enabled.Value);
+-                    if (tablet != null && tablet.Tablet.Value != null)
+-                    {
+-                        string name = tablet.Tablet.Value.Name;
+-                        var size = tablet.AreaSize.Value;
+-                        var offset = tablet.AreaOffset.Value;
+-                        sb.Append($"tablet={Uri.EscapeDataString(name)};area={size.X:F1}x{size.Y:F1};off={offset.X:F1}x{offset.Y:F1}|");
+-                    }
+-
+-                    var window = Host?.Window;
+-                    if (window != null)
+-                    {
+-                        var mode = window.CurrentDisplayMode.Value;
+-                        if (mode.Size.Width > 0)
+-                        {
+-                            sb.Append($"disp={mode.Size.Width}x{mode.Size.Height}@{mode.RefreshRate:F0}|");
+-                        }
+-                    }
+-
+-                    double audioOffset = LocalConfig?.Get<double>(OsuSetting.AudioOffset) ?? 0;
+-                    if (audioOffset != 0)
+-                    {
+-                        sb.Append($"audio={audioOffset:F0}|");
+-                    }
+-
+-                    string? otdPlugins = EnvironmentTelemetry.GetDetectedTabletPlugins();
+-                    if (!string.IsNullOrEmpty(otdPlugins))
+-                    {
+-                        sb.Append($"otd={otdPlugins}|");
+-                    }
+-
+-                    string? integrity = EnvironmentTelemetry.GetIntegritySignals();
+-                    if (!string.IsNullOrEmpty(integrity))
+-                    {
+-                        sb.Append($"integ={integrity}|");
+-                    }
+-
+-                    return sb.Length > 0 ? sb.ToString().TrimEnd('|') : null;
+-                }
+-                catch
+-                {
+-                    return null;
+-                }
+-            };
++            // No environment or integrity telemetry is collected in the offline client.
++            EnvironmentTelemetry.Provider = null;
+ 
+             base.Content.Add(new BeatmapOnlineChangeIngest(beatmapUpdater, realm, metadataClient));
+ 
+-            BeatmapManager.ProcessBeatmap = (beatmapSet, scope) => beatmapUpdater.Process(beatmapSet, scope);
++            BeatmapManager.ProcessBeatmap = (beatmapSet, scope) => beatmapUpdater.Process(beatmapSet, MetadataLookupScope.None);
+ 
+             dependencies.Cache(userCache = new UserLookupCache());
+             base.Content.Add(userCache);
+@@ -626,6 +578,8 @@ private void load(ReadableKeyCombinationProvider keyCombinationProvider, Framewo
+             // add api components to hierarchy.
+             if (API is APIAccess apiAccess)
+                 base.Content.Add(apiAccess);
++            else if (API is Offline.OfflineAPIProvider offlineApi)
++                base.Content.Add(offlineApi);
+ 
+             base.Content.Add(SpectatorClient);
+             base.Content.Add(MultiplayerClient);
+diff --git a/osu.Game/Overlays/ChatOverlay.cs b/osu.Game/Overlays/ChatOverlay.cs
+index 17f6b0189f..78bb0ad3f1 100644
+--- a/osu.Game/Overlays/ChatOverlay.cs
++++ b/osu.Game/Overlays/ChatOverlay.cs
+@@ -36,6 +36,12 @@ namespace osu.Game.Overlays
+ {
+     public partial class ChatOverlay : OsuFocusedOverlayContainer, INamedOverlayComponent, IKeyBindingHandler<PlatformAction>
+     {
++        public override void Show()
++        {
++            if (!Offline.RitsuOffline.Enabled)
++                base.Show();
++        }
++
+         public IconUsage Icon => OsuIcon.Chat;
+         public LocalisableString Title => ChatStrings.HeaderTitle;
+         public LocalisableString Description => ChatStrings.HeaderDescription;
+diff --git a/osu.Game/Overlays/FirstRunSetup/ToriiFirstRunFlow.cs b/osu.Game/Overlays/FirstRunSetup/ToriiFirstRunFlow.cs
+index 3225dfd007..fc07f1f157 100644
+--- a/osu.Game/Overlays/FirstRunSetup/ToriiFirstRunFlow.cs
++++ b/osu.Game/Overlays/FirstRunSetup/ToriiFirstRunFlow.cs
+@@ -30,7 +30,7 @@ public static class ToriiFirstRunFlow
+         /// <returns>false si el path no es una carpeta de datos de lazer valida. el llamador muestra el error.</returns>
+         public static bool ApplyDataPath(string? path, Storage storage, OsuGameBase game, OsuConfigManager config, IDialogOverlay? dialogOverlay)
+         {
+-            if (!ToriiStoragePathHelper.LooksLikeLazerStoragePath(path))
++            if (Offline.RitsuOffline.Enabled || !ToriiStoragePathHelper.LooksLikeLazerStoragePath(path))
+                 return false;
+ 
+             dialogOverlay?.Push(new ConfirmDialog(restart_required_message, () =>
+diff --git a/osu.Game/Overlays/FirstRunSetupOverlay.cs b/osu.Game/Overlays/FirstRunSetupOverlay.cs
+index f7aa054683..258384dbd5 100644
+--- a/osu.Game/Overlays/FirstRunSetupOverlay.cs
++++ b/osu.Game/Overlays/FirstRunSetupOverlay.cs
+@@ -54,7 +54,14 @@ private void load(LegacyImportManager? legacyImportManager)
+             // torii: el unico paso que existe de entrada es la deteccion de la carpeta de lazer. la mayoria
+             // importa ahi mismo y el juego se reinicia, asi que los pasos clasicos de ppy se agregan en
+             // caliente (ver AppendClassicSteps) solo si eligen quedarse portable.
+-            AddStep<ScreenToriiStorage>();
++            if (Offline.RitsuOffline.Enabled)
++            {
++                AddStep<ScreenWelcome>();
++                AddStep<ScreenUIScale>();
++                AddStep<ScreenBehaviour>();
++            }
++            else
++                AddStep<ScreenToriiStorage>();
+ 
+             Header.Title = FirstRunSetupOverlayStrings.FirstRunSetupTitle;
+             // el string de ppy dice "osu!", pero lo primero que se ve aca es la pantalla de datos de torii.
+diff --git a/osu.Game/Overlays/LoginOverlay.cs b/osu.Game/Overlays/LoginOverlay.cs
+index 75b0806447..bbeb8244ac 100644
+--- a/osu.Game/Overlays/LoginOverlay.cs
++++ b/osu.Game/Overlays/LoginOverlay.cs
+@@ -45,6 +45,12 @@ public LoginOverlay()
+             };
+         }
+ 
++        public override void Show()
++        {
++            if (!Offline.RitsuOffline.Enabled)
++                base.Show();
++        }
++
+         [BackgroundDependencyLoader]
+         private void load(OsuConfigManager config)
+         {
+diff --git a/osu.Game/Overlays/OnlineOverlay.cs b/osu.Game/Overlays/OnlineOverlay.cs
+index cc5a1b9d2d..4e52a87fcb 100644
+--- a/osu.Game/Overlays/OnlineOverlay.cs
++++ b/osu.Game/Overlays/OnlineOverlay.cs
+@@ -24,6 +24,12 @@ public abstract partial class OnlineOverlay<T> : FullscreenOverlay<T>
+         private readonly Container loadingContainer;
+         private readonly Container content;
+ 
++        public override void Show()
++        {
++            if (!Offline.RitsuOffline.Enabled)
++                base.Show();
++        }
++
+         protected OnlineOverlay(OverlayColourScheme colourScheme, bool requiresSignIn = true)
+             : base(colourScheme)
+         {
+diff --git a/osu.Game/Overlays/Settings/Sections/General/InstallationSettings.cs b/osu.Game/Overlays/Settings/Sections/General/InstallationSettings.cs
+index a7f95cfb57..e2d13677a7 100644
+--- a/osu.Game/Overlays/Settings/Sections/General/InstallationSettings.cs
++++ b/osu.Game/Overlays/Settings/Sections/General/InstallationSettings.cs
+@@ -29,6 +29,9 @@ private void load(Storage storage)
+                 Action = () => storage.PresentExternally(),
+             });
+ 
++            if (Offline.RitsuOffline.Enabled)
++                return;
++
+             Add(new DangerousSettingsButtonV2
+             {
+                 Text = GeneralSettingsStrings.ChangeFolderLocation,
+diff --git a/osu.Game/Overlays/Settings/Sections/General/QuickActionSettings.cs b/osu.Game/Overlays/Settings/Sections/General/QuickActionSettings.cs
+index f6fe576dc2..16d3217115 100644
+--- a/osu.Game/Overlays/Settings/Sections/General/QuickActionSettings.cs
++++ b/osu.Game/Overlays/Settings/Sections/General/QuickActionSettings.cs
+@@ -2,6 +2,7 @@
+ // See the LICENCE file in the repository root for full licence text.
+ 
+ using System.Threading.Tasks;
++using System.Linq;
+ using osu.Framework.Allocation;
+ using osu.Framework.Extensions.Color4Extensions;
+ using osu.Framework.Graphics;
+@@ -57,7 +58,7 @@ private void load(OsuColour colours, Storage storage)
+                     BackgroundColour = colours.YellowDarker,
+                     Action = () => game?.OpenUrlExternally(@"https://osu.ppy.sh/community/forums/topics/create?forum_id=5", LinkWarnMode.NeverWarn)
+                 },
+-            });
++            }.Take(Offline.RitsuOffline.Enabled ? 1 : 3).ToArray());
+ 
+             Add(new SettingsButtonV2
+             {
+diff --git a/osu.Game/Overlays/Settings/Sections/ToriiSection.cs b/osu.Game/Overlays/Settings/Sections/ToriiSection.cs
+index 85bb78f832..aa2b7b2db9 100644
+--- a/osu.Game/Overlays/Settings/Sections/ToriiSection.cs
++++ b/osu.Game/Overlays/Settings/Sections/ToriiSection.cs
+@@ -36,10 +36,14 @@ private void load(RulesetStore rulesets)
+             // key debounce anti-chatter. mismo binding que la copia en Settings -> Input (tocar una
+             // actualiza la otra en vivo), espejada aca al lado de los tweaks de gameplay.
+             Add(new Input.KeyDebounceSettings());
+-            Add(new ToriiAuraSettings());
+-            Add(new ToriiServerSettings());
+-            Add(new ToriiBriefingSettings());
+-            Add(new ToriiStorageSettings());
++            if (!Offline.RitsuOffline.Enabled)
++                Add(new ToriiAuraSettings());
++            if (!Offline.RitsuOffline.Enabled)
++                Add(new ToriiServerSettings());
++            if (!Offline.RitsuOffline.Enabled)
++                Add(new ToriiBriefingSettings());
++            if (!Offline.RitsuOffline.Enabled)
++                Add(new ToriiStorageSettings());
+ 
+             // subsecciones torii por-ruleset: cada ruleset puede pedir mirrorear prefs relevantes aca
+             // via Ruleset.CreateToriiSettingsSubsection(). los mismos toggles viven tambien en su
+diff --git a/osu.Game/Overlays/SettingsOverlay.cs b/osu.Game/Overlays/SettingsOverlay.cs
+index 178445d5d8..07a1d4fd2c 100644
+--- a/osu.Game/Overlays/SettingsOverlay.cs
++++ b/osu.Game/Overlays/SettingsOverlay.cs
+@@ -111,7 +111,8 @@ private void load(RulesetStore rulesets)
+                 sections.Insert(9, new AfToggleSection());
+ 
+             foreach (var s in sections)
+-                AddSection(s);
++                if (!Offline.RitsuOffline.Enabled || s is not OnlineSection)
++                    AddSection(s);
+ 
+             foreach (var s in subPanels)
+                 ContentContainer.Add(s);
+diff --git a/osu.Game/Overlays/Toolbar/Toolbar.cs b/osu.Game/Overlays/Toolbar/Toolbar.cs
+index 2b5757b7bb..8ce1e13647 100644
+--- a/osu.Game/Overlays/Toolbar/Toolbar.cs
++++ b/osu.Game/Overlays/Toolbar/Toolbar.cs
+@@ -288,24 +288,8 @@ private void load(OsuGame osuGame, OsuConfigManager config)
+                                         AutoSizeAxes = Axes.X,
+                                         Children = new Drawable[]
+                                         {
+-                                            // torii: News / Changelog / Wiki sacados del toolbar (no los usamos).
+-                                            new ToolbarRankingsButton(),
+-                                            new ToolbarBeatmapListingButton(),
+-                                            new ToolbarChatButton(),
+-                                            new ToolbarSocialButton(),
++                                            // Ritsu local toolbar: no account, server or shop controls.
+                                             new ToolbarMusicButton(),
+-                                            userButton = new ToolbarUserButton(),
+-                                            new ToolbarAdminButton(),
+-                                            new ToolbarCosmeticStoreButton(),
+-                                            // torii: un poco de aire alrededor de los pills de puntos + pulse
+-                                            // asi no se ven pegados entre si ni contra el store / clock.
+-                                            new Container { RelativeSizeAxes = Axes.Y, Width = 4 },
+-                                            new ToolbarPointsButton(),
+-                                            new Container { RelativeSizeAxes = Axes.Y, Width = 4 },
+-                                            pulseButton = new ToriiServerPulseButton(),
+-                                            new Container { RelativeSizeAxes = Axes.Y, Width = 4 },
+-                                            rankedButton = new ToolbarRankedPlayButton(),
+-                                            new Container { RelativeSizeAxes = Axes.Y, Width = 4 },
+                                             new ToolbarClock(),
+                                             new ToolbarNotificationButton(),
+                                         }
+@@ -529,7 +513,7 @@ protected override void PopIn()
+ 
+         protected override void PopOut()
+         {
+-            userButton.StateContainer?.Hide();
++            userButton?.StateContainer?.Hide();
+ 
+             this.MoveToY(-DrawSize.Y, transition_time, Easing.OutQuint);
+             this.FadeOut(transition_time, Easing.InQuint);
+diff --git a/osu.Game/Screens/Menu/ButtonSystem.cs b/osu.Game/Screens/Menu/ButtonSystem.cs
+index 67f8aecad3..86ef1ff4ab 100644
+--- a/osu.Game/Screens/Menu/ButtonSystem.cs
++++ b/osu.Game/Screens/Menu/ButtonSystem.cs
+@@ -155,9 +155,12 @@ private void load(AudioManager audio, IdleTracker? idleTracker, GameHost host)
+             {
+                 Padding = new MarginPadding { Left = WEDGE_WIDTH },
+             });
+-            buttonsPlay.Add(new MainMenuButton(ButtonSystemStrings.Multi, @"button-default-select", OsuIcon.Online, new Color4(94, 63, 186, 255), (_, _) => State = ButtonSystemState.Multi, Key.M));
+-            buttonsPlay.Add(new MainMenuButton(ButtonSystemStrings.Playlists, @"button-default-select", OsuIcon.Tournament, new Color4(94, 63, 186, 255), onPlaylists, Key.L));
+-            buttonsPlay.Add(new DailyChallengeButton(@"button-daily-select", new Color4(94, 63, 186, 255), onDailyChallenge, Key.D));
++            if (!Offline.RitsuOffline.Enabled)
++            {
++                buttonsPlay.Add(new MainMenuButton(ButtonSystemStrings.Multi, @"button-default-select", OsuIcon.Online, new Color4(94, 63, 186, 255), (_, _) => State = ButtonSystemState.Multi, Key.M));
++                buttonsPlay.Add(new MainMenuButton(ButtonSystemStrings.Playlists, @"button-default-select", OsuIcon.Tournament, new Color4(94, 63, 186, 255), onPlaylists, Key.L));
++                buttonsPlay.Add(new DailyChallengeButton(@"button-daily-select", new Color4(94, 63, 186, 255), onDailyChallenge, Key.D));
++            }
+             buttonsPlay.ForEach(b => b.VisibleState = ButtonSystemState.Play);
+ 
+             buttonsMulti.Add(new MainMenuButton(ButtonSystemStrings.Lounge, @"button-default-select", FontAwesome.Solid.Couch, new Color4(94, 63, 186, 255), onMultiplayer, Key.L, Key.M)
+@@ -178,10 +181,13 @@ private void load(AudioManager audio, IdleTracker? idleTracker, GameHost host)
+ 
+             // torii: generar un mapa desde una cancion suelta, sin tener que buscar un
+             // mapa que ya tenga ese audio.
+-            buttonsEdit.Add(new MainMenuButton(@"mapperatorinator", @"button-default-select", FontAwesome.Solid.Magic, new Color4(200, 140, 0, 255),
+-                (_, _) => OnMapperatorinator?.Invoke(), Key.M));
+-            buttonsEdit.Add(new MainMenuButton(@"presets", @"button-default-select", FontAwesome.Solid.SlidersH, new Color4(184, 128, 0, 255),
+-                (_, _) => OnMapperatorinatorPresets?.Invoke(), Key.P));
++            if (!Offline.RitsuOffline.Enabled)
++            {
++                buttonsEdit.Add(new MainMenuButton(@"mapperatorinator", @"button-default-select", FontAwesome.Solid.Magic, new Color4(200, 140, 0, 255),
++                    (_, _) => OnMapperatorinator?.Invoke(), Key.M));
++                buttonsEdit.Add(new MainMenuButton(@"presets", @"button-default-select", FontAwesome.Solid.SlidersH, new Color4(184, 128, 0, 255),
++                    (_, _) => OnMapperatorinatorPresets?.Invoke(), Key.P));
++            }
+             buttonsEdit.ForEach(b => b.VisibleState = ButtonSystemState.Edit);
+ 
+             buttonsTopLevel.Add(new MainMenuButton(ButtonSystemStrings.Play, @"button-play-select", OsuIcon.Logo, new Color4(102, 68, 204, 255), (_, _) => State = ButtonSystemState.Play, Key.P, Key.M,
+diff --git a/osu.Game/Screens/Menu/MainMenu.cs b/osu.Game/Screens/Menu/MainMenu.cs
+index 086a3075c9..9baaa1ee60 100644
+--- a/osu.Game/Screens/Menu/MainMenu.cs
++++ b/osu.Game/Screens/Menu/MainMenu.cs
+@@ -1,4 +1,4 @@
+-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
++// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+ // See the LICENCE file in the repository root for full licence text.
+ 
+ #nullable disable
+@@ -342,7 +342,7 @@ private bool onLogoClick(Func<bool> originalAction)
+ 
+         private void displayLoginIfApplicable()
+         {
+-            if (loginDisplayed.Value) return;
++            if (Offline.RitsuOffline.Enabled || loginDisplayed.Value) return;
+ 
+             if (!api.IsLoggedIn || api.State.Value == APIState.RequiresSecondFactorAuth)
+             {
+diff --git a/osu.Game/Screens/Menu/SupporterDisplay.cs b/osu.Game/Screens/Menu/SupporterDisplay.cs
+index a3bc7ebd3c..4b1ee8c855 100644
+--- a/osu.Game/Screens/Menu/SupporterDisplay.cs
++++ b/osu.Game/Screens/Menu/SupporterDisplay.cs
+@@ -25,6 +25,8 @@ namespace osu.Game.Screens.Menu
+ {
+     public partial class SupporterDisplay : CompositeDrawable
+     {
++        public override bool IsPresent => !Offline.RitsuOffline.Enabled && base.IsPresent;
++
+         private LinkFlowContainer supportFlow = null!;
+ 
+         private Drawable heart = null!;
+diff --git a/osu.Game/Screens/Ranking/RenderVideoButton.cs b/osu.Game/Screens/Ranking/RenderVideoButton.cs
+index a2e77204d2..518a980df3 100644
+--- a/osu.Game/Screens/Ranking/RenderVideoButton.cs
++++ b/osu.Game/Screens/Ranking/RenderVideoButton.cs
+@@ -75,7 +75,7 @@ private void load()
+         private void updateVisibility()
+         {
+             // solo scores subidos al server (con replay) son renderizables.
+-            bool renderable = Score.Value?.OnlineID > 0;
++            bool renderable = !Offline.RitsuOffline.Enabled && Score.Value?.OnlineID > 0;
+             this.FadeTo(renderable ? 1 : 0, 150, Easing.OutQuint);
+         }
+     }
+diff --git a/osu.Game/Screens/Ranking/V2ResultsFooter.cs b/osu.Game/Screens/Ranking/V2ResultsFooter.cs
+index 808e6e5417..717d2a7c47 100644
+--- a/osu.Game/Screens/Ranking/V2ResultsFooter.cs
++++ b/osu.Game/Screens/Ranking/V2ResultsFooter.cs
+@@ -2,6 +2,7 @@
+ // See the LICENCE file in the repository root for full licence text.
+ 
+ using System;
++using System.Linq;
+ using osu.Framework.Allocation;
+ using osu.Framework.Bindables;
+ using osu.Framework.Extensions;
+@@ -377,7 +378,7 @@ public ReplayOptionsPopover(
+                             Enabled = { Value = isOwnScore },
+                             TooltipText = isOwnScore ? "Add a personal note or comment to this play" : "Notes are only available for your own online scores",
+                         },
+-                    }
++                    }.Take(Offline.RitsuOffline.Enabled ? 1 : 3).ToArray()
+                 };
+             }
+ 
+diff --git a/osu.Game/Updater/UpdateManager.cs b/osu.Game/Updater/UpdateManager.cs
+index 9aa6c812cb..fd717522ad 100644
+--- a/osu.Game/Updater/UpdateManager.cs
++++ b/osu.Game/Updater/UpdateManager.cs
+@@ -32,7 +32,7 @@ public partial class UpdateManager : CompositeDrawable
+         /// <summary>
+         /// Whether this UpdateManager should be or is capable of checking for updates.
+         /// </summary>
+-        public bool CanCheckForUpdate => game.IsDeployedBuild &&
++        public bool CanCheckForUpdate => !Offline.RitsuOffline.Enabled && game.IsDeployedBuild &&
+                                          // only implementations will actually check for updates.
+                                          GetType() != typeof(UpdateManager);
+ 
+@@ -62,7 +62,7 @@ protected override void LoadComplete()
+         {
+             base.LoadComplete();
+ 
+-            if (game.IsDeployedBuild)
++            if (game.IsDeployedBuild && !Offline.RitsuOffline.Enabled)
+             {
+                 // make sure the release stream setting matches the build which was just run.
+                 if (FixedReleaseStream != null)
+diff --git a/osu.Game/Utils/SentryLogger.cs b/osu.Game/Utils/SentryLogger.cs
+index 8614bd89e1..49ac91cf3f 100644
+--- a/osu.Game/Utils/SentryLogger.cs
++++ b/osu.Game/Utils/SentryLogger.cs
+@@ -47,7 +47,7 @@ public SentryLogger(OsuGame game, Storage? storage = null)
+         {
+             this.game = game;
+ 
+-            if (Environment.GetEnvironmentVariable("OSU_DISABLE_ERROR_REPORTING") == "1")
++            if (Offline.RitsuOffline.Enabled || Environment.GetEnvironmentVariable("OSU_DISABLE_ERROR_REPORTING") == "1")
+                 return;
+ 
+             if (DebugUtils.IsNUnitRunning)

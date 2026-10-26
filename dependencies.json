@@ -1,0 +1,20 @@
+{
+  "client": {
+    "repository": "https://github.com/ShikkesoraSIM/torii-osu.git",
+    "ref": "v2026.1026.0-torii",
+    "commit": "27291c03874c611155073440b5e2539548681fe6",
+    "directory": "client",
+    "patch": "patches/client-offline.patch"
+  },
+  "framework": {
+    "repository": "https://github.com/ShikkesoraSIM/torii-framework.git",
+    "commit": "25e68d530f7116437c4cfaf127169ac4d6619927",
+    "directory": "toriirefresh-framework",
+    "patch": "patches/framework-offline.patch"
+  },
+  "resources": {
+    "repository": "https://github.com/ShikkesoraSIM/torii-resources.git",
+    "commit": "2a516e45ba416dbd2cf8b821661909109f738b34",
+    "directory": "toriirefresh-resources"
+  }
+}

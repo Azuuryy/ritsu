@@ -1,0 +1,7 @@
+.cache/
+artifacts/
+tools/fixtures/
+**/bin/
+**/obj/
+toriirefresh-framework/
+toriirefresh-resources/
