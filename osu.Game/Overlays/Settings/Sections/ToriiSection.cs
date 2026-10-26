@@ -36,10 +36,14 @@ namespace osu.Game.Overlays.Settings.Sections
             // key debounce anti-chatter. mismo binding que la copia en Settings -> Input (tocar una
             // actualiza la otra en vivo), espejada aca al lado de los tweaks de gameplay.
             Add(new Input.KeyDebounceSettings());
-            Add(new ToriiAuraSettings());
-            Add(new ToriiServerSettings());
-            Add(new ToriiBriefingSettings());
-            Add(new ToriiStorageSettings());
+            if (!Offline.RitsuOffline.Enabled)
+                Add(new ToriiAuraSettings());
+            if (!Offline.RitsuOffline.Enabled)
+                Add(new ToriiServerSettings());
+            if (!Offline.RitsuOffline.Enabled)
+                Add(new ToriiBriefingSettings());
+            if (!Offline.RitsuOffline.Enabled)
+                Add(new ToriiStorageSettings());
 
             // subsecciones torii por-ruleset: cada ruleset puede pedir mirrorear prefs relevantes aca
             // via Ruleset.CreateToriiSettingsSubsection(). los mismos toggles viven tambien en su

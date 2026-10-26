@@ -45,7 +45,7 @@ namespace osu.Game.Beatmaps
 
             this.storage = storage;
 
-            if (shouldFetchCache())
+            if (!Offline.RitsuOffline.Enabled && shouldFetchCache())
                 FetchCache();
         }
 

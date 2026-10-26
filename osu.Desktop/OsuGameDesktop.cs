@@ -45,6 +45,9 @@ namespace osu.Desktop
 
         public override StableStorage? GetStorageForStableInstall()
         {
+            if (osu.Game.Offline.RitsuOffline.Enabled)
+                return null;
+
             try
             {
                 if (Host is DesktopGameHost desktopHost)
@@ -114,6 +117,9 @@ namespace osu.Desktop
             //
             // This ensures that if a user is trying to recover from a failed startup, it will keep them
             // on the stream which is imminently being reinstalled.
+            if (osu.Game.Offline.RitsuOffline.Enabled)
+                return new UpdateManager();
+
             if (IsFirstRun)
                 LocalConfig.SetValue(OsuSetting.ReleaseStream, ReleaseStream.Torii);
 
@@ -125,7 +131,7 @@ namespace osu.Desktop
 
         public override bool RestartAppWhenExited()
         {
-            if (IsPackageManaged || !IsDeployedBuild)
+            if (osu.Game.Offline.RitsuOffline.Enabled || IsPackageManaged || !IsDeployedBuild)
                 return false;
 
             RestartOnExitAction = () =>
@@ -161,7 +167,7 @@ namespace osu.Desktop
         protected override void LoadComplete()
         {
             // this is done before `base.LoadComplete` so that the game can immediately register data sources.
-            if (EnableWebSocketServer)
+            if (!osu.Game.Offline.RitsuOffline.Enabled && EnableWebSocketServer)
             {
                 var provider = new OsuWebSocketProvider();
                 Add(provider);
@@ -170,7 +176,7 @@ namespace osu.Desktop
 
             base.LoadComplete();
 
-            LoadComponentAsync(new DiscordRichPresence(), Add);
+            // Discord and other external integrations are disabled in the offline build.
 
             switch (RuntimeInfo.OS)
             {

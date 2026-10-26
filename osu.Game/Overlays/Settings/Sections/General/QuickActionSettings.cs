@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Threading.Tasks;
+using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
@@ -57,7 +58,7 @@ namespace osu.Game.Overlays.Settings.Sections.General
                     BackgroundColour = colours.YellowDarker,
                     Action = () => game?.OpenUrlExternally(@"https://osu.ppy.sh/community/forums/topics/create?forum_id=5", LinkWarnMode.NeverWarn)
                 },
-            });
+            }.Take(Offline.RitsuOffline.Enabled ? 1 : 3).ToArray());
 
             Add(new SettingsButtonV2
             {

@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions;
@@ -377,7 +378,7 @@ namespace osu.Game.Screens.Ranking
                             Enabled = { Value = isOwnScore },
                             TooltipText = isOwnScore ? "Add a personal note or comment to this play" : "Notes are only available for your own online scores",
                         },
-                    }
+                    }.Take(Offline.RitsuOffline.Enabled ? 1 : 3).ToArray()
                 };
             }
 

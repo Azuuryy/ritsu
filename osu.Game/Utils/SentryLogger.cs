@@ -47,7 +47,7 @@ namespace osu.Game.Utils
         {
             this.game = game;
 
-            if (Environment.GetEnvironmentVariable("OSU_DISABLE_ERROR_REPORTING") == "1")
+            if (Offline.RitsuOffline.Enabled || Environment.GetEnvironmentVariable("OSU_DISABLE_ERROR_REPORTING") == "1")
                 return;
 
             if (DebugUtils.IsNUnitRunning)

@@ -155,9 +155,12 @@ namespace osu.Game.Screens.Menu
             {
                 Padding = new MarginPadding { Left = WEDGE_WIDTH },
             });
-            buttonsPlay.Add(new MainMenuButton(ButtonSystemStrings.Multi, @"button-default-select", OsuIcon.Online, new Color4(94, 63, 186, 255), (_, _) => State = ButtonSystemState.Multi, Key.M));
-            buttonsPlay.Add(new MainMenuButton(ButtonSystemStrings.Playlists, @"button-default-select", OsuIcon.Tournament, new Color4(94, 63, 186, 255), onPlaylists, Key.L));
-            buttonsPlay.Add(new DailyChallengeButton(@"button-daily-select", new Color4(94, 63, 186, 255), onDailyChallenge, Key.D));
+            if (!Offline.RitsuOffline.Enabled)
+            {
+                buttonsPlay.Add(new MainMenuButton(ButtonSystemStrings.Multi, @"button-default-select", OsuIcon.Online, new Color4(94, 63, 186, 255), (_, _) => State = ButtonSystemState.Multi, Key.M));
+                buttonsPlay.Add(new MainMenuButton(ButtonSystemStrings.Playlists, @"button-default-select", OsuIcon.Tournament, new Color4(94, 63, 186, 255), onPlaylists, Key.L));
+                buttonsPlay.Add(new DailyChallengeButton(@"button-daily-select", new Color4(94, 63, 186, 255), onDailyChallenge, Key.D));
+            }
             buttonsPlay.ForEach(b => b.VisibleState = ButtonSystemState.Play);
 
             buttonsMulti.Add(new MainMenuButton(ButtonSystemStrings.Lounge, @"button-default-select", FontAwesome.Solid.Couch, new Color4(94, 63, 186, 255), onMultiplayer, Key.L, Key.M)
@@ -178,10 +181,13 @@ namespace osu.Game.Screens.Menu
 
             // torii: generar un mapa desde una cancion suelta, sin tener que buscar un
             // mapa que ya tenga ese audio.
-            buttonsEdit.Add(new MainMenuButton(@"mapperatorinator", @"button-default-select", FontAwesome.Solid.Magic, new Color4(200, 140, 0, 255),
-                (_, _) => OnMapperatorinator?.Invoke(), Key.M));
-            buttonsEdit.Add(new MainMenuButton(@"presets", @"button-default-select", FontAwesome.Solid.SlidersH, new Color4(184, 128, 0, 255),
-                (_, _) => OnMapperatorinatorPresets?.Invoke(), Key.P));
+            if (!Offline.RitsuOffline.Enabled)
+            {
+                buttonsEdit.Add(new MainMenuButton(@"mapperatorinator", @"button-default-select", FontAwesome.Solid.Magic, new Color4(200, 140, 0, 255),
+                    (_, _) => OnMapperatorinator?.Invoke(), Key.M));
+                buttonsEdit.Add(new MainMenuButton(@"presets", @"button-default-select", FontAwesome.Solid.SlidersH, new Color4(184, 128, 0, 255),
+                    (_, _) => OnMapperatorinatorPresets?.Invoke(), Key.P));
+            }
             buttonsEdit.ForEach(b => b.VisibleState = ButtonSystemState.Edit);
 
             buttonsTopLevel.Add(new MainMenuButton(ButtonSystemStrings.Play, @"button-play-select", OsuIcon.Logo, new Color4(102, 68, 204, 255), (_, _) => State = ButtonSystemState.Play, Key.P, Key.M,

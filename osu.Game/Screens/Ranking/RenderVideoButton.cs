@@ -75,7 +75,7 @@ namespace osu.Game.Screens.Ranking
         private void updateVisibility()
         {
             // solo scores subidos al server (con replay) son renderizables.
-            bool renderable = Score.Value?.OnlineID > 0;
+            bool renderable = !Offline.RitsuOffline.Enabled && Score.Value?.OnlineID > 0;
             this.FadeTo(renderable ? 1 : 0, 150, Easing.OutQuint);
         }
     }

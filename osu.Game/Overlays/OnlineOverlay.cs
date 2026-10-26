@@ -24,6 +24,12 @@ namespace osu.Game.Overlays
         private readonly Container loadingContainer;
         private readonly Container content;
 
+        public override void Show()
+        {
+            if (!Offline.RitsuOffline.Enabled)
+                base.Show();
+        }
+
         protected OnlineOverlay(OverlayColourScheme colourScheme, bool requiresSignIn = true)
             : base(colourScheme)
         {

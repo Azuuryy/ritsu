@@ -43,7 +43,7 @@ namespace osu.Game.Graphics
 
         public Texture? Get(string url)
         {
-            if (string.IsNullOrWhiteSpace(url))
+            if (Offline.RitsuOffline.Enabled || string.IsNullOrWhiteSpace(url))
                 return null;
 
             return largeTextureStore.Get(url);

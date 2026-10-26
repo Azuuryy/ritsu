@@ -25,6 +25,8 @@ namespace osu.Game.Screens.Menu
 {
     public partial class SupporterDisplay : CompositeDrawable
     {
+        public override bool IsPresent => !Offline.RitsuOffline.Enabled && base.IsPresent;
+
         private LinkFlowContainer supportFlow = null!;
 
         private Drawable heart = null!;

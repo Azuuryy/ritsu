@@ -45,6 +45,12 @@ namespace osu.Game.Overlays
             };
         }
 
+        public override void Show()
+        {
+            if (!Offline.RitsuOffline.Enabled)
+                base.Show();
+        }
+
         [BackgroundDependencyLoader]
         private void load(OsuConfigManager config)
         {

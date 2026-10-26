@@ -29,6 +29,9 @@ namespace osu.Game.Overlays.Settings.Sections.General
                 Action = () => storage.PresentExternally(),
             });
 
+            if (Offline.RitsuOffline.Enabled)
+                return;
+
             Add(new DangerousSettingsButtonV2
             {
                 Text = GeneralSettingsStrings.ChangeFolderLocation,

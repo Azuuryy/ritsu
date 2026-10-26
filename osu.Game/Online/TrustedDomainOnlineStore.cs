@@ -11,6 +11,9 @@ namespace osu.Game.Online
     {
         protected override string GetLookupUrl(string url)
         {
+            if (Offline.RitsuOffline.Enabled)
+                return string.Empty;
+
             // Trust the Torii server's file host (avatars, team flags, etc.) alongside ppy.sh.
             // torii.local es el host del stack de dev; solo resuelve a 127.0.0.1 via el hosts, asi
             // que confiarlo es inofensivo en prod (no resuelve en una maquina normal).

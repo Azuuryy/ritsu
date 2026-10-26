@@ -85,12 +85,18 @@ namespace osu.Game.Mapperatorinator
 
         public static async Task DownloadAsync(Uri uri, string destination, CancellationToken cancellation)
         {
+            if (Offline.RitsuOffline.Enabled)
+                throw new Offline.OfflineOperationException();
+
             using var http = new HttpClient();
             await DownloadAsync(http, uri, destination, cancellation).ConfigureAwait(false);
         }
 
         internal static async Task DownloadAsync(HttpClient http, Uri uri, string destination, CancellationToken cancellation)
         {
+            if (Offline.RitsuOffline.Enabled)
+                throw new Offline.OfflineOperationException();
+
             string partial = destination + $".{Guid.NewGuid():N}.download";
             try
             {

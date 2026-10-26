@@ -46,7 +46,7 @@ namespace osu.Game.Configuration
         protected override string Filename => TORII_CONFIG_FILENAME;
 
         public OsuConfigManager(Storage storage)
-            : base(prepareMigratedStorage(storage))
+            : base(Offline.RitsuOffline.Enabled ? storage : prepareMigratedStorage(storage))
         {
         }
 
@@ -266,7 +266,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.Version, string.Empty);
 
             // Torii: server pulse toolbar widget (live "currently playing" stats).
-            SetDefault(OsuSetting.ToriiServerPulseEnabled, true);
+            SetDefault(OsuSetting.ToriiServerPulseEnabled, false);
 
             // Torii: cosmetic UI theme. glass es el default nuevo; el look clasico quedo como "Torii Legacy".
             SetDefault(OsuSetting.UITheme, UIThemeOption.LiquidGlass);
@@ -388,7 +388,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.ShowFirstRunSetup, true);
             // torii: el wizard propio de torii corre DESPUES del first-run (o despues del reinicio por
             // cambio de carpeta), asi que es una key aparte y no un paso mas del first-run de ppy.
-            SetDefault(OsuSetting.ShowToriiWelcome, true);
+            SetDefault(OsuSetting.ShowToriiWelcome, false);
             SetDefault(OsuSetting.ToriiWelcomeMigrated, false);
             SetDefault(OsuSetting.ShowMobileDisclaimer, RuntimeInfo.IsMobile);
 

@@ -22,12 +22,10 @@ namespace osu.Desktop
     public static class Program
     {
 #if DEBUG
-        private const string base_game_name = @"osu-development";
+        private const string base_game_name = @"Ritsu";
 #else
-        // torii nova: usamos la MISMA data dir que la Nova vieja (%APPDATA%/osu-torii)
-        // asi el update es seamless: el usuario conserva skins, settings, mapas, scores,
-        // collections, todo. toriirefresh REEMPLAZA a Nova, no convive con ella.
-        private const string base_game_name = @"osu-torii";
+        // Keep this offline foundation separate from existing Torii and osu! data.
+        private const string base_game_name = @"Ritsu";
 #endif
 
         /// <summary>
@@ -333,17 +331,7 @@ namespace osu.Desktop
 
             try
             {
-                // IMPORTANT DON'T IGNORE: For general sanity, velopack's setup needs to run before anything else.
-                // This has bitten us in the rear before (bricked updater), and although the underlying issue from
-                // last time has been fixed, let's not tempt fate.
-                try
-                {
-                    setupVelopack(args);
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"[Torii] Velopack setup failed: {ex.Message}", LoggingTarget.Runtime, LogLevel.Important);
-                }
+                // Manual portable updates only; no Velopack hooks or file associations.
 
             if (OperatingSystem.IsWindows())
             {
@@ -417,6 +405,7 @@ namespace osu.Desktop
 
             string gameName = base_game_name;
             bool tournamentClient = false;
+            osu.Framework.IO.Network.WebRequest.DisableNetworkAccess();
 
             foreach (string arg in args)
             {
@@ -428,8 +417,7 @@ namespace osu.Desktop
                 switch (key)
                 {
                     case "--tournament":
-                        tournamentClient = true;
-                        break;
+                        throw new NotSupportedException("The online tournament client is not available in this offline build.");
 
                     case "--debug-client-id":
                         if (!DebugUtils.IsDebugBuild)
@@ -484,7 +472,7 @@ namespace osu.Desktop
                         }
                     }
 
-                    if (host.IsPrimaryInstance)
+                    if (host.IsPrimaryInstance && !osu.Game.Offline.RitsuOffline.Enabled)
                     {
                         try
                         {
@@ -505,7 +493,7 @@ namespace osu.Desktop
                         host.Run(new OsuGameDesktop(args)
                         {
                             IsFirstRun = isFirstRun,
-                            EnableWebSocketServer = Environment.GetEnvironmentVariable("OSU_WEBSOCKET_SERVER") == "1",
+                            EnableWebSocketServer = false,
                         });
                     }
                 }

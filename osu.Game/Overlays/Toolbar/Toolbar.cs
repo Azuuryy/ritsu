@@ -288,24 +288,8 @@ namespace osu.Game.Overlays.Toolbar
                                         AutoSizeAxes = Axes.X,
                                         Children = new Drawable[]
                                         {
-                                            // torii: News / Changelog / Wiki sacados del toolbar (no los usamos).
-                                            new ToolbarRankingsButton(),
-                                            new ToolbarBeatmapListingButton(),
-                                            new ToolbarChatButton(),
-                                            new ToolbarSocialButton(),
+                                            // Ritsu local toolbar: no account, server or shop controls.
                                             new ToolbarMusicButton(),
-                                            userButton = new ToolbarUserButton(),
-                                            new ToolbarAdminButton(),
-                                            new ToolbarCosmeticStoreButton(),
-                                            // torii: un poco de aire alrededor de los pills de puntos + pulse
-                                            // asi no se ven pegados entre si ni contra el store / clock.
-                                            new Container { RelativeSizeAxes = Axes.Y, Width = 4 },
-                                            new ToolbarPointsButton(),
-                                            new Container { RelativeSizeAxes = Axes.Y, Width = 4 },
-                                            pulseButton = new ToriiServerPulseButton(),
-                                            new Container { RelativeSizeAxes = Axes.Y, Width = 4 },
-                                            rankedButton = new ToolbarRankedPlayButton(),
-                                            new Container { RelativeSizeAxes = Axes.Y, Width = 4 },
                                             new ToolbarClock(),
                                             new ToolbarNotificationButton(),
                                         }
@@ -529,7 +513,7 @@ namespace osu.Game.Overlays.Toolbar
 
         protected override void PopOut()
         {
-            userButton.StateContainer?.Hide();
+            userButton?.StateContainer?.Hide();
 
             this.MoveToY(-DrawSize.Y, transition_time, Easing.OutQuint);
             this.FadeOut(transition_time, Easing.InQuint);

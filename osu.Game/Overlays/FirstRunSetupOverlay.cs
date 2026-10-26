@@ -54,7 +54,14 @@ namespace osu.Game.Overlays
             // torii: el unico paso que existe de entrada es la deteccion de la carpeta de lazer. la mayoria
             // importa ahi mismo y el juego se reinicia, asi que los pasos clasicos de ppy se agregan en
             // caliente (ver AppendClassicSteps) solo si eligen quedarse portable.
-            AddStep<ScreenToriiStorage>();
+            if (Offline.RitsuOffline.Enabled)
+            {
+                AddStep<ScreenWelcome>();
+                AddStep<ScreenUIScale>();
+                AddStep<ScreenBehaviour>();
+            }
+            else
+                AddStep<ScreenToriiStorage>();
 
             Header.Title = FirstRunSetupOverlayStrings.FirstRunSetupTitle;
             // el string de ppy dice "osu!", pero lo primero que se ve aca es la pantalla de datos de torii.

@@ -270,7 +270,7 @@ namespace osu.Game.Database
             // TODO: Add a check to prevent files from storage to be deleted.
             try
             {
-                if (import != null && ShouldDeleteArchive(task.Path))
+                if (import != null && !Offline.RitsuOffline.Enabled && ShouldDeleteArchive(task.Path))
                     task.DeleteFile();
             }
             catch (Exception e)

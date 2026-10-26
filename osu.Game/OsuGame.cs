@@ -104,11 +104,11 @@ namespace osu.Game
     {
 #if DEBUG
         // Different port allows running release and debug builds alongside each other.
-        public const string IPC_PIPE_NAME = "osu-lazer-debug";
+        public const string IPC_PIPE_NAME = "ritsu-offline-debug";
 #else
         // toriirefresh: unique IPC pipe so this fork's single-instance check doesn't
         // collide with a running stock osu!lazer (which would make us hand off + exit).
-        public const string IPC_PIPE_NAME = "osu-toriirefresh";
+        public const string IPC_PIPE_NAME = "ritsu-offline";
 #endif
 
         /// <summary>
@@ -1513,7 +1513,7 @@ namespace osu.Game
             // per-frame work. The settings toggle prompts for a restart to apply a change.
             osu.Game.Online.Server.ToriiServerPulse.SetFromConfig(LocalConfig.Get<bool>(OsuSetting.ToriiServerPulseEnabled));
 
-            if (osu.Game.Online.Server.ToriiServerPulse.Enabled)
+            if (!Offline.RitsuOffline.Enabled && osu.Game.Online.Server.ToriiServerPulse.Enabled)
                 loadComponentSingleFile(new osu.Game.Online.Server.ToriiServerPulseProvider(), Add, true);
 
             // Torii: points-earned summary watcher. Hosts its own card layer; the
@@ -1902,7 +1902,7 @@ namespace osu.Game
             {
                 LocalisableString message;
 
-                if (entry.Exception != null && IsDeployedBuild)
+                if (entry.Exception != null && IsDeployedBuild && !Offline.RitsuOffline.Enabled)
                     message = LocalisableString.Interpolate($"{entry.Message.Truncate(256)}\n\n{NotificationsStrings.ErrorAutomaticallyReported}");
                 else
                     message = entry.Message.Truncate(256);

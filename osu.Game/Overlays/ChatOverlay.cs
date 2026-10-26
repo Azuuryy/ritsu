@@ -36,6 +36,12 @@ namespace osu.Game.Overlays
 {
     public partial class ChatOverlay : OsuFocusedOverlayContainer, INamedOverlayComponent, IKeyBindingHandler<PlatformAction>
     {
+        public override void Show()
+        {
+            if (!Offline.RitsuOffline.Enabled)
+                base.Show();
+        }
+
         public IconUsage Icon => OsuIcon.Chat;
         public LocalisableString Title => ChatStrings.HeaderTitle;
         public LocalisableString Description => ChatStrings.HeaderDescription;

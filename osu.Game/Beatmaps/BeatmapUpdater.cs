@@ -48,7 +48,7 @@ namespace osu.Game.Beatmaps
                 // Before we use below, we want to invalidate.
                 workingBeatmapCache.Invalidate(beatmapSet);
 
-                if (lookupScope != MetadataLookupScope.None)
+                if (!Offline.RitsuOffline.Enabled && lookupScope != MetadataLookupScope.None)
                     metadataLookup.Update(beatmapSet, lookupScope == MetadataLookupScope.OnlineFirst);
 
                 foreach (BeatmapInfo beatmap in beatmapSet.Beatmaps)

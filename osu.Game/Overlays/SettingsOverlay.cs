@@ -111,7 +111,8 @@ namespace osu.Game.Overlays
                 sections.Insert(9, new AfToggleSection());
 
             foreach (var s in sections)
-                AddSection(s);
+                if (!Offline.RitsuOffline.Enabled || s is not OnlineSection)
+                    AddSection(s);
 
             foreach (var s in subPanels)
                 ContentContainer.Add(s);

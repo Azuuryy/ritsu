@@ -106,10 +106,8 @@ namespace osu.Game
 
         public virtual bool UseDevelopmentServer => DebugUtils.IsDebugBuild;
 
-        // toriirefresh: hard-locked to the Torii server. The official osu.ppy.sh
-        // production / development endpoints are intentionally unreachable so the
-        // client can only ever connect to Torii's API + hubs.
-        public virtual EndpointConfiguration CreateEndpoints() => new ToriiEndpointConfiguration();
+        // Offline builds have no service endpoints or credentials.
+        public virtual EndpointConfiguration CreateEndpoints() => new Offline.OfflineEndpointConfiguration();
 
         protected override OnlineStore CreateOnlineStore() => new TrustedDomainOnlineStore();
 
@@ -267,6 +265,7 @@ namespace osu.Game
 
         public OsuGameBase()
         {
+            osu.Framework.IO.Network.WebRequest.DisableNetworkAccess();
             Name = GAME_NAME;
 
             allowableExceptions = UnhandledExceptionsBeforeCrash;
@@ -334,7 +333,7 @@ namespace osu.Game
 
             CurrentLanguage.BindValueChanged(val => frameworkLocale.Value = val.NewValue.ToCultureCode());
 
-            dependencies.CacheAs(API ??= new APIAccess(this, LocalConfig, endpoints, VersionHash));
+            dependencies.CacheAs(API ??= new Offline.OfflineAPIProvider(LocalConfig));
 
             var defaultBeatmap = new DummyWorkingBeatmap(Audio, Textures);
 
@@ -343,7 +342,7 @@ namespace osu.Game
             // ordering is important here to ensure foreign keys rules are not broken in ModelStore.Cleanup()
             dependencies.Cache(ScoreManager = new ScoreManager(RulesetStore, () => BeatmapManager, Storage, realm, API, LocalConfig));
 
-            dependencies.Cache(BeatmapManager = new BeatmapManager(Storage, realm, API, Audio, Resources, Host, defaultBeatmap, difficultyCache, performOnlineLookups: true));
+            dependencies.Cache(BeatmapManager = new BeatmapManager(Storage, realm, API, Audio, Resources, Host, defaultBeatmap, difficultyCache, performOnlineLookups: false));
             dependencies.CacheAs<IWorkingBeatmapCache>(BeatmapManager);
 
             // Torii cosmetics / economy: app-wide owned/equipped/points state, shared by the
@@ -434,59 +433,12 @@ namespace osu.Game
 
             // Torii environment telemetry provider: supplies tablet model, active area,
             // monitor refresh rate and audio offset for server anti-cheat correlation.
-            EnvironmentTelemetry.Provider = () =>
-            {
-                try
-                {
-                    var sb = new System.Text.StringBuilder();
-                    var tablet = Host?.AvailableInputHandlers.OfType<ITabletHandler>().FirstOrDefault(t => t.Enabled.Value);
-                    if (tablet != null && tablet.Tablet.Value != null)
-                    {
-                        string name = tablet.Tablet.Value.Name;
-                        var size = tablet.AreaSize.Value;
-                        var offset = tablet.AreaOffset.Value;
-                        sb.Append($"tablet={Uri.EscapeDataString(name)};area={size.X:F1}x{size.Y:F1};off={offset.X:F1}x{offset.Y:F1}|");
-                    }
-
-                    var window = Host?.Window;
-                    if (window != null)
-                    {
-                        var mode = window.CurrentDisplayMode.Value;
-                        if (mode.Size.Width > 0)
-                        {
-                            sb.Append($"disp={mode.Size.Width}x{mode.Size.Height}@{mode.RefreshRate:F0}|");
-                        }
-                    }
-
-                    double audioOffset = LocalConfig?.Get<double>(OsuSetting.AudioOffset) ?? 0;
-                    if (audioOffset != 0)
-                    {
-                        sb.Append($"audio={audioOffset:F0}|");
-                    }
-
-                    string? otdPlugins = EnvironmentTelemetry.GetDetectedTabletPlugins();
-                    if (!string.IsNullOrEmpty(otdPlugins))
-                    {
-                        sb.Append($"otd={otdPlugins}|");
-                    }
-
-                    string? integrity = EnvironmentTelemetry.GetIntegritySignals();
-                    if (!string.IsNullOrEmpty(integrity))
-                    {
-                        sb.Append($"integ={integrity}|");
-                    }
-
-                    return sb.Length > 0 ? sb.ToString().TrimEnd('|') : null;
-                }
-                catch
-                {
-                    return null;
-                }
-            };
+            // No environment or integrity telemetry is collected in the offline client.
+            EnvironmentTelemetry.Provider = null;
 
             base.Content.Add(new BeatmapOnlineChangeIngest(beatmapUpdater, realm, metadataClient));
 
-            BeatmapManager.ProcessBeatmap = (beatmapSet, scope) => beatmapUpdater.Process(beatmapSet, scope);
+            BeatmapManager.ProcessBeatmap = (beatmapSet, scope) => beatmapUpdater.Process(beatmapSet, MetadataLookupScope.None);
 
             dependencies.Cache(userCache = new UserLookupCache());
             base.Content.Add(userCache);
@@ -626,6 +578,8 @@ namespace osu.Game
             // add api components to hierarchy.
             if (API is APIAccess apiAccess)
                 base.Content.Add(apiAccess);
+            else if (API is Offline.OfflineAPIProvider offlineApi)
+                base.Content.Add(offlineApi);
 
             base.Content.Add(SpectatorClient);
             base.Content.Add(MultiplayerClient);

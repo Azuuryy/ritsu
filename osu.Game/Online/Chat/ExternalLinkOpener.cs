@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
@@ -45,6 +45,12 @@ namespace osu.Game.Online.Chat
 
         public void OpenUrlExternally(string url, LinkWarnMode warnMode = LinkWarnMode.Default)
         {
+            if (Offline.RitsuOffline.Enabled)
+            {
+                notificationOverlay?.Post(new SimpleNotification { Text = "This build is offline. External links are disabled." });
+                return;
+            }
+
             bool isTrustedDomain;
 
             if (url.StartsWith('/'))

@@ -32,7 +32,7 @@ namespace osu.Game.Updater
         /// <summary>
         /// Whether this UpdateManager should be or is capable of checking for updates.
         /// </summary>
-        public bool CanCheckForUpdate => game.IsDeployedBuild &&
+        public bool CanCheckForUpdate => !Offline.RitsuOffline.Enabled && game.IsDeployedBuild &&
                                          // only implementations will actually check for updates.
                                          GetType() != typeof(UpdateManager);
 
@@ -62,7 +62,7 @@ namespace osu.Game.Updater
         {
             base.LoadComplete();
 
-            if (game.IsDeployedBuild)
+            if (game.IsDeployedBuild && !Offline.RitsuOffline.Enabled)
             {
                 // make sure the release stream setting matches the build which was just run.
                 if (FixedReleaseStream != null)
