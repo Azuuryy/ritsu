@@ -1,0 +1,69 @@
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+#nullable disable
+
+using osu.Framework.Allocation;
+using osu.Framework.Extensions;
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.Textures;
+using osu.Game.Database;
+using osu.Game.Graphics;
+using osu.Game.Online.API.Requests.Responses;
+
+namespace osu.Game.Users.Drawables
+{
+    [LongRunningLoad]
+    public partial class DrawableAvatar : Sprite
+    {
+        private readonly IUser user;
+
+        /// <summary>
+        /// A simple, non-interactable avatar sprite for the specified user.
+        /// </summary>
+        /// <param name="user">The user. A null value will get a placeholder avatar.</param>
+        public DrawableAvatar(IUser user = null)
+        {
+            this.user = user;
+
+            RelativeSizeAxes = Axes.Both;
+            FillMode = FillMode.Fit;
+            Anchor = Anchor.Centre;
+            Origin = Anchor.Centre;
+        }
+
+        [BackgroundDependencyLoader]
+        private void load(LargeTextureStore textures, UserLookupCache userLookupCache)
+        {
+            string avatarUrl = (user as APIUser)?.AvatarUrl;
+
+            // torii: a locally-stored score carries a RealmUser with no avatar_url, so
+            // resolve the full user by id through the API (UserLookupCache) to get their
+            // real Torii avatar. This is [LongRunningLoad], so we can block on the lookup
+            // here. Replaces the old hand-built `{APIUrl}/users/{id}/avatar` fallback,
+            // which missed the /api/v2 prefix and 301'd to the website (blank avatar), and
+            // never risks the osu!-id collision the old a.ppy.sh fallback had. Ids that
+            // aren't Torii users just resolve to null -> the guest placeholder.
+            //
+            // NO pasa por OnlineAssetCachingStore. Ese store llego con #38454 (el mismo
+            // PR que trae el schema 52) y tiene un bug de performance abierto upstream:
+            // ppy/osu#38651, "Game lags when loading user images". Se queda el modelo de
+            // realm (que es lo unico que el schema necesita) y los avatares siguen por
+            // LargeTextureStore hasta que lo arreglen.
+            if (string.IsNullOrEmpty(avatarUrl) && user != null && user.OnlineID > 1)
+                avatarUrl = userLookupCache.GetUserAsync(user.OnlineID).GetResultSafely()?.AvatarUrl;
+
+            if (!string.IsNullOrEmpty(avatarUrl))
+                Texture = textures.Get(avatarUrl);
+
+            Texture ??= textures.Get(@"Online/avatar-guest");
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+            this.FadeInFromZero(300, Easing.OutQuint);
+        }
+    }
+}

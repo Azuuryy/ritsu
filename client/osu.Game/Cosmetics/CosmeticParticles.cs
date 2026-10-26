@@ -1,0 +1,404 @@
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.Sprites;
+using osuTK;
+using osuTK.Graphics;
+
+namespace osu.Game.Cosmetics
+{
+    /// <summary>
+    /// Shape factories for <see cref="CosmeticParticleTrail"/>. Each returns a
+    /// fresh, fully-styled particle drawable for one emission; the trail then
+    /// positions, animates and expires it. The int is the running emission index
+    /// so a factory can vary colour/shape down the stream (e.g. rainbow).
+    ///
+    /// These are deliberately built from primitives + a couple of safe icons so
+    /// every trail has its OWN form and personality, not just a recoloured dot.
+    /// </summary>
+    public static class CosmeticParticles
+    {
+        private static readonly Color4 white = new Color4(255, 255, 255, 255);
+        private static readonly Color4 gold = new Color4(255, 225, 120, 255);
+        private static readonly Color4 pink = new Color4(255, 135, 195, 255);
+        private static readonly Color4 rose = new Color4(255, 90, 140, 255);
+        private static readonly Color4 ice = new Color4(220, 245, 255, 255);
+        private static readonly Color4 cyan = new Color4(120, 215, 255, 255);
+        private static readonly Color4 green = new Color4(130, 230, 150, 255);
+        private static readonly Color4 violet = new Color4(190, 150, 255, 255);
+
+        private static readonly Color4[] sakura = { new Color4(255, 200, 222, 255), new Color4(255, 158, 195, 255), new Color4(232, 110, 170, 255) };
+        private static readonly Color4[] flame = { new Color4(255, 235, 120, 255), new Color4(255, 150, 40, 255), new Color4(230, 60, 30, 255) };
+        private static readonly Color4[] notes = { new Color4(120, 200, 255, 255), new Color4(255, 170, 90, 255), new Color4(180, 140, 255, 255) };
+        // autumn 2026: leaves (maple, orange, amber, ochre, chestnut), embers and mist.
+        private static readonly Color4[] autumn_leaves =
+        {
+            new Color4(200, 58, 42, 255), new Color4(224, 122, 47, 255), new Color4(242, 177, 52, 255),
+            new Color4(201, 150, 58, 255), new Color4(122, 74, 43, 255),
+        };
+        private static readonly Color4[] embers = { new Color4(255, 190, 90, 255), new Color4(255, 120, 40, 255), new Color4(200, 58, 42, 255) };
+        private static readonly Color4 fog = new Color4(143, 163, 184, 200);
+        private static readonly Color4 lantern = new Color4(255, 190, 90, 255);
+
+        /// <summary>Gold five-point star.</summary>
+        public static Drawable Star(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Star,
+            Size = new Vector2(14),
+            Colour = gold,
+        };
+
+        /// <summary>Soft heart, pink/rose alternating.</summary>
+        public static Drawable Heart(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Heart,
+            Size = new Vector2(12),
+            Colour = index % 2 == 0 ? pink : rose,
+        };
+
+        /// <summary>Icy six-arm snowflake.</summary>
+        public static Drawable Snowflake(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Snowflake,
+            Size = new Vector2(13),
+            Colour = ice,
+        };
+
+        /// <summary>Music note, colour-cycled.</summary>
+        public static Drawable Note(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Music,
+            Size = new Vector2(12),
+            Colour = notes[index % notes.Length],
+        };
+
+        /// <summary>A single drifting cherry-blossom petal (a tinted oval).</summary>
+        public static Drawable Petal(int index) => new Circle
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(6, 10),
+            Colour = sakura[index % sakura.Length],
+            Rotation = index * 47 % 360,
+        };
+
+        /// <summary>Hollow bubble ring, varied size.</summary>
+        public static Drawable Bubble(int index)
+        {
+            float size = 9 + index % 3 * 4;
+            return new CircularContainer
+            {
+                Origin = Anchor.Centre,
+                Size = new Vector2(size),
+                Masking = true,
+                BorderThickness = 2f,
+                BorderColour = cyan,
+                Child = new Box { RelativeSizeAxes = Axes.Both, Colour = cyan, Alpha = 0.12f },
+            };
+        }
+
+        /// <summary>A teardrop flame blob (warm, flickers hot→cool by index).</summary>
+        public static Drawable Flame(int index) => new Circle
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(8, 12),
+            Colour = flame[index % flame.Length],
+        };
+
+        /// <summary>Four-point twinkle: a bright core with a thin cross.</summary>
+        public static Drawable Sparkle(int index)
+        {
+            Color4 c = index % 2 == 0 ? white : gold;
+            return new Container
+            {
+                Origin = Anchor.Centre,
+                AutoSizeAxes = Axes.Both,
+                Children = new Drawable[]
+                {
+                    new Box { Anchor = Anchor.Centre, Origin = Anchor.Centre, Size = new Vector2(2.2f, 12), Colour = c },
+                    new Box { Anchor = Anchor.Centre, Origin = Anchor.Centre, Size = new Vector2(12, 2.2f), Colour = c },
+                    new Circle { Anchor = Anchor.Centre, Origin = Anchor.Centre, Size = new Vector2(4.5f), Colour = white },
+                },
+            };
+        }
+
+        /// <summary>Rainbow twinkle: hue cycles down the emission stream.</summary>
+        public static Drawable RainbowSparkle(int index)
+        {
+            var hue = index * 0.07f % 1f;
+            Color4 c = Colour4.FromHSV(hue, 0.85f, 1f);
+            return new Container
+            {
+                Origin = Anchor.Centre,
+                AutoSizeAxes = Axes.Both,
+                Children = new Drawable[]
+                {
+                    new Box { Anchor = Anchor.Centre, Origin = Anchor.Centre, Size = new Vector2(2.4f, 13), Colour = c },
+                    new Box { Anchor = Anchor.Centre, Origin = Anchor.Centre, Size = new Vector2(13, 2.4f), Colour = c },
+                    new Circle { Anchor = Anchor.Centre, Origin = Anchor.Centre, Size = new Vector2(5f), Colour = white },
+                },
+            };
+        }
+
+        private static readonly Color4[] confetti_palette =
+        {
+            new Color4(255, 90, 110, 255), new Color4(90, 200, 255, 255), new Color4(120, 235, 140, 255),
+            new Color4(255, 210, 80, 255), new Color4(200, 120, 255, 255), new Color4(255, 140, 70, 255),
+        };
+
+        private static readonly Color4[] retro_palette =
+        {
+            new Color4(255, 80, 90, 255), new Color4(70, 220, 120, 255), new Color4(80, 150, 255, 255),
+            new Color4(255, 220, 70, 255), new Color4(255, 120, 220, 255),
+        };
+
+        private static readonly Color4[] galaxy_palette =
+        {
+            new Color4(180, 150, 255, 255), new Color4(120, 170, 255, 255), new Color4(235, 220, 255, 255), white,
+        };
+
+        /// <summary>Small rotating confetti rectangle, vivid colour by index.</summary>
+        public static Drawable Confetti(int index) => new Box
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(7, 4),
+            Colour = confetti_palette[index % confetti_palette.Length],
+            Rotation = index * 53 % 360,
+        };
+
+        /// <summary>Faint smoke puff (billows out + fades via the trail).</summary>
+        public static Drawable Smoke(int index) => new Circle
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(11),
+            Colour = new Color4(205, 205, 215, 110),
+        };
+
+        /// <summary>Spinning geometric triangle, cool palette.</summary>
+        public static Drawable Geometric(int index) => new Triangle
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(13),
+            Colour = galaxy_palette[index % galaxy_palette.Length],
+            Rotation = index * 40 % 360,
+        };
+
+        /// <summary>Tiny galaxy mote: small star, cool palette, occasional bright.</summary>
+        public static Drawable GalaxyDust(int index)
+        {
+            bool bright = index % 5 == 0;
+            return new Circle
+            {
+                Origin = Anchor.Centre,
+                Size = new Vector2(bright ? 5.5f : 3f),
+                Colour = galaxy_palette[index % galaxy_palette.Length],
+            };
+        }
+
+        /// <summary>Deliberate retro pixel: a crisp arcade-coloured square (this
+        /// time squares are the point).</summary>
+        public static Drawable Pixel(int index) => new Box
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(6),
+            Colour = retro_palette[index % retro_palette.Length],
+        };
+
+        /// <summary>Electric bolt, yellow/blue flicker.</summary>
+        public static Drawable Bolt(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Bolt,
+            Size = new Vector2(14),
+            Colour = index % 2 == 0 ? new Color4(255, 235, 110, 255) : new Color4(150, 215, 255, 255),
+        };
+
+        /// <summary>Crescent moon, icy.</summary>
+        public static Drawable Moon(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Moon,
+            Size = new Vector2(13),
+            Colour = ice,
+        };
+
+        /// <summary>Bright sun.</summary>
+        public static Drawable Sun(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Sun,
+            Size = new Vector2(14),
+            Colour = gold,
+        };
+
+        /// <summary>Fire glyph, warm flicker.</summary>
+        public static Drawable Fire(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Fire,
+            Size = new Vector2(13),
+            Colour = flame[index % flame.Length],
+        };
+
+        /// <summary>Cut gem, cool colours.</summary>
+        public static Drawable Gem(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Gem,
+            Size = new Vector2(13),
+            Colour = index % 2 == 0 ? cyan : pink,
+        };
+
+        /// <summary>Leaf, soft green.</summary>
+        public static Drawable Leaf(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Leaf,
+            Size = new Vector2(12),
+            Colour = green,
+        };
+
+        /// <summary>Cloud puff.</summary>
+        public static Drawable Cloud(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Cloud,
+            Size = new Vector2(14),
+            Colour = new Color4(230, 240, 255, 235),
+        };
+
+        /// <summary>Sunburst spark (certificate glyph).</summary>
+        public static Drawable Sunburst(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Certificate,
+            Size = new Vector2(13),
+            Colour = index % 2 == 0 ? gold : white,
+        };
+
+        /// <summary>Little ghost (fun).</summary>
+        public static Drawable Ghost(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Ghost,
+            Size = new Vector2(13),
+            Colour = new Color4(225, 230, 255, 240),
+        };
+
+        /// <summary>Crown, gold.</summary>
+        public static Drawable Crown(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Crown,
+            Size = new Vector2(13),
+            Colour = gold,
+        };
+
+        /// <summary>Paw print.</summary>
+        public static Drawable Paw(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Paw,
+            Size = new Vector2(13),
+            Colour = index % 2 == 0 ? pink : violet,
+        };
+
+        /// <summary>Thin hollow ring.</summary>
+        public static Drawable Ring(int index) => new CircularContainer
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(11),
+            Masking = true,
+            BorderThickness = 1.6f,
+            BorderColour = index % 2 == 0 ? cyan : violet,
+            Child = new Box { RelativeSizeAxes = Axes.Both, Colour = white, Alpha = 0f },
+        };
+
+        /// <summary>Spinning diamond (rotated square), cool palette.</summary>
+        public static Drawable Diamond(int index) => new Box
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(8),
+            Rotation = 45,
+            Colour = galaxy_palette[index % galaxy_palette.Length],
+        };
+
+        // ───────────────── autumn 2026 ─────────────────
+
+        /// <summary>Autumn leaf: same shape as <see cref="Leaf"/> but each in its own colour and pre-rotated,
+        /// so a leaf fall doesn't look like copies of one sprite.</summary>
+        public static Drawable AutumnLeaf(int index) => new SpriteIcon
+        {
+            Origin = Anchor.Centre,
+            Icon = FontAwesome.Solid.Leaf,
+            Size = new Vector2(12),
+            Colour = autumn_leaves[index % autumn_leaves.Length],
+            Rotation = index * 53 % 360,
+        };
+
+        /// <summary>Acorn: chestnut body, darker cap, stem on top.</summary>
+        public static Drawable Acorn(int index) => new Container
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(8, 11),
+            Rotation = index * 31 % 40 - 20,
+            Children = new Drawable[]
+            {
+                new Circle { Anchor = Anchor.BottomCentre, Origin = Anchor.BottomCentre, Size = new Vector2(8, 9), Colour = new Color4(160, 104, 60, 255) },
+                new Box { Anchor = Anchor.TopCentre, Origin = Anchor.TopCentre, Size = new Vector2(9, 3.5f), Colour = new Color4(96, 58, 34, 255) },
+                new Box { Anchor = Anchor.TopCentre, Origin = Anchor.BottomCentre, Size = new Vector2(2, 2.5f), Colour = new Color4(96, 58, 34, 255) },
+            },
+        };
+
+        /// <summary>Pumpkin: orange oval with a darker middle segment and a green stem.</summary>
+        public static Drawable Pumpkin(int index) => new Container
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(12, 10),
+            Children = new Drawable[]
+            {
+                new Circle { Anchor = Anchor.BottomCentre, Origin = Anchor.BottomCentre, Size = new Vector2(12, 9), Colour = new Color4(232, 118, 40, 255) },
+                new Circle { Anchor = Anchor.BottomCentre, Origin = Anchor.BottomCentre, Size = new Vector2(5, 9), Colour = new Color4(205, 95, 30, 255) },
+                new Box { Anchor = Anchor.TopCentre, Origin = Anchor.BottomCentre, Size = new Vector2(2.2f, 3), Y = 1.5f, Colour = new Color4(107, 122, 64, 255) },
+            },
+        };
+
+        /// <summary>Ember: hot dot, varied size and colour (yellow, orange, red).</summary>
+        public static Drawable Ember(int index) => new Circle
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(4 + index % 3),
+            Colour = embers[index % embers.Length],
+        };
+
+        /// <summary>Raindrop: tall thin streak, blue-grey, slightly tilted.</summary>
+        public static Drawable Raindrop(int index) => new Circle
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(2.4f, 14),
+            Colour = new Color4(200, 218, 236, 235),
+            Rotation = 9,
+        };
+
+        /// <summary>Paper lantern: warm body with plum top and bottom and the flame in the middle.</summary>
+        public static Drawable Lantern(int index) => new Container
+        {
+            Origin = Anchor.Centre,
+            Size = new Vector2(9, 13),
+            Children = new Drawable[]
+            {
+                new Circle { Anchor = Anchor.Centre, Origin = Anchor.Centre, Size = new Vector2(9, 11), Colour = index % 2 == 0 ? lantern : new Color4(255, 150, 70, 255) },
+                new Box { Anchor = Anchor.TopCentre, Origin = Anchor.TopCentre, Size = new Vector2(5, 1.6f), Colour = new Color4(110, 46, 74, 255) },
+                new Box { Anchor = Anchor.BottomCentre, Origin = Anchor.BottomCentre, Size = new Vector2(5, 1.6f), Colour = new Color4(110, 46, 74, 255) },
+                new Circle { Anchor = Anchor.Centre, Origin = Anchor.Centre, Size = new Vector2(3.5f, 5), Colour = new Color4(255, 240, 200, 255) },
+            },
+        };
+
+    }
+}

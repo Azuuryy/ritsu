@@ -1,0 +1,278 @@
+on: [push, pull_request]
+name: Continuous Integration
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+env:
+  # Framework and resources are pinned to specific commit hashes so CI runs
+  # against exactly what release builds (build-gu.yml) consume. Without these
+  # pins the jobs would clone each dep at its default branch and inspect a
+  # different codebase than what ships. toriirefresh uses the standard upstream
+  # graphics backend that ships with the framework via nuget.org — no extra
+  # fork to clone/pack, so restore resolves everything straight from nuget.org.
+  FRAMEWORK_REPOSITORY: 'ShikkesoraSIM/torii-framework'
+  FRAMEWORK_REF: '25e68d530f7116437c4cfaf127169ac4d6619927'
+  RESOURCES_REPOSITORY: 'ShikkesoraSIM/torii-resources'
+  RESOURCES_REF: '2a516e45ba416dbd2cf8b821661909109f738b34'
+
+jobs:
+  inspect-code:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test Android release metadata
+        run: python3 -m unittest discover -s .github/scripts -p 'test_android_release.py' -v
+
+      - name: Checkout framework dependency
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FRAMEWORK_REPOSITORY }}
+          fetch-depth: 1
+          ref: ${{ env.FRAMEWORK_REF }}
+          path: toriirefresh-framework
+
+      - name: Checkout resources dependency
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.RESOURCES_REPOSITORY }}
+          fetch-depth: 1
+          ref: ${{ env.RESOURCES_REF }}
+          path: toriirefresh-resources
+
+      - name: Place dependencies in expected sibling paths
+        shell: bash
+        run: |
+          rm -rf ../toriirefresh-framework ../toriirefresh-resources
+          mv toriirefresh-framework ../toriirefresh-framework
+          mv toriirefresh-resources ../toriirefresh-resources
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore Tools
+        run: dotnet tool restore
+
+      - name: Restore Packages
+        run: dotnet restore osu.Desktop/osu.Desktop.csproj --configfile nuget.config
+
+      - name: Restore inspectcode cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/inspectcode
+          key: inspectcode-${{ hashFiles('.config/dotnet-tools.json', '.github/workflows/ci.yml', 'osu.sln*', 'osu*.slnf', '.editorconfig', '.globalconfig', 'CodeAnalysis/*', '**/*.csproj', '**/*.props') }}
+
+      - name: Dotnet code style
+        run: dotnet build -c Debug osu.Desktop/osu.Desktop.csproj -p:EnforceCodeStyleInBuild=true
+
+      - name: CodeFileSanity
+        continue-on-error: true
+        run: |
+          # TODO: Add ignore filters and GitHub Workflow Command Reporting in CFS. That way we don't have to do this workaround.
+          # FIXME: Suppress warnings from templates project
+          exit_code=0
+          while read -r line; do
+            if [[ ! -z "$line" ]]; then
+              echo "::error::$line"
+              exit_code=1
+            fi
+          done <<< $(dotnet codefilesanity)
+          exit $exit_code
+
+      - name: InspectCode
+        continue-on-error: true
+        run: dotnet jb inspectcode $(pwd)/osu.Desktop/osu.Desktop.csproj --no-build --output="inspectcodereport.xml" --caches-home="inspectcode" --verbosity=WARN
+
+      - name: NVika
+        continue-on-error: true
+        run: dotnet nvika parsereport "${{github.workspace}}/inspectcodereport.xml" --treatwarningsaserrors
+
+  test:
+    name: Test
+    # disabled per request: keep only code quality checks
+    if: ${{ false }}
+    runs-on: ${{matrix.os.fullname}}
+    env:
+      OSU_EXECUTION_MODE: ${{matrix.threadingMode}}
+    strategy:
+       fail-fast: false
+       matrix:
+          os:
+            - { prettyname: Windows, fullname: windows-latest }
+            # macOS runner performance has gotten unbearably slow so let's turn them off temporarily.
+            # - { prettyname: macOS, fullname: macos-latest }
+            - { prettyname: Linux, fullname: ubuntu-latest }
+          threadingMode: ['SingleThread', 'MultiThreaded']
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout framework dependency
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FRAMEWORK_REPOSITORY }}
+          fetch-depth: 1
+          ref: ${{ env.FRAMEWORK_REF }}
+          path: toriirefresh-framework
+
+      - name: Checkout resources dependency
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.RESOURCES_REPOSITORY }}
+          fetch-depth: 1
+          ref: ${{ env.RESOURCES_REF }}
+          path: toriirefresh-resources
+
+      - name: Place dependencies in expected sibling paths
+        shell: bash
+        run: |
+          rm -rf ../toriirefresh-framework ../toriirefresh-resources
+          mv toriirefresh-framework ../toriirefresh-framework
+          mv toriirefresh-resources ../toriirefresh-resources
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Compile
+        run: dotnet build -c Debug -warnaserror osu.Desktop.slnf
+
+      - name: Test
+        run: >
+          dotnet test
+          osu.Game.Tests/bin/Debug/**/osu.Game.Tests.dll
+          osu.Game.Rulesets.Osu.Tests/bin/Debug/**/osu.Game.Rulesets.Osu.Tests.dll
+          osu.Game.Rulesets.Taiko.Tests/bin/Debug/**/osu.Game.Rulesets.Taiko.Tests.dll
+          osu.Game.Rulesets.Catch.Tests/bin/Debug/**/osu.Game.Rulesets.Catch.Tests.dll
+          osu.Game.Rulesets.Mania.Tests/bin/Debug/**/osu.Game.Rulesets.Mania.Tests.dll
+          osu.Game.Tournament.Tests/bin/Debug/**/osu.Game.Tournament.Tests.dll
+          Templates/**/*.Tests/bin/Debug/**/*.Tests.dll
+          --logger "trx;LogFileName=TestResults-${{matrix.os.prettyname}}-${{matrix.threadingMode}}.trx"
+          --
+          NUnit.ConsoleOut=0
+
+      # Attempt to upload results even if test fails.
+      # https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#always
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: osu-test-results-${{matrix.os.prettyname}}-${{matrix.threadingMode}}
+          path: ${{github.workspace}}/TestResults/TestResults-${{matrix.os.prettyname}}-${{matrix.threadingMode}}.trx
+
+  build-only-android:
+    name: Build only (Android)
+    # disabled per request: keep only code quality checks
+    if: ${{ false }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout framework dependency
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FRAMEWORK_REPOSITORY }}
+          fetch-depth: 1
+          ref: ${{ env.FRAMEWORK_REF }}
+          path: toriirefresh-framework
+
+      - name: Checkout resources dependency
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.RESOURCES_REPOSITORY }}
+          fetch-depth: 1
+          ref: ${{ env.RESOURCES_REF }}
+          path: toriirefresh-resources
+
+      - name: Place dependencies in expected sibling paths
+        shell: bash
+        run: |
+          rm -rf ../toriirefresh-framework ../toriirefresh-resources
+          mv toriirefresh-framework ../toriirefresh-framework
+          mv toriirefresh-resources ../toriirefresh-resources
+
+      - name: Setup JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: 11
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Install .NET workloads
+        run: dotnet workload install android
+
+      - name: Compile
+        run: dotnet build -c Debug osu.Android.slnf
+
+  build-only-ios:
+    name: Build only (iOS)
+    # disabled per request: keep only code quality checks
+    if: ${{ false }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout framework dependency
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FRAMEWORK_REPOSITORY }}
+          fetch-depth: 1
+          ref: ${{ env.FRAMEWORK_REF }}
+          path: toriirefresh-framework
+
+      - name: Checkout resources dependency
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.RESOURCES_REPOSITORY }}
+          fetch-depth: 1
+          ref: ${{ env.RESOURCES_REF }}
+          path: toriirefresh-resources
+
+      - name: Place dependencies in expected sibling paths
+        shell: bash
+        run: |
+          rm -rf ../toriirefresh-framework ../toriirefresh-resources
+          mv toriirefresh-framework ../toriirefresh-framework
+          mv toriirefresh-resources ../toriirefresh-resources
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Install .NET Workloads
+        run: dotnet workload install ios
+
+      # https://github.com/dotnet/macios/issues/19157
+      # https://github.com/actions/runner-images/issues/12758
+      - name: Use Xcode 16.4
+        run: sudo xcode-select -switch /Applications/Xcode_16.4.app
+
+      - name: Build
+        run: dotnet build -c Debug osu.iOS.slnf

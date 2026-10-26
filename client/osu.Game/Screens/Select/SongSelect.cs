@@ -1,0 +1,1683 @@
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using osu.Framework.Allocation;
+using osu.Framework.Audio;
+using osu.Framework.Audio.Sample;
+using osu.Framework.Audio.Track;
+using osu.Framework.Bindables;
+using osu.Framework.Development;
+using osu.Framework.Extensions;
+using osu.Framework.Extensions.Color4Extensions;
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.Colour;
+using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
+using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Input;
+using osu.Framework.Input.Bindings;
+using osu.Framework.Input.Events;
+using osu.Framework.Input.StateChanges;
+using osu.Framework.Logging;
+using osu.Framework.Screens;
+using osu.Framework.Threading;
+using osu.Game.Beatmaps;
+using osu.Game.Collections;
+using osu.Game.Configuration;
+using osu.Game.Database;
+using osu.Game.Graphics;
+using osu.Game.Graphics.Carousel;
+using osu.Game.Graphics.Containers;
+using osu.Game.Graphics.Cursor;
+using osu.Game.Graphics.UserInterface;
+using osu.Game.Input.Bindings;
+using osu.Game.Localisation;
+using osu.Game.Online.API;
+using osu.Game.Online.API.Requests.Responses;
+using osu.Game.Overlays;
+using osu.Game.Overlays.Mods;
+using osu.Game.Overlays.Volume;
+using osu.Game.Rulesets;
+using osu.Game.Rulesets.Mods;
+using osu.Game.Scoring;
+using osu.Game.Screens.Footer;
+using osu.Game.Screens.Select.Filter;
+using osu.Game.Screens.Menu;
+using osu.Game.Screens.Play;
+using osu.Game.Screens.Ranking;
+using osu.Game.Skinning;
+using osu.Game.Utils;
+using osuTK;
+using osuTK.Graphics;
+using osuTK.Input;
+
+namespace osu.Game.Screens.Select
+{
+    public abstract partial class SongSelect : ScreenWithBeatmapBackground, IKeyBindingHandler<GlobalAction>, ISongSelect, IHandlePresentBeatmap, IProvideCursor
+    {
+        /// <summary>
+        /// A debounce that governs how long after a panel is selected before the rest of song select (and the game at large)
+        /// updates to show that selection.
+        ///
+        /// This is intentionally slightly higher than key repeat, but low enough to not impede user experience.
+        /// </summary>
+        public const int SELECTION_DEBOUNCE = 350;
+
+        /// <summary>
+        /// A general "global" debounce to be applied to anything aggressive difficulty calculation at song select,
+        /// either after selection or after a panel comes on screen. Value should be low enough that users don't complain,
+        /// but otherwise as high as possible to reduce overheads.
+        /// </summary>
+        public const int DIFFICULTY_CALCULATION_DEBOUNCE = 150;
+
+        private const float logo_scale = 0.4f;
+        private const double fade_duration = 300;
+
+        public const float WEDGE_CONTENT_MARGIN = CORNER_RADIUS_HIDE_OFFSET + OsuGame.SCREEN_EDGE_MARGIN;
+        public const float CORNER_RADIUS_HIDE_OFFSET = 20f;
+        public const float ENTER_DURATION = 600;
+
+        /// <summary>
+        /// Whether this song select instance should take control of the global track,
+        /// applying looping and preview offsets.
+        /// </summary>
+        protected bool ControlGlobalMusic { get; init; } = true;
+
+        /// <summary>
+        /// Whether this song select instance should allow scoping down to a specific beatmap set,
+        /// exposing other difficulties that are otherwise hidden by filter criteria.
+        /// </summary>
+        protected bool SupportScoping { init => scopedBeatmapSet.Disabled = !value; }
+
+        /// <summary>
+        /// Whether the osu! logo should be shown at the bottom-right of the screen.
+        /// </summary>
+        protected bool ShowOsuLogo { get; init; } = true;
+
+        /// <summary>
+        /// Additional padding to be added to the title wedge.
+        /// Generally set to show external content in this space.
+        /// </summary>
+        public float TopPadding { get; init; }
+
+        private ModSelectOverlay modSelectOverlay = null!;
+        private ModSpeedHotkeyHandler modSpeedHotkeyHandler = null!;
+
+        // Blue is the most neutral choice, so I'm using that for now.
+        // Purple makes the most sense to match the "gameplay" flow, but it's a bit too strong for the current design.
+        // TODO: Colour scheme choice should probably be customisable by the user.
+        [Cached]
+        private readonly OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Blue);
+
+        // torii DARK GLASS: fuente compartida del blur (frost) para los paneles del carousel (solo con glass).
+        private PanelBackdrop? panelBackdrop;
+        private DependencyContainer dependencies = null!;
+
+        protected override IReadOnlyDependencyContainer CreateChildDependencies(IReadOnlyDependencyContainer parent)
+        {
+            dependencies = new DependencyContainer(base.CreateChildDependencies(parent));
+
+            if (OsuColour.IsGlassTheme && !Performance.PotatoMode.Active)
+            {
+                panelBackdrop = new PanelBackdrop(4f);
+                dependencies.CacheAs<IPanelBackdrop>(panelBackdrop);
+            }
+
+            return dependencies;
+        }
+
+        private BeatmapCarousel carousel = null!;
+
+        protected FilterControl FilterControl { get; private set; } = null!;
+
+        private BeatmapTitleWedge titleWedge = null!;
+        private BeatmapDetailsArea detailsArea = null!;
+        private FillFlowContainer wedgesContainer = null!;
+
+        // Torii: legacy (stable-style) song-select UI. When on, the modern lazer chrome
+        // (filter/sort/star-rating bar + the left info & details wedges) is hidden so the
+        // screen reads like osu!stable (carousel + legacy footer). Shares the footer-skin toggle.
+        private Bindable<bool> legacyUi = null!;
+
+        // torii: guard de re-entrancy del rebuild del chrome legacy (si un toggle y un cambio de skin
+        // caen en el mismo frame).
+        private bool rebuildingLegacyChrome;
+
+        // Torii: watches the grouping config so a legacy-tab group change flags the carousel to collapse
+        // all groups once the re-group completes (consumed in BeatmapCarousel.HandleFilterCompleted).
+        private Bindable<GroupMode> legacyGroupCollapseWatcher = null!;
+        private Drawable legacyTopContainer = null!;
+        private Drawable legacyLeaderboardContainer = null!;
+        private Drawable legacyModsContainer = null!;
+        private Box rightGradientBackground = null!;
+        private Container mainContent = null!;
+        private SkinnableContainer skinnableContent = null!;
+
+        private GridContainer mainGridContainer = null!;
+
+        private NoResultsPlaceholder noResultsPlaceholder = null!;
+
+        public override bool? ApplyModTrackAdjustments => true;
+
+        private Sample? errorSample;
+
+        [Resolved]
+        private OsuGameBase? game { get; set; }
+
+        // torii: lo usamos para reconstruir el chrome legacy cuando cambia el skin estando en stable.
+        [Resolved]
+        private ISkinSource skinSource { get; set; } = null!;
+
+        [Resolved]
+        private OsuConfigManager gameConfig { get; set; } = null!;
+
+        [Resolved]
+        private OsuLogo? logo { get; set; }
+
+        [Resolved]
+        private BeatmapSetOverlay? beatmapOverlay { get; set; }
+
+        [Resolved]
+        private BeatmapManager beatmaps { get; set; } = null!;
+
+        [Resolved]
+        private IAPIProvider api { get; set; } = null!;
+
+        [Resolved]
+        private ManageCollectionsDialog? collectionsDialog { get; set; }
+
+        [Resolved]
+        private DifficultyRecommender? difficultyRecommender { get; set; }
+
+        [Resolved]
+        private IDialogOverlay? dialogOverlay { get; set; }
+
+        [Resolved]
+        private IOverlayManager? overlayManager { get; set; }
+
+        // Torii: the real footer (cached by OsuGame). Used to drive footer hotkeys (F1/F2/F3) in legacy
+        // mode, where the default footer buttons are hidden (alpha 0) and so leave the key-binding queue.
+        [Resolved(CanBeNull = true)]
+        private ScreenFooter? screenFooter { get; set; }
+
+        private InputManager inputManager = null!;
+
+        private readonly RealmPopulatingOnlineLookupSource onlineLookupSource = new RealmPopulatingOnlineLookupSource();
+
+        private Bindable<bool> configBackgroundBlur = null!;
+        private Bindable<bool> showConvertedBeatmaps = null!;
+        private IDisposable? customUiHueBinding;
+
+        private IDisposable? modSelectOverlayRegistration;
+
+        protected SongSelect()
+        {
+            FooterContent.Value = ScreenFooterContent.Argon(leftButtons: CreateFooterButtons);
+        }
+
+        [BackgroundDependencyLoader]
+        private void load(AudioManager audio, OsuConfigManager config)
+        {
+            // BindFullScheme drives BOTH the chrome hue and the donator
+            // accent hue on the song-select OverlayColourProvider in a
+            // single ColoursChanged firing. The accent re-tints every
+            // Highlight1/Light/Colour shade used here — mod button bars,
+            // footer accent strip, leaderboard score row highlights, the
+            // beatmap status pill, etc. — without touching the chrome
+            // hue used for the dark background panels.
+            customUiHueBinding = CustomUiHueHelper.BindFullScheme(config, colourProvider, OverlayColourScheme.Blue.GetHue(), CustomUiHueScope.Menu, api);
+
+            errorSample = audio.Samples.Get(@"UI/generic-error");
+
+            // torii dark glass: fuente compartida del blur (invisible), atras de todo.
+            if (panelBackdrop != null)
+                AddInternal(panelBackdrop);
+
+            AddRangeInternal(new Drawable[]
+            {
+                new ScrollAdjustsVolume(),
+                onlineLookupSource,
+                mainContent = new Container
+                {
+                    Anchor = Anchor.Centre,
+                    Origin = Anchor.Centre,
+                    RelativeSizeAxes = Axes.Both,
+                    Padding = new MarginPadding { Bottom = ScreenFooter.HEIGHT },
+                    Child = new OsuContextMenuContainer
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Child = new PopoverContainer
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            Children = new Drawable[]
+                            {
+                                new Box
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Width = 0.6f,
+                                    Colour = ColourInfo.GradientHorizontal(Color4.Black.Opacity(0.3f), Color4.Black.Opacity(0f)),
+                                },
+                                mainGridContainer = new GridContainer // used for max width implementation
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Content = new[]
+                                    {
+                                        new[]
+                                        {
+                                            // torii: recorta lo que las wedges se salen por arriba y por
+                                            // izquierda. El Padding negativo de abajo las corre
+                                            // CORNER_RADIUS_HIDE_OFFSET hacia afuera para que las esquinas
+                                            // redondeadas queden fuera de la vista, y eso funcionaba porque
+                                            // caia fuera de la pantalla.
+                                            //
+                                            // Con la toolbar empujando la pantalla (auto-hide apagado) ya no
+                                            // cae afuera: cae DEBAJO de la barra. Vos no lo ves, pero el
+                                            // frost de la toolbar samplea la escena entera y ahi si aparece,
+                                            // como un bloque mas claro en la mitad izquierda de la barra.
+                                            //
+                                            // El masking corta recto en el borde del area de contenido, que
+                                            // esconde las esquinas igual de bien (un corte recto no tiene
+                                            // esquina que mostrar) y de paso no dibuja nada arriba del
+                                            // recorte. Va POR AFUERA del Shear a proposito: adentro, el
+                                            // recorte saldria cizallado en diagonal.
+                                            new Container
+                                            {
+                                                RelativeSizeAxes = Axes.Both,
+                                                Masking = true,
+                                                Depth = float.MinValue,
+                                                Child = new Container
+                                                {
+                                                RelativeSizeAxes = Axes.Both,
+                                                // Ensure the left components are on top of the carousel both visually (although they should never overlay)
+                                                // but more importantly, for input purposes to allow the scroll-to-selection logic to override carousel's
+                                                // screen-wide scroll handling.
+                                                Shear = OsuGame.SHEAR,
+                                                Padding = new MarginPadding
+                                                {
+                                                    Top = -CORNER_RADIUS_HIDE_OFFSET,
+                                                    Left = -CORNER_RADIUS_HIDE_OFFSET,
+                                                },
+                                                Children = new Drawable[]
+                                                {
+                                                    new Container
+                                                    {
+                                                        // Pad enough to only reset scroll when well into the left wedge areas.
+                                                        Padding = new MarginPadding { Right = 40 },
+                                                        RelativeSizeAxes = Axes.Both,
+                                                        // Torii: in legacy mode the left wedges are hidden, leaving empty
+                                                        // space here; forward drags from it into the carousel so it stays
+                                                        // drag-scrollable there too (non-legacy behaviour is unchanged).
+                                                        Child = new LeftSideInteractionContainer(
+                                                            () => carousel.ScrollToSelection(),
+                                                            delta => carousel.ScrollFromDelta(delta),
+                                                            () => legacyUi.Value)
+                                                        {
+                                                            RelativeSizeAxes = Axes.Both,
+                                                        },
+                                                    },
+                                                    wedgesContainer = new FillFlowContainer
+                                                    {
+                                                        RelativeSizeAxes = Axes.Both,
+                                                        Direction = FillDirection.Vertical,
+                                                        Children = new Drawable[]
+                                                        {
+                                                            new ShearAligningWrapper(titleWedge = new BeatmapTitleWedge
+                                                            {
+                                                                TopPadding = TopPadding,
+                                                            }),
+                                                            new InputBlockingContainer
+                                                            {
+                                                                RelativeSizeAxes = Axes.X,
+                                                                Height = 4
+                                                            },
+                                                            new ShearAligningWrapper(detailsArea = new BeatmapDetailsArea()),
+                                                        },
+                                                    },
+                                                }
+                                                },
+                                            },
+                                            Empty(),
+                                            new Container
+                                            {
+                                                RelativeSizeAxes = Axes.Both,
+                                                Children = new Drawable[]
+                                                {
+                                                    rightGradientBackground = new Box
+                                                    {
+                                                        Anchor = Anchor.TopRight,
+                                                        Origin = Anchor.TopRight,
+                                                        Colour = ColourInfo.GradientHorizontal(Color4.Black.Opacity(0.0f), Color4.Black.Opacity(0.5f)),
+                                                        RelativeSizeAxes = Axes.Both,
+                                                    },
+                                                    new Container
+                                                    {
+                                                        RelativeSizeAxes = Axes.Both,
+                                                        Padding = new MarginPadding
+                                                        {
+                                                            Top = FilterControl.HEIGHT_FROM_SCREEN_TOP + 5,
+                                                            Bottom = 5,
+                                                        },
+                                                        Children = new Drawable[]
+                                                        {
+                                                            carousel = new BeatmapCarousel
+                                                            {
+                                                                BleedTop = FilterControl.HEIGHT_FROM_SCREEN_TOP + 5,
+                                                                BleedBottom = ScreenFooter.HEIGHT + 5,
+                                                                RelativeSizeAxes = Axes.Both,
+                                                                RequestPresentBeatmap = b => SelectAndRun(b, OnStart),
+                                                                RequestSelection = queueBeatmapSelection,
+                                                                RequestRecommendedSelection = requestRecommendedSelection,
+                                                                NewItemsPresented = newItemsPresented,
+                                                            },
+                                                            noResultsPlaceholder = new NoResultsPlaceholder
+                                                            {
+                                                                RequestClearFilterText = () => FilterControl.Search(string.Empty)
+                                                            }
+                                                        }
+                                                    },
+                                                    FilterControl = new FilterControl
+                                                    {
+                                                        Anchor = Anchor.TopRight,
+                                                        Origin = Anchor.TopRight,
+                                                        RelativeSizeAxes = Axes.X,
+                                                        ScopedBeatmapSet = { BindTarget = ScopedBeatmapSet },
+                                                    },
+                                                }
+                                            },
+                                        },
+                                    }
+                                },
+                            }
+                        },
+                    }
+                },
+                skinnableContent = new SkinnableContainer(new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.SongSelect))
+                {
+                    Anchor = Anchor.Centre,
+                    Origin = Anchor.Centre,
+                    RelativeSizeAxes = Axes.Both,
+                },
+                // Torii: stable-style song-select top panel for the legacy UI (songselect-top skin
+                // texture + beatmap info). Mounted in a 1366x768 logical space (matching the legacy
+                // footer) so it aligns with stable coordinates and skin textures render correctly.
+                // Hidden by default; shown in legacy mode via updateLegacyChrome.
+                legacyTopContainer = new DrawSizePreservingFillContainer
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    TargetDrawSize = new Vector2(1366, 768),
+                    Strategy = DrawSizePreservationStrategy.Minimum,
+                    Alpha = 0,
+                    Child = new LegacySongSelectTop
+                    {
+                        Anchor = Anchor.TopLeft,
+                        Origin = Anchor.TopLeft,
+                        RelativeSizeAxes = Axes.Both,
+                        FilterControl = FilterControl,
+                    },
+                },
+                // Torii: stable-style bottom-left ranking panel (Local Ranking dropdown + scores)
+                // for the legacy UI, in the same 1366x768 scaled space. Hidden by default.
+                legacyLeaderboardContainer = new DrawSizePreservingFillContainer
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    TargetDrawSize = new Vector2(1366, 768),
+                    Strategy = DrawSizePreservationStrategy.Minimum,
+                    Alpha = 0,
+                    // Context-menu container wraps (rather than sits inside) the leaderboard so the
+                    // right-click menu renders above everything and stays clickable regardless of the
+                    // leaderboard's input pass-through. ContextMenuContainer only captures right-clicks
+                    // on an IHasContextMenu target, so the carousel drag still falls through it.
+                    Child = new OsuContextMenuContainer
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Child = new LegacyLeaderboard
+                        {
+                            Anchor = Anchor.TopLeft,
+                            Origin = Anchor.TopLeft,
+                            RelativeSizeAxes = Axes.Both,
+                            // hoverear la leaderboard vuelve el carousel a la seleccion (como el modo normal).
+                            HoverScrollRequested = () => carousel.ScrollToSelection(),
+                        },
+                    },
+                },
+                // Torii: el readout de mods activos estilo stable (texto semi-transparente arriba
+                // del footer), en el mismo espacio 1366x768. no depende del skin, asi que no
+                // participa del rebuild del chrome.
+                legacyModsContainer = new DrawSizePreservingFillContainer
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    TargetDrawSize = new Vector2(1366, 768),
+                    Strategy = DrawSizePreservationStrategy.Minimum,
+                    Alpha = 0,
+                    Child = new LegacyModsList { RelativeSizeAxes = Axes.Both },
+                },
+                modSpeedHotkeyHandler = new ModSpeedHotkeyHandler()
+            });
+
+            LoadComponent(modSelectOverlay = CreateModSelectOverlay());
+
+            configBackgroundBlur = config.GetBindable<bool>(OsuSetting.SongSelectBackgroundBlur);
+            configBackgroundBlur.BindValueChanged(_ =>
+            {
+                if (!this.IsCurrentScreen())
+                    return;
+
+                updateBackgroundDim();
+            });
+
+            showConvertedBeatmaps = config.GetBindable<bool>(OsuSetting.ShowConvertedBeatmaps);
+
+            legacyUi = config.GetBindable<bool>(OsuSetting.ToriiLegacyFooterUseSkin);
+            legacyUi.BindValueChanged(e =>
+            {
+                // al PRENDER el stable estando ya en la pantalla, reconstruimos el chrome para que las
+                // texturas de skin se resuelvan frescas (sino quedan stale hasta salir y volver). el
+                // invoke inicial (,true) corre durante el load -todavia no somos current- asi que cae al
+                // else y solo hace el fade, como antes.
+                if (e.NewValue && this.IsCurrentScreen())
+                    rebuildLegacyChrome();
+                else
+                    updateLegacyChrome();
+            }, true);
+
+            // Torii: when the user picks a grouping via the legacy tabs, collapse all groups after the
+            // re-group so they see every group closed (stable's "group then Shift+Enter"), instead of
+            // the selected group staying expanded. The carousel consumes this on the next completed
+            // filter (HandleFilterCompleted), after its own selection/expansion has settled.
+            legacyGroupCollapseWatcher = config.GetBindable<GroupMode>(OsuSetting.SongSelectGroupMode);
+            legacyGroupCollapseWatcher.BindValueChanged(_ =>
+            {
+                if (legacyUi.Value)
+                    carousel.CollapseGroupsOnNextFilter = true;
+            });
+        }
+
+        /// <summary>
+        /// Torii: hide/show the modern lazer song-select chrome for the legacy (stable-style)
+        /// UI mode. Hides the filter/sort bar and the left info + details wedges so only the
+        /// carousel + legacy footer remain, matching osu!stable.
+        /// </summary>
+        private void updateLegacyChrome()
+        {
+            if (FilterControl == null)
+                return;
+
+            bool legacy = legacyUi.Value;
+
+            FilterControl.FadeTo(legacy ? 0 : 1, 200, Easing.OutQuint);
+            wedgesContainer.FadeTo(legacy ? 0 : 1, 200, Easing.OutQuint);
+            legacyTopContainer.FadeTo(legacy ? 1 : 0, 200, Easing.OutQuint);
+            legacyLeaderboardContainer.FadeTo(legacy ? 1 : 0, 200, Easing.OutQuint);
+            legacyModsContainer.FadeTo(legacy ? 1 : 0, 200, Easing.OutQuint);
+
+            // torii: cuando el area es mas ancha que 16:9 (tipico con la nav-bar arriba) letterboxeamos
+            // TODO el screen+footer juntos via el ScalingContainer, asi todo (carousel, chrome, footer,
+            // back button) se achica uniforme y centrado, con el fondo dimmeado del screen-scaling en
+            // los costados. al salir de legacy se limpia (null) y vuelve a full screen.
+            (game as OsuGame)?.SetLegacyScreenAspectLock(legacy ? 1366f / 768f : null);
+        }
+
+        // torii: el skin cambio. solo reconstruimos si el stable esta activo y seguimos en pantalla
+        // (SourceChanged es un callback de manager de larga vida; no debe tocar una screen ya disposeada).
+        private void onSkinChangedWhileLegacy()
+        {
+            if (!legacyUi.Value || !this.IsCurrentScreen())
+                return;
+
+            // diferimos un frame: en este momento SourceChanged esta iterando SU lista de handlers, que
+            // incluye los de los componentes legacy actuales. si los disposeamos ya, esos handlers (que
+            // siguen en la lista capturada de esta emision) correrian sobre objetos disposeados. en el
+            // proximo frame la emision ya termino y reconstruimos seguro (Schedule se cancela al disposear).
+            Schedule(rebuildLegacyChrome);
+        }
+
+        /// <summary>
+        /// torii: reconstruye el chrome legacy como si entraramos de cero. el toggle solo hacia fade de
+        /// los contenedores creados una vez en load(), pero sus hijos resuelven las texturas de skin
+        /// one-shot en LoadComplete; al prender el stable mid-screen (o cambiar de skin) quedaban stale
+        /// hasta salir y volver al menu. reemplazamos el Child de cada contenedor (no el contenedor, asi
+        /// el z-order no cambia): el setter disposa el hijo viejo -corriendo su Dispose, que desuscribe
+        /// sus handlers de skin- y carga el nuevo contra el skin ACTUAL.
+        /// </summary>
+        private void rebuildLegacyChrome()
+        {
+            if (rebuildingLegacyChrome || !this.IsCurrentScreen())
+                return;
+
+            if (legacyTopContainer is not Container topContainer || legacyLeaderboardContainer is not Container leaderboardContainer)
+                return;
+
+            rebuildingLegacyChrome = true;
+
+            try
+            {
+                topContainer.Child = new LegacySongSelectTop
+                {
+                    Anchor = Anchor.TopLeft,
+                    Origin = Anchor.TopLeft,
+                    RelativeSizeAxes = Axes.Both,
+                    FilterControl = FilterControl,
+                };
+
+                leaderboardContainer.Child = new OsuContextMenuContainer
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Child = new LegacyLeaderboard
+                    {
+                        Anchor = Anchor.TopLeft,
+                        Origin = Anchor.TopLeft,
+                        RelativeSizeAxes = Axes.Both,
+                        HoverScrollRequested = () => carousel.ScrollToSelection(),
+                    },
+                };
+            }
+            finally
+            {
+                rebuildingLegacyChrome = false;
+            }
+
+            // dejamos los contenedores en el estado visible correcto + re-aplica el aspect lock.
+            updateLegacyChrome();
+        }
+
+        // Colour scheme for mod overlay is left as default (green) to match mods button.
+        // Not sure about this, but we'll iterate based on feedback.
+        protected virtual ModSelectOverlay CreateModSelectOverlay() => new UserModSelectOverlay
+        {
+            ShowPresets = true,
+        };
+
+        private void requestRecommendedSelection(IEnumerable<GroupedBeatmap> groupedBeatmaps)
+        {
+            var recommendedBeatmap = difficultyRecommender?.GetRecommendedBeatmap(groupedBeatmaps.Select(gb => gb.Beatmap)) ?? groupedBeatmaps.First().Beatmap;
+            queueBeatmapSelection(groupedBeatmaps.First(bug => bug.Beatmap.Equals(recommendedBeatmap)));
+        }
+
+        /// <summary>
+        /// Called when a selection is made to progress away from the song select screen.
+        ///
+        /// This is the default action which should be provided to <see cref="SelectAndRun"/>.
+        /// </summary>
+        protected abstract void OnStart();
+
+        public virtual IReadOnlyList<ScreenFooterButton> CreateFooterButtons() => new ScreenFooterButton[]
+        {
+            new FooterButtonMods(modSelectOverlay)
+            {
+                Hotkey = GlobalAction.ToggleModSelection,
+                Mods = Mods,
+                Ruleset = Ruleset,
+                RequestDeselectAllMods = () =>
+                {
+                    if (modSelectOverlay.State.Value == Visibility.Visible)
+                        modSelectOverlay.DeselectAll();
+                    else
+                        Mods.Value = Array.Empty<Mod>();
+                }
+            },
+            new FooterButtonRandom
+            {
+                NextRandom = () =>
+                {
+                    if (!carousel.NextRandom())
+                        errorSample?.Play();
+                },
+                PreviousRandom = () =>
+                {
+                    if (!carousel.PreviousRandom())
+                        errorSample?.Play();
+                }
+            },
+            new FooterButtonOptions
+            {
+                Hotkey = GlobalAction.ToggleBeatmapOptions,
+            }
+        };
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            // torii: cambiar de skin con el stable activo reconstruye el chrome legacy (sino las texturas
+            // viejas quedan cacheadas). el delegate apunta a este screen (no a un local) asi no lo barre el GC.
+            skinSource.SourceChanged += onSkinChangedWhileLegacy;
+
+            modSelectOverlayRegistration = overlayManager?.RegisterBlockingOverlay(modSelectOverlay);
+
+            inputManager = GetContainingInputManager()!;
+
+            FilterControl.CriteriaChanged += criteriaChanged;
+
+            modSelectOverlay.State.BindValueChanged(v =>
+            {
+                if (!this.IsCurrentScreen())
+                    return;
+
+                if (ShowOsuLogo)
+                    logo?.FadeTo(v.NewValue == Visibility.Visible ? 0f : 1f, 200, Easing.OutQuint);
+            });
+        }
+
+        protected override void Update()
+        {
+            base.Update();
+
+            detailsArea.Height = wedgesContainer.ChildSize.Y - titleWedge.LayoutSize.Y - 4;
+
+            float widescreenBonusWidth = Math.Max(0, DrawWidth / DrawHeight - 2f);
+
+            mainGridContainer.ColumnDimensions = new[]
+            {
+                new Dimension(GridSizeMode.Relative, 0.5f, maxSize: 700 + widescreenBonusWidth * 100),
+                new Dimension(),
+                new Dimension(GridSizeMode.Relative, 0.5f, minSize: 500, maxSize: 700 + widescreenBonusWidth * 300),
+            };
+
+            if (this.IsCurrentScreen())
+                updateDebounce();
+        }
+
+        #region Selection debounce
+
+        private BeatmapInfo? debounceQueuedSelection;
+        private double debounceElapsedTime;
+
+        private void debounceQueueSelection(BeatmapInfo beatmap)
+        {
+            debounceQueuedSelection = beatmap;
+            debounceElapsedTime = 0;
+        }
+
+        private void updateDebounce()
+        {
+            if (debounceQueuedSelection == null) return;
+
+            double elapsed = Clock.ElapsedFrameTime;
+
+            // When a key is being held, assume the user is traversing the carousel using key repeat.
+            // We want to change panels less often in this state (basically making debounce longer than initial key repeat, at least).
+            double debounceInterval = inputManager.CurrentState.Keyboard.Keys.HasAnyButtonPressed ? SELECTION_DEBOUNCE * 2 : SELECTION_DEBOUNCE;
+
+            // avoid debounce running early if there's a single long frame.
+            if (!DebugUtils.IsNUnitRunning && Clock.FramesPerSecond > 0)
+                elapsed = Math.Min(1000 / Clock.FramesPerSecond, elapsed);
+
+            debounceElapsedTime += elapsed;
+
+            if (debounceElapsedTime >= debounceInterval)
+                performDebounceSelection();
+        }
+
+        private void performDebounceSelection()
+        {
+            if (debounceQueuedSelection == null) return;
+
+            try
+            {
+                if (Beatmap.Value.BeatmapInfo.Equals(debounceQueuedSelection))
+                    return;
+
+                var workingBeatmap = beatmaps.GetWorkingBeatmap(debounceQueuedSelection);
+                if (!checkBeatmapValidForSelection(workingBeatmap.BeatmapInfo))
+                    return;
+
+                Beatmap.Value = workingBeatmap;
+            }
+            finally
+            {
+                cancelDebounceSelection();
+            }
+        }
+
+        private void cancelDebounceSelection()
+        {
+            debounceQueuedSelection = null;
+            debounceElapsedTime = 0;
+        }
+
+        #endregion
+
+        #region Audio
+
+        [Resolved]
+        private MusicController music { get; set; } = null!;
+
+        private readonly WeakReference<ITrack?> lastTrack = new WeakReference<ITrack?>(null);
+
+        /// <summary>
+        /// Ensures some music is playing for the current track.
+        /// Will resume playback from a manual user pause if the track has changed.
+        /// </summary>
+        private void ensurePlayingSelected()
+        {
+            if (!ControlGlobalMusic)
+                return;
+
+            ITrack track = music.CurrentTrack;
+
+            bool isNewTrack = !lastTrack.TryGetTarget(out var last) || last != track;
+
+            if (!track.IsRunning && (music.UserPauseRequested != true || isNewTrack))
+            {
+                // Only restart playback if a new track.
+                // This is important so that when exiting gameplay, the track is not restarted back to the preview point.
+                music.Play(isNewTrack);
+            }
+
+            lastTrack.SetTarget(track);
+        }
+
+        private bool isHandlingLooping;
+
+        private void beginLooping()
+        {
+            Debug.Assert(!isHandlingLooping);
+
+            isHandlingLooping = true;
+
+            ensureTrackLooping(Beatmap.Value, TrackChangeDirection.None);
+
+            music.TrackChanged += ensureTrackLooping;
+        }
+
+        private void endLooping()
+        {
+            // may be called multiple times during screen exit process.
+            if (!isHandlingLooping)
+                return;
+
+            music.CurrentTrack.Looping = isHandlingLooping = false;
+
+            music.TrackChanged -= ensureTrackLooping;
+        }
+
+        private void ensureTrackLooping(IWorkingBeatmap beatmap, TrackChangeDirection changeDirection)
+            => beatmap.PrepareTrackForPreview(true);
+
+        #endregion
+
+        #region Selection handling
+
+        /// <summary>
+        /// Finalises selection on the given <see cref="BeatmapInfo"/> and runs the provided action if possible.
+        /// </summary>
+        /// <param name="beatmap">The beatmap which should be selected. If not provided, the current globally selected beatmap will be used.</param>
+        /// <param name="startAction">The action to perform if conditions are met to be able to proceed. May not be invoked if in an invalid state.</param>
+        protected void SelectAndRun(BeatmapInfo beatmap, Action startAction)
+        {
+            if (!this.IsCurrentScreen())
+                return;
+
+            if (!checkBeatmapValidForSelection(beatmap))
+                return;
+
+            // To ensure sanity, cancel any pending selection as we are about to force a selection.
+            // Carousel selection will update to the forced selection via a call of `ensureGlobalBeatmapValid` below, or when song select becomes current again.
+            cancelDebounceSelection();
+
+            // Forced refetch is important here to guarantee correct invalidation across all difficulties (editor specific).
+            Beatmap.Value = beatmaps.GetWorkingBeatmap(beatmap, true);
+
+            if (Beatmap.IsDefault)
+                return;
+
+            startAction();
+        }
+
+        /// <summary>
+        /// Prepares the proposed beatmap for global selection based on a carousel user-performed action.
+        /// </summary>
+        /// <remarks>
+        /// Calling this method will:
+        /// - Immediately update the selection the carousel.
+        /// - After <see cref="SELECTION_DEBOUNCE"/>, update the global beatmap. This in turn causes song select visuals (title, details, leaderboard) to update.
+        ///   This debounce is intended to avoid high overheads from churning lookups while a user is changing selection via rapid keyboard operations.
+        /// </remarks>
+        /// <param name="groupedBeatmap">The beatmap to be selected.</param>
+        private void queueBeatmapSelection(GroupedBeatmap groupedBeatmap)
+        {
+            if (!this.IsCurrentScreen())
+                return;
+
+            carousel.CurrentGroupedBeatmap = groupedBeatmap;
+
+            // Debounce consideration is to avoid beatmap churn on key repeat selection.
+            debounceQueueSelection(groupedBeatmap.Beatmap);
+        }
+
+        private bool ensureGlobalBeatmapValid()
+        {
+            if (!this.IsCurrentScreen())
+                return false;
+
+            performDebounceSelection();
+
+            // While filtering, let's not ever attempt to change selection.
+            // This will be resolved after the filter completes, see `newItemsPresented`.
+            if (IsFiltering)
+                return false;
+
+            // Refetch to be confident that the current selection is still valid. It may have been deleted or hidden.
+            var currentBeatmap = beatmaps.GetWorkingBeatmap(Beatmap.Value.BeatmapInfo, true);
+            bool validSelection = checkBeatmapValidForSelection(currentBeatmap.BeatmapInfo);
+
+            if (validSelection)
+            {
+                carousel.CurrentBeatmap = currentBeatmap.BeatmapInfo;
+                return true;
+            }
+
+            // If there was no beatmap selected, pick a random one.
+            if (Beatmap.IsDefault)
+            {
+                validSelection = carousel.NextRandom();
+                performDebounceSelection();
+                return validSelection;
+            }
+
+            // If a previous non-default selection became non-valid, it was likely hidden or deleted.
+            if (!validSelection)
+            {
+                // In the case a difficulty was hidden or removed, prefer selecting another difficulty from the same set.
+                var activeSet = currentBeatmap.BeatmapSetInfo;
+
+                var validBeatmaps = activeSet.Beatmaps.Where(checkBeatmapValidForSelection).ToArray();
+
+                if (validBeatmaps.Any())
+                {
+                    var beatmap = difficultyRecommender?.GetRecommendedBeatmap(validBeatmaps) ?? validBeatmaps.First();
+                    carousel.CurrentBeatmap = beatmap;
+                    debounceQueueSelection(beatmap);
+                    return true;
+                }
+            }
+
+            // If all else fails, use the default beatmap.
+            Beatmap.SetDefault();
+            performDebounceSelection();
+
+            return validSelection;
+        }
+
+        private bool checkBeatmapValidForSelection(BeatmapInfo beatmap)
+        {
+            if (!beatmap.AllowGameplayWithRuleset(Ruleset.Value, showConvertedBeatmaps.Value))
+                return false;
+
+            if (beatmap.Hidden)
+                return false;
+
+            if (beatmap.BeatmapSet == null)
+                return false;
+
+            if (beatmap.BeatmapSet.Protected || beatmap.BeatmapSet.DeletePending)
+                return false;
+
+            return true;
+        }
+
+        #endregion
+
+        #region Transitions
+
+        public override void OnEntering(ScreenTransitionEvent e)
+        {
+            base.OnEntering(e);
+
+            this.FadeIn();
+            onArrivingAtScreen();
+        }
+
+        public override void OnResuming(ScreenTransitionEvent e)
+        {
+            base.OnResuming(e);
+
+            this.FadeIn(fade_duration, Easing.OutQuint);
+            onArrivingAtScreen();
+
+            ensureGlobalBeatmapValid();
+
+            detailsArea.Refresh();
+
+            if (ControlGlobalMusic)
+            {
+                // restart playback on returning to song select, regardless.
+                // not sure this should be a permanent thing (we may want to leave a user pause paused even on returning)
+                music.ResetTrackAdjustments();
+                music.Play(requestedByUser: true);
+            }
+        }
+
+        public override void OnSuspending(ScreenTransitionEvent e)
+        {
+            carousel.VisuallyFocusSelected = true;
+
+            this.FadeOut(fade_duration, Easing.OutQuint);
+            onLeavingScreen();
+
+            base.OnSuspending(e);
+        }
+
+        public override bool OnExiting(ScreenExitEvent e)
+        {
+            this.FadeOut(fade_duration, Easing.OutQuint);
+            onLeavingScreen();
+
+            return base.OnExiting(e);
+        }
+
+        private void onArrivingAtScreen()
+        {
+            modSelectOverlay.Beatmap.BindTo(Beatmap);
+            modSelectOverlay.Ruleset.BindTo(Ruleset);
+            // required due to https://github.com/ppy/osu-framework/issues/3218
+            modSelectOverlay.SelectedMods.Disabled = false;
+            modSelectOverlay.SelectedMods.BindTo(Mods);
+
+            carousel.VisuallyFocusSelected = false;
+
+            if (ControlGlobalMusic)
+            {
+                // Avoid abruptly starting playback at preview point.
+                // Importantly, this should be done before looping is setup to ensure we get the correct imminent `IsPlaying` state.
+                if (!music.IsPlaying)
+                {
+                    music.DuckMomentarily(0, new DuckParameters
+                    {
+                        DuckDuration = 0,
+                        DuckVolumeTo = 0,
+                        RestoreDuration = 800,
+                        RestoreEasing = Easing.OutQuint
+                    });
+                }
+
+                beginLooping();
+            }
+
+            Beatmap.BindValueChanged(updateVariousState, true);
+
+            // torii: re-aplicar el letterbox legacy al llegar (puede haber quedado limpio al irnos).
+            (game as OsuGame)?.SetLegacyScreenAspectLock(legacyUi.Value ? 1366f / 768f : null);
+
+            maybeShowToolbarHints();
+        }
+
+        /// <summary>
+        /// torii: popups glass de descubrimiento, cada uno una sola vez. (C) en la stable song select
+        /// recomienda el auto-hide de la toolbar; (B) a quien NO la usa, tras varias visitas, le ofrece
+        /// la stable. el caso (A) -uso frecuente de la toolbar- lo dispara OsuGame aparte. damos ~2s de
+        /// delay tras llegar asi el popup aparece con su animacion + sonido y no pisado por la transicion
+        /// de entrada; si nos fuimos antes, no sale (el Scheduler de la screen se cancela al disposear).
+        /// </summary>
+        private void maybeShowToolbarHints()
+        {
+            if (legacyUi.Value)
+            {
+                if (!gameConfig.Get<bool>(OsuSetting.ToriiStableDisclaimerSeen))
+                {
+                    Scheduler.AddDelayed(() =>
+                    {
+                        if (this.IsCurrentScreen())
+                            (game as OsuGame)?.ShowStableSongSelectDisclaimer();
+                    }, 1200);
+                }
+                else
+                {
+                    // (C) en la stable recomendamos el auto-hide para la mejor experiencia.
+                    Scheduler.AddDelayed(() =>
+                    {
+                        if (this.IsCurrentScreen())
+                            (game as OsuGame)?.ShowAutoHideHint(true);
+                    }, 2000);
+                }
+            }
+            else
+            {
+                // (B) contamos visitas a la song select normal; tras unas cuantas, ofrecemos la stable.
+                int views = gameConfig.Get<int>(OsuSetting.ToriiSongSelectViews) + 1;
+                gameConfig.SetValue(OsuSetting.ToriiSongSelectViews, views);
+
+                if (views >= 15)
+                {
+                    Scheduler.AddDelayed(() =>
+                    {
+                        if (this.IsCurrentScreen())
+                            (game as OsuGame)?.ShowStableSongSelectPromo();
+                    }, 2000);
+                }
+            }
+        }
+
+        private void updateVariousState(ValueChangedEvent<WorkingBeatmap> e)
+        {
+            if (!this.IsCurrentScreen())
+                return;
+
+            ensureGlobalBeatmapValid();
+
+            ensurePlayingSelected();
+            updateBackgroundDim();
+            updateWedgeVisibility();
+            fetchOnlineInfo(force: ReferenceEquals(e.OldValue, e.NewValue));
+        }
+
+        private void onLeavingScreen()
+        {
+            // torii: soltar el letterbox legacy asi el resto del juego no queda achicado.
+            (game as OsuGame)?.SetLegacyScreenAspectLock(null);
+
+            restoreBackground();
+
+            Beatmap.ValueChanged -= updateVariousState;
+
+            modSelectOverlay.SelectedMods.UnbindFrom(Mods);
+            modSelectOverlay.Ruleset.UnbindFrom(Ruleset);
+            modSelectOverlay.Beatmap.UnbindFrom(Beatmap);
+            modSelectOverlay.Hide();
+
+            updateWedgeVisibility();
+
+            endLooping();
+        }
+
+        protected override void LogoArriving(OsuLogo logo, bool resuming)
+        {
+            base.LogoArriving(logo, resuming);
+
+            if (!ShowOsuLogo)
+                return;
+
+            if (logo.Alpha > 0.8f && resuming)
+                Footer?.StartTrackingLogo(logo, 400, Easing.OutQuint);
+            else
+            {
+                logo.Hide();
+                logo.ScaleTo(0.2f);
+                Footer?.StartTrackingLogo(logo);
+            }
+
+            logo.FadeIn(240, Easing.OutQuint);
+            logo.ScaleTo(logo_scale, 240, Easing.OutQuint);
+
+            logo.Action = () =>
+            {
+                ensureGlobalBeatmapValid();
+                SelectAndRun(Beatmap.Value.BeatmapInfo, OnStart);
+                return false;
+            };
+        }
+
+        protected override void LogoSuspending(OsuLogo logo)
+        {
+            base.LogoSuspending(logo);
+
+            if (!ShowOsuLogo)
+                return;
+
+            Footer?.StopTrackingLogo();
+        }
+
+        protected override void LogoExiting(OsuLogo logo)
+        {
+            base.LogoExiting(logo);
+
+            if (!ShowOsuLogo)
+                return;
+
+            Footer?.StopTrackingLogo();
+
+            logo.ScaleTo(0.2f, 120, Easing.Out);
+            logo.FadeOut(120, Easing.Out);
+        }
+
+        private void updateWedgeVisibility()
+        {
+            // Ensure we don't show an invalid selection before the carousel has finished initially filtering.
+            // This avoids a flicker of a placeholder or invalid beatmap before a proper selection.
+            //
+            // After the carousel finishes filtering, it will attempt a selection then call this method again.
+            if (!CarouselItemsPresented && !checkBeatmapValidForSelection(Beatmap.Value.BeatmapInfo))
+                return;
+
+            if (carousel.VisuallyFocusSelected)
+            {
+                titleWedge.Hide();
+                detailsArea.Hide();
+                FilterControl.Hide();
+            }
+            else
+            {
+                titleWedge.Show();
+                detailsArea.Show();
+
+                // In legacy UI mode the filter bar + wedges stay hidden (see updateLegacyChrome).
+                if (!legacyUi.Value)
+                    FilterControl.Show();
+            }
+        }
+
+        private void updateBackgroundDim() => ApplyToBackground(backgroundModeBeatmap =>
+        {
+            backgroundModeBeatmap.Beatmap = Beatmap.Value;
+            backgroundModeBeatmap.IgnoreUserSettings.Value = true;
+
+            backgroundModeBeatmap.DimWhenUserSettingsIgnored.Value = 0.1f;
+
+            // Required to undo results screen dimming the background.
+            // Probably needs more thought because this needs to be in every `ApplyToBackground` currently to restore sane defaults.
+            backgroundModeBeatmap.FadeColour(Color4.White, 250);
+
+            bool backgroundRevealActive = revealBackgroundDelegate?.State == ScheduledDelegate.RunState.Running || revealBackgroundDelegate?.State == ScheduledDelegate.RunState.Complete;
+            backgroundModeBeatmap.BlurAmount.Value = configBackgroundBlur.Value && !backgroundRevealActive ? 20f : 0f;
+        });
+
+        #endregion
+
+        #region Filtering
+
+        /// <summary>
+        /// Whether the carousel has finished initial presentation of beatmap panels.
+        /// </summary>
+        public bool CarouselItemsPresented { get; private set; }
+
+        /// <summary>
+        /// Whether the carousel is or will be undergoing a filter operation.
+        /// </summary>
+        public bool IsFiltering => carousel.IsFiltering || filterDebounce?.State == ScheduledDelegate.RunState.Waiting;
+
+        private const double filter_delay = 250;
+        public const double REVEAL_BACKGROUND_DELAY = 200;
+
+        private ScheduledDelegate? filterDebounce;
+
+        private void criteriaChanged(FilterCriteria criteria)
+        {
+            filterDebounce?.Cancel();
+
+            // The first filter needs to be applied immediately as this triggers the initial carousel load.
+            bool isFirstFilter = filterDebounce == null;
+
+            // Criteria change may have included a ruleset change which made the current selection invalid.
+            bool isSelectionValid = checkBeatmapValidForSelection(Beatmap.Value.BeatmapInfo);
+
+            filterDebounce = Scheduler.AddDelayed(() => carousel.Filter(criteria, !isSelectionValid), isFirstFilter || !isSelectionValid ? 0 : filter_delay);
+        }
+
+        private void newItemsPresented(IEnumerable<CarouselItem> carouselItems)
+        {
+            if (carousel.Criteria == null)
+                return;
+
+            CarouselItemsPresented = true;
+
+            updateNoResultsPlaceholder();
+
+            FilterControl.StatusText = SongSelectStrings.MatchesCount(carousel.MatchedBeatmapsCount);
+
+            // If there's already a selection update in progress, let's not interrupt it.
+            // Interrupting could cause the debounce interval to be reduced.
+            //
+            // `ensureGlobalBeatmapValid` is run post-selection which will resolve any pending incompatibilities (see `Beatmap` bindable callback).
+            if (debounceQueuedSelection == null)
+                ensureGlobalBeatmapValid();
+
+            updateWedgeVisibility();
+        }
+
+        private void updateNoResultsPlaceholder()
+        {
+            int count = carousel.MatchedBeatmapsCount;
+
+            if (count == 0)
+            {
+                if (noResultsPlaceholder.State.Value == Visibility.Hidden)
+                {
+                    // Duck audio temporarily when the no results placeholder becomes visible.
+                    //
+                    // Temporary ducking makes it easier to avoid scenarios where the ducking interacts badly
+                    // with other global UI components (like overlays).
+                    music.DuckMomentarily(400, new DuckParameters
+                    {
+                        DuckVolumeTo = 1,
+                        DuckCutoffTo = 500,
+                        DuckDuration = 250,
+                        RestoreDuration = 2000,
+                    });
+                }
+
+                noResultsPlaceholder.Show();
+                noResultsPlaceholder.Filter = carousel.Criteria!;
+
+                rightGradientBackground.ResizeWidthTo(3, 1000, Easing.OutPow10);
+            }
+            else
+            {
+                noResultsPlaceholder.Hide();
+
+                rightGradientBackground.ResizeWidthTo(1, 400, Easing.OutPow10);
+            }
+        }
+
+        #endregion
+
+        #region Background reveal
+
+        private ScheduledDelegate? revealBackgroundDelegate;
+
+        public CursorContainer? Cursor => null;
+        bool IProvideCursor.ProvidingUserCursor => revealBackgroundDelegate?.Completed == true;
+
+        protected override bool OnHover(HoverEvent e) => true;
+
+        protected override bool OnMouseDown(MouseDownEvent e)
+        {
+            var containingInputManager = GetContainingInputManager();
+
+            // I don't know why this works, but it does.
+            // If the carousel panels are hovered, hovered no longer contains the screen.
+            // Maybe there's a better way of doing this, but I couldn't immediately find a good setup.
+            bool mouseDownPriority = containingInputManager!.HoveredDrawables.Contains(this);
+
+            // Touch input synthesises right clicks, which allow absolute scroll of the carousel.
+            // For simplicity, disable this functionality on mobile.
+            bool isTouchInput = e.CurrentState.Mouse.LastSource is ISourcedFromTouch;
+
+            if (!carousel.AbsoluteScrolling && !isTouchInput && mouseDownPriority && revealBackgroundDelegate == null)
+            {
+                revealBackgroundDelegate = Scheduler.AddDelayed(() =>
+                {
+                    if (containingInputManager.DraggedDrawable != null)
+                    {
+                        revealBackgroundDelegate = null;
+                        return;
+                    }
+
+                    mainContent.ResizeWidthTo(1.2f, 600, Easing.OutQuint);
+                    mainContent.ScaleTo(1.2f, 600, Easing.OutQuint);
+                    mainContent.FadeOut(200, Easing.OutQuint);
+
+                    skinnableContent.ResizeWidthTo(1.2f, 600, Easing.OutQuint);
+                    skinnableContent.ScaleTo(1.2f, 600, Easing.OutQuint);
+                    skinnableContent.FadeOut(200, Easing.OutQuint);
+
+                    updateBackgroundDim();
+
+                    Footer?.Hide();
+                }, REVEAL_BACKGROUND_DELAY);
+            }
+
+            return base.OnMouseDown(e);
+        }
+
+        protected override void OnMouseUp(MouseUpEvent e)
+        {
+            restoreBackground();
+            base.OnMouseUp(e);
+        }
+
+        private void restoreBackground()
+        {
+            if (revealBackgroundDelegate == null)
+                return;
+
+            if (revealBackgroundDelegate.State == ScheduledDelegate.RunState.Complete)
+            {
+                mainContent.ResizeWidthTo(1f, 500, Easing.OutQuint);
+                mainContent.ScaleTo(1, 500, Easing.OutQuint);
+                mainContent.FadeIn(500, Easing.OutQuint);
+
+                skinnableContent.ResizeWidthTo(1f, 500, Easing.OutQuint);
+                skinnableContent.ScaleTo(1, 500, Easing.OutQuint);
+                skinnableContent.FadeIn(500, Easing.OutQuint);
+
+                Footer?.Show();
+            }
+
+            revealBackgroundDelegate.Cancel();
+            revealBackgroundDelegate = null;
+
+            updateBackgroundDim();
+        }
+
+        #endregion
+
+        #region Input
+
+        public virtual bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
+        {
+            if (!this.IsCurrentScreen()) return false;
+
+            if (game == null)
+                return false;
+
+            var flattenedMods = ModUtils.FlattenMods(game.AvailableMods.Value.SelectMany(kv => kv.Value));
+
+            // Torii: in legacy mode the default lazer footer is hidden (alpha 0), so its buttons leave
+            // the global key-binding queue and F1/F2/F3 stop working. Drive the same actions from the
+            // (always-present) screen. Gated on the chrome being hidden so the normal footer path isn't
+            // double-handled when the default footer is visible.
+            if (!e.Repeat && screenFooter != null && !screenFooter.DefaultChromeVisible)
+            {
+                switch (e.Action)
+                {
+                    case GlobalAction.ToggleModSelection:
+                        screenFooter.TriggerFooterButton(0);
+                        return true;
+
+                    case GlobalAction.SelectNextRandom:
+                        screenFooter.TriggerFooterButton(1);
+                        return true;
+
+                    case GlobalAction.SelectPreviousRandom:
+                        // index 1 only does NextRandom; rewind has to call the carousel directly.
+                        if (!carousel.PreviousRandom())
+                            errorSample?.Play();
+                        return true;
+
+                    case GlobalAction.ToggleBeatmapOptions:
+                        screenFooter.TriggerFooterButton(2);
+                        return true;
+                }
+            }
+
+            switch (e.Action)
+            {
+                case GlobalAction.Select:
+                    // in most circumstances this is handled already by the carousel itself, but there are cases where it will not be.
+                    // one of which is filtering out all visible beatmaps and attempting to start gameplay.
+                    // in that case, users still expect a `Select` press to advance to gameplay anyway, using the ambient selected beatmap if there is one,
+                    // which matches the behaviour resulting from clicking the osu! cookie in that scenario.
+                    ensureGlobalBeatmapValid();
+                    SelectAndRun(Beatmap.Value.BeatmapInfo, OnStart);
+                    return true;
+
+                case GlobalAction.IncreaseModSpeed:
+                    return modSpeedHotkeyHandler.ChangeSpeed(0.05, flattenedMods);
+
+                case GlobalAction.DecreaseModSpeed:
+                    return modSpeedHotkeyHandler.ChangeSpeed(-0.05, flattenedMods);
+            }
+
+            return false;
+        }
+
+        public void OnReleased(KeyBindingReleaseEvent<GlobalAction> e)
+        {
+        }
+
+        protected override bool OnKeyDown(KeyDownEvent e)
+        {
+            if (e.Repeat) return false;
+
+            switch (e.Key)
+            {
+                case Key.Delete:
+                    if (e.ShiftPressed)
+                    {
+                        if (!Beatmap.IsDefault)
+                            Delete(Beatmap.Value.BeatmapSetInfo);
+                        return true;
+                    }
+
+                    break;
+            }
+
+            return base.OnKeyDown(e);
+        }
+
+        #endregion
+
+        #region Online lookups
+
+        public enum BeatmapSetLookupStatus
+        {
+            InProgress,
+            Completed,
+        }
+
+        public class BeatmapSetLookupResult
+        {
+            public BeatmapSetLookupStatus Status { get; }
+            public APIBeatmapSet? Result { get; }
+
+            private BeatmapSetLookupResult(BeatmapSetLookupStatus status, APIBeatmapSet? result)
+            {
+                Status = status;
+                Result = result;
+            }
+
+            public static BeatmapSetLookupResult InProgress() => new BeatmapSetLookupResult(BeatmapSetLookupStatus.InProgress, null);
+            public static BeatmapSetLookupResult Completed(APIBeatmapSet? beatmapSet) => new BeatmapSetLookupResult(BeatmapSetLookupStatus.Completed, beatmapSet);
+        }
+
+        /// <summary>
+        /// Result of the latest online beatmap set lookup.
+        /// Note that this being <see langword="null"/> or <see cref="BeatmapSetLookupResult.InProgress"/> is different from
+        /// being a <see cref="BeatmapSetLookupResult.Completed"/> with a <see cref="BeatmapSetLookupResult.Result"/> of null.
+        /// The former indicates a lookup never occurring or being in progress, while the latter indicates a completed lookup with no result.
+        /// </summary>
+        [Cached(typeof(IBindable<BeatmapSetLookupResult?>))]
+        private readonly Bindable<BeatmapSetLookupResult?> lastLookupResult = new Bindable<BeatmapSetLookupResult?>();
+
+        private CancellationTokenSource? onlineLookupCancellation;
+        private Task<APIBeatmapSet?>? currentOnlineLookup;
+
+        // Torii: per-session cache of online-set lookups, keyed by set OnlineID.
+        // Upstream re-fires GetBeatmapSetRequest on every selection (its only
+        // guard is "same as the immediately previous lookup"), so browsing
+        // A -> B -> A re-fetches A in full and re-runs the realm-write callback
+        // each time. Caching the result for the session means a given set is
+        // fetched (and its realm row touched) at most once, so revisits are free.
+        private readonly Dictionary<int, APIBeatmapSet?> onlineLookupCache = new Dictionary<int, APIBeatmapSet?>();
+
+        private void fetchOnlineInfo(bool force = false)
+        {
+            var beatmapSetInfo = Beatmap.Value.BeatmapSetInfo;
+
+            if (lastLookupResult.Value?.Result?.OnlineID == beatmapSetInfo.OnlineID && !force)
+                return;
+
+            onlineLookupCancellation?.Cancel();
+            onlineLookupCancellation = null;
+            currentOnlineLookup = null;
+
+            if (beatmapSetInfo.OnlineID < 0)
+            {
+                lastLookupResult.Value = BeatmapSetLookupResult.Completed(null);
+                return;
+            }
+
+            // Already looked up this set this session: serve the cached result
+            // without another request or realm write.
+            if (!force && onlineLookupCache.TryGetValue(beatmapSetInfo.OnlineID, out var cached))
+            {
+                lastLookupResult.Value = BeatmapSetLookupResult.Completed(cached);
+                return;
+            }
+
+            lastLookupResult.Value = BeatmapSetLookupResult.InProgress();
+            onlineLookupCancellation = new CancellationTokenSource();
+            int lookupOnlineID = beatmapSetInfo.OnlineID;
+            currentOnlineLookup = onlineLookupSource.GetBeatmapSetAsync(lookupOnlineID, onlineLookupCancellation.Token);
+            currentOnlineLookup.ContinueWith(t =>
+            {
+                var exception = t.Exception;
+                Schedule(() =>
+                {
+                    // una respuesta del mapa anterior no puede pisar la seleccion actual.
+                    if (IsDisposed || !ReferenceEquals(currentOnlineLookup, t))
+                        return;
+
+                    if (t.IsCompletedSuccessfully)
+                    {
+                        var result = t.GetResultSafely();
+                        onlineLookupCache[lookupOnlineID] = result;
+                        lastLookupResult.Value = BeatmapSetLookupResult.Completed(result);
+                    }
+                    else if (exception != null)
+                    {
+                        Logger.Log($"Error when fetching online beatmap set: {exception}", LoggingTarget.Network);
+                        lastLookupResult.Value = BeatmapSetLookupResult.Completed(null);
+                    }
+                });
+            });
+        }
+
+        #endregion
+
+        #region Implementation of ISongSelect
+
+        void ISongSelect.AddToSearch(string query) => FilterControl.AddToSearch(query);
+
+        bool ISongSelect.CanPresentScore => true;
+
+        void ISongSelect.PresentScore(ScoreInfo score, ScorePresentType presentType)
+        {
+            switch (presentType)
+            {
+                case ScorePresentType.Results:
+                    Debug.Assert(Beatmap.Value.BeatmapInfo.Equals(score.BeatmapInfo));
+                    Debug.Assert(Ruleset.Value.Equals(score.Ruleset));
+
+                    this.Push(new SoloResultsScreen(score));
+                    break;
+
+                case ScorePresentType.Gameplay:
+                    (game as OsuGame)?.PresentScore(score, presentType);
+                    break;
+            }
+        }
+
+        #endregion
+
+        #region IHandlePresentBeatmap
+
+        void IHandlePresentBeatmap.PresentBeatmap(WorkingBeatmap workingBeatmap, RulesetInfo ruleset)
+        {
+            unscopeBeatmapSet(restorePreviousSelection: false);
+            cancelDebounceSelection();
+
+            var beatmapInfo = workingBeatmap.BeatmapInfo;
+
+            // Don't change the local ruleset if the user is on another ruleset and is showing converted beatmaps.
+            // Eventually we probably want to check whether conversion is actually possible for the current ruleset.
+            bool requiresRulesetSwitch = !beatmapInfo.Ruleset.Equals(Ruleset.Value)
+                                         && (beatmapInfo.Ruleset.OnlineID > 0 || !showConvertedBeatmaps.Value);
+
+            if (requiresRulesetSwitch)
+            {
+                Ruleset.Value = beatmapInfo.Ruleset;
+                Beatmap.Value = workingBeatmap;
+
+                Logger.Log($"Completing {nameof(IHandlePresentBeatmap.PresentBeatmap)} with beatmap {workingBeatmap} ruleset {beatmapInfo.Ruleset}");
+            }
+            else
+            {
+                Beatmap.Value = workingBeatmap;
+
+                Logger.Log($"Completing {nameof(IHandlePresentBeatmap.PresentBeatmap)} with beatmap {workingBeatmap} (maintaining ruleset)");
+            }
+        }
+
+        #endregion
+
+        #region Beatmap management
+
+        [Resolved]
+        private ManageCollectionsDialog? manageCollectionsDialog { get; set; }
+
+        [Resolved]
+        private RealmAccess realm { get; set; } = null!;
+
+        public virtual IEnumerable<OsuMenuItem> GetForwardActions(BeatmapInfo beatmap)
+        {
+            yield return new OsuMenuItem(GlobalActionKeyBindingStrings.Select, MenuItemType.Highlighted, () => SelectAndRun(beatmap, OnStart))
+            {
+                Icon = FontAwesome.Solid.Check
+            };
+
+            yield return new OsuMenuItemSpacer();
+
+            if (beatmap.OnlineID > 0)
+            {
+                yield return new OsuMenuItem(CommonStrings.Details, MenuItemType.Standard, () => beatmapOverlay?.FetchAndShowBeatmap(beatmap.OnlineID));
+
+                if (beatmap.GetOnlineURL(api, Ruleset.Value) is string url)
+                    yield return new OsuMenuItem(CommonStrings.CopyLink, MenuItemType.Standard, () => (game as OsuGame)?.CopyToClipboard(url));
+
+                // torii: link al osu! oficial tambien desde la dificultad individual
+                // (ya estaba en la tarjeta del set, faltaba aca).
+                if (beatmap.GetOfficialOnlineURL(Ruleset.Value) is string osuUrl)
+                    yield return new OsuMenuItem("Copy osu! link", MenuItemType.Standard, () => (game as OsuGame)?.CopyToClipboard(osuUrl));
+            }
+
+            yield return new OsuMenuItemSpacer();
+
+            foreach (var i in CreateCollectionMenuActions(beatmap))
+                yield return i;
+        }
+
+        protected IEnumerable<OsuMenuItem> CreateCollectionMenuActions(BeatmapInfo beatmap)
+        {
+            var collectionItems = realm.Realm.All<BeatmapCollection>()
+                                       .OrderBy(c => c.Name)
+                                       .AsEnumerable()
+                                       .Select(c => new CollectionToggleMenuItem(c.ToLive(realm), beatmap)).Cast<OsuMenuItem>().ToList();
+
+            collectionItems.Add(new OsuMenuItem(CommonStrings.Manage, MenuItemType.Standard, () => manageCollectionsDialog?.Show()));
+
+            yield return new OsuMenuItem(CommonStrings.Collections) { Items = collectionItems };
+        }
+
+        public void ManageCollections() => collectionsDialog?.Show();
+
+        public void Delete(BeatmapSetInfo beatmapSet) => dialogOverlay?.Push(new BeatmapDeleteDialog(beatmapSet));
+
+        public void RestoreAllHidden(BeatmapSetInfo beatmapSet) => beatmaps.Restore(beatmapSet);
+
+        private GroupedBeatmap? beforeScopedSelection;
+
+        private readonly Bindable<BeatmapSetInfo?> scopedBeatmapSet = new Bindable<BeatmapSetInfo?>();
+        public IBindable<BeatmapSetInfo?> ScopedBeatmapSet => scopedBeatmapSet;
+
+        public void ScopeToBeatmapSet(BeatmapSetInfo beatmapSet)
+        {
+            beforeScopedSelection = carousel.CurrentGroupedBeatmap;
+
+            scopedBeatmapSet.Value = beatmapSet;
+        }
+
+        public void UnscopeBeatmapSet() => unscopeBeatmapSet(restorePreviousSelection: true);
+
+        private void unscopeBeatmapSet(bool restorePreviousSelection)
+        {
+            if (scopedBeatmapSet.Value == null)
+                return;
+
+            if (beforeScopedSelection != null && restorePreviousSelection)
+                queueBeatmapSelection(beforeScopedSelection);
+
+            scopedBeatmapSet.Value = null;
+            beforeScopedSelection = null;
+        }
+
+        #endregion
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (skinSource is not null)
+                skinSource.SourceChanged -= onSkinChangedWhileLegacy;
+
+            customUiHueBinding?.Dispose();
+            base.Dispose(isDisposing);
+            modSelectOverlayRegistration?.Dispose();
+        }
+    }
+}

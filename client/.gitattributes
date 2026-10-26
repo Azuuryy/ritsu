@@ -1,0 +1,31 @@
+# Autodetect text files and ensure that we normalise their
+# line endings to lf internally. When checked out they may
+# use different line endings.
+* text=auto
+
+# Check out with crlf (Windows) line endings
+*.sln text eol=crlf
+*.csproj text eol=crlf
+*.cs text diff=csharp eol=crlf
+*.resx text eol=crlf
+*.vsixmanifest text eol=crlf
+packages.config text eol=crlf
+App.config text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.snippet text eol=crlf
+*.manifest text eol=crlf
+*.licenseheader text eol=crlf
+
+# Check out with lf (UNIX) line endings
+*.sh text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+*.md text eol=lf
+.travis.yml text eol=lf
+# Vendored Satori GC runtime binaries (net10)
+satori-runtime/**/*.zip binary
+# torii: scripts que corren en mac/linux no pueden tener CRLF
+*.command text eol=lf
+*.sh text eol=lf
+osu.Desktop/macos-package/README.txt text eol=lf

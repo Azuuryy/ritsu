@@ -1,0 +1,34 @@
+name: Add Release to Sentry
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+jobs:
+  sentry_release:
+    # torii: publica la release en el Sentry de ppy (sentry.ppy.sh, org ppy, proyecto osu) con un token
+    # que este fork no tiene ni deberia tener, asi que fallaba en cada release. Ni siquiera queremos que
+    # ande: seria mandar nuestra telemetria a la infra de ellos. Se deja el archivo para no conflictuar
+    # al sincronizar con upstream, y se apaga por repo.
+    if: github.repository == 'ppy/osu'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Create Sentry release
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ppy
+          SENTRY_PROJECT: osu
+          SENTRY_URL: https://sentry.ppy.sh/
+        with:
+          environment: production
+          version: osu@${{ github.ref_name }}

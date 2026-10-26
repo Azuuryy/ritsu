@@ -1,0 +1,127 @@
+﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using System;
+using osu.Framework.Allocation;
+using osu.Framework.Extensions.Color4Extensions;
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Effects;
+using osuTK.Graphics;
+using osu.Game.Configuration;
+using osu.Game.Graphics;
+using osu.Game.Graphics.Backdrops;
+using osu.Game.Graphics.Containers;
+using osu.Game.Graphics.Cursor;
+using osu.Game.Overlays.Login;
+using osu.Game.Overlays.Settings;
+
+namespace osu.Game.Overlays
+{
+    public partial class LoginOverlay : OsuFocusedOverlayContainer
+    {
+        private LoginPanel panel = null!;
+
+        private const float transition_time = 400;
+
+        protected override double PopInOutSampleBalance => OsuGameBase.SFX_STEREO_STRENGTH * 0.75f;
+
+        [Cached]
+        private OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Purple);
+        private IDisposable? customUiHueBinding;
+        // torii DARK GLASS: GlassBackdrop en vez de Box plano para el fondo del flyout de login.
+        private GlassBackdrop background = null!;
+
+        public LoginOverlay()
+        {
+            AutoSizeAxes = Axes.Both;
+            Masking = true;
+            EdgeEffect = new EdgeEffectParameters
+            {
+                Colour = Color4.Black,
+                Type = EdgeEffectType.Shadow,
+                Radius = 10,
+                Hollow = true,
+            };
+        }
+
+        public override void Show()
+        {
+            if (!Offline.RitsuOffline.Enabled)
+                base.Show();
+        }
+
+        [BackgroundDependencyLoader]
+        private void load(OsuConfigManager config)
+        {
+            colourProvider.ChangeColourScheme(CustomUiHueHelper.ResolveHue(config, OverlayColourScheme.Purple.GetHue(), CustomUiHueScope.Overlays));
+
+            Children = new Drawable[]
+            {
+                new OsuContextMenuContainer
+                {
+                    Width = 360,
+                    AutoSizeAxes = Axes.Y,
+                    Children = new Drawable[]
+                    {
+                        background = new GlassBackdrop
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            TintColour = colourProvider.Background4.Opacity(ThemeAware.GlassAlpha(0.8f)), // torii dark glass
+                        },
+                        new Container
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            AutoSizeAxes = Axes.Y,
+                            Masking = true,
+                            AutoSizeDuration = transition_time,
+                            AutoSizeEasing = Easing.OutQuint,
+                            Child = panel = new LoginPanel
+                            {
+                                Padding = new MarginPadding { Vertical = SettingsSection.ITEM_SPACING },
+                                RequestHide = Hide,
+                            },
+                        }
+                    }
+                }
+            };
+
+            customUiHueBinding = CustomUiHueHelper.BindHue(config, OverlayColourScheme.Purple.GetHue(), CustomUiHueScope.Overlays, hue =>
+            {
+                colourProvider.ChangeColourScheme(hue);
+
+                if (background != null)
+                    background.TintColour = colourProvider.Background4.Opacity(ThemeAware.GlassAlpha(0.8f)); // torii dark glass
+            });
+        }
+
+        protected override void PopIn()
+        {
+            panel.Bounding = true;
+            this.FadeIn(transition_time, Easing.OutQuint);
+            FadeEdgeEffectTo(WaveContainer.SHADOW_OPACITY, WaveContainer.APPEAR_DURATION, Easing.Out);
+
+            ScheduleAfterChildren(() => GetContainingFocusManager()!.ChangeFocus(panel));
+        }
+
+        protected override void PopOut()
+        {
+            base.PopOut();
+
+            panel.Bounding = false;
+            this.FadeOut(transition_time);
+            FadeEdgeEffectTo(0, WaveContainer.DISAPPEAR_DURATION, Easing.In);
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (isDisposing)
+            {
+                customUiHueBinding?.Dispose();
+                customUiHueBinding = null;
+            }
+
+            base.Dispose(isDisposing);
+        }
+    }
+}
