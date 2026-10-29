@@ -32,4 +32,19 @@ Decide which parts of Torii's visual identity remain and which become Ritsu. Bef
 
 Evaluate updates, sharing creations, osu! OAuth, and a community server independently. Also study map search without player sign-in and decide separately whether downloading maps should be offered. Compare the official API and its OAuth requirements with public mirrors, their features, and availability before integration. OAuth can link an identity and authorized data; it does not validate scores for official leaderboards. Local play must remain usable without these services.
 
+### GitHub release updates
+
+Automatic update checks and downloads are disabled for the current offline milestone. Plan them as an optional service, with a manual release-page download always available and offline play unaffected.
+
+Use Torii's desktop updater as an implementation reference: `client/osu.Desktop/Updater/VelopackUpdateManager.cs` uses Velopack for desktop installs, while `ToriiUpdateSource.cs` filters GitHub Releases by release stream and paginates releases. Torii also has a separate macOS install path and a mobile update notifier. Ritsu should first define its supported platforms and release package formats, then choose the matching update mechanism rather than assuming the desktop path applies everywhere.
+
+Before implementation, specify the release contract and update flow:
+
+- CI publishes a versioned, platform-specific install/update artifact to a GitHub Release, with stable and prerelease channels identified consistently by tags or metadata.
+- The client checks only its selected channel, compares versions, and never switches channels or downgrades implicitly. Channel changes require an explicit user choice.
+- Update checks and downloads are opt-in/configurable, occur outside gameplay, and fail without interrupting local play when GitHub is unavailable. The user can review release notes and install immediately or on restart.
+- Validate the artifact's platform, version, and integrity before installation. Define signing or trusted checksums and recovery behavior for incomplete downloads or failed installs.
+- Update application files only. Preserve Ritsu data and settings, and never migrate, overwrite, or delete a linked osu!lazer folder as part of updating the client.
+- Verify upgrades, channel changes, interrupted downloads, rollback/recovery, and offline startup on every supported platform before enabling automatic updates.
+
 Size any future hosting from observed concurrent connections, calculations, storage, and traffic. No purchase or deployment is included in the current milestone.

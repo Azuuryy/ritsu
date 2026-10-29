@@ -4,15 +4,26 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
+Local replay video rendering is planned for 0.2.5.
+
+## [0.2.4] - 2026-10-29
+
 ### Added
 
 - Restored the beatmap catalogue button in the top bar, with an offline placeholder. Online search, downloads, and sign-in remain unavailable.
+- Local profiles show an estimated global rank for osu!standard, interpolated from the bundled September 2026 PP sample.
+- Local profile owners can choose a profile picture from an image file on their device.
+
+### Changed
+
+- The local rank is displayed as a standalone profile statistic, without a redundant rank history graph.
 
 ### Fixed
 
+- New local installations use `Guest` for the initial profile name.
 - New local scores use the active profile's name. Scores already associated with a Ritsu profile display its current name without changing shared score data.
 
-These changes still require manual verification by the user.
+The profile changes in this release still require manual in-game verification. Compatibility of scores and replays with other clients has not been verified.
 
 ## [0.2.3] - 2026-10-29
 

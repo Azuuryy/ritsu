@@ -129,7 +129,8 @@ namespace osu.Game.Overlays
 
             Header.User.Value = new UserProfileData(new APIUser { Id = APIUser.SYSTEM_USER_ID, Username = name }, mode);
             Header.RefreshProfiles();
-            Header.SetHistories(Array.Empty<RitsuPpPoint>(), Array.Empty<RitsuRankPoint>());
+            Header.SetHistory(Array.Empty<RitsuPpPoint>());
+            Header.SetLocalRank(null);
             scores.User.Value = Header.User.Value;
             scores.SetScores(Array.Empty<ScoreInfo>(), Array.Empty<ScoreInfo>());
             scores.SetError(null);
@@ -138,14 +139,16 @@ namespace osu.Game.Overlays
             Task.Run(() =>
             {
                 var statistics = profiles.GetStatistics(id, mode.ShortName);
-                var ranks = profiles.GetLocalRankHistory(id, mode.ShortName);
                 var ppByProfile = new Dictionary<Guid, double> { [id] = statistics.PP };
                 foreach (var profile in allProfiles.Where(p => p.Id != id))
                 {
                     try { ppByProfile[profile.Id] = profiles.GetStatistics(profile.Id, mode.ShortName).PP; }
                     catch (Exception ex) { Logger.Error(ex, "Could not load a local profile's PP for the profile selector."); }
                 }
-                return (Statistics: statistics, Ranks: ranks, PPByProfile: ppByProfile, Display: createDisplayStatistics(statistics));
+                int? localRank = statistics.BestScores.Count > 0
+                    ? 1 + ppByProfile.Count(pair => pair.Key != id && pair.Value > statistics.PP)
+                    : null;
+                return (Statistics: statistics, PPByProfile: ppByProfile, LocalRank: localRank, Display: createDisplayStatistics(statistics));
             }).ContinueWith(task => Schedule(() =>
             {
                 // Observe failures even if a newer refresh has superseded this one.
@@ -163,7 +166,8 @@ namespace osu.Game.Overlays
                 var user = new APIUser { Id = APIUser.SYSTEM_USER_ID, Username = name, Statistics = result.Display };
                 Header.User.Value = new UserProfileData(user, mode);
                 Header.RefreshProfiles(result.PPByProfile);
-                Header.SetHistories(result.Statistics.History, result.Ranks);
+                Header.SetHistory(result.Statistics.History);
+                Header.SetLocalRank(result.LocalRank);
                 scores.User.Value = Header.User.Value;
                 scores.SetScores(result.Statistics.RecentScores, result.Statistics.BestScores);
                 loading.Hide();
@@ -178,6 +182,7 @@ namespace osu.Game.Overlays
             {
                 IsRanked = false,
                 PP = (decimal)stats.PP,
+                GlobalRank = stats.EstimatedGlobalRank,
                 Accuracy = stats.Accuracy,
                 PlayCount = stats.PlayCount,
                 TotalScore = scores.Sum(s => s.TotalScore),

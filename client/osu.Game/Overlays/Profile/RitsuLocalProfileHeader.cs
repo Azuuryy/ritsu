@@ -17,7 +17,6 @@ using osu.Game.Online.Leaderboards;
 using osu.Game.Overlays.Profile.Header.Components;
 using osu.Game.Scoring;
 using osu.Game.Users;
-using osu.Game.Users.Drawables;
 using osuTK;
 
 namespace osu.Game.Overlays.Profile
@@ -52,7 +51,9 @@ namespace osu.Game.Overlays.Profile
 
         public void RefreshProfiles(IReadOnlyDictionary<Guid, double>? pp = null) => top.RefreshProfiles(pp);
 
-        public void SetHistories(IReadOnlyList<RitsuPpPoint> pp, IReadOnlyList<RitsuRankPoint> ranks) => details.SetHistories(pp, ranks);
+        public void SetHistory(IReadOnlyList<RitsuPpPoint> pp) => details.SetHistory(pp);
+
+        public void SetLocalRank(int? rank) => details.SetLocalRank(rank);
 
         private partial class LocalProfileTitle : OverlayTitle
         {
@@ -69,7 +70,7 @@ namespace osu.Game.Overlays.Profile
     {
         public readonly Bindable<UserProfileData?> User = new Bindable<UserProfileData?>();
         private readonly RitsuProfileCardRow cards;
-        private readonly UpdateableAvatar avatar;
+        private readonly RitsuProfileAvatar avatar;
         private readonly OsuSpriteText username;
         private readonly Box background;
 
@@ -90,7 +91,7 @@ namespace osu.Game.Overlays.Profile
                     {
                         new Drawable[]
                         {
-                            avatar = new UpdateableAvatar(isInteractive: false, showGuestOnNull: true)
+                            avatar = new RitsuProfileAvatar
                             {
                                 Size = new Vector2(65),
                                 Anchor = Anchor.CentreLeft,
@@ -128,7 +129,6 @@ namespace osu.Game.Overlays.Profile
             User.BindValueChanged(e =>
             {
                 username.Text = e.NewValue?.User.Username ?? string.Empty;
-                avatar.User = e.NewValue?.User;
             }, true);
         }
 
@@ -169,7 +169,9 @@ namespace osu.Game.Overlays.Profile
             };
         }
 
-        public void SetHistories(IReadOnlyList<RitsuPpPoint> pp, IReadOnlyList<RitsuRankPoint> ranks) => Schedule(() => main.SetHistories(pp, ranks));
+        public void SetHistory(IReadOnlyList<RitsuPpPoint> pp) => Schedule(() => main.SetHistory(pp));
+
+        public void SetLocalRank(int? rank) => Schedule(() => main.SetLocalRank(rank));
     }
 
     public partial class RitsuLocalMainDetails : CompositeDrawable
@@ -177,9 +179,9 @@ namespace osu.Game.Overlays.Profile
         public readonly Bindable<UserProfileData?> User = new Bindable<UserProfileData?>();
         private readonly Dictionary<ScoreRank, OsuSpriteText> grades = new Dictionary<ScoreRank, OsuSpriteText>();
         private ProfileValueDisplay performance = null!;
+        private ProfileValueDisplay estimatedRank = null!;
         private ProfileValueDisplay localRank = null!;
         private RitsuPpGraph ppGraph = null!;
-        private RitsuRankGraph rankGraph = null!;
         private OsuSpriteText graphPlaceholder = null!;
 
         [BackgroundDependencyLoader]
@@ -199,12 +201,13 @@ namespace osu.Game.Overlays.Profile
                         RelativeSizeAxes = Axes.X,
                         AutoSizeAxes = Axes.Y,
                         RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
-                        ColumnDimensions = new[] { new Dimension(), new Dimension() },
+                        ColumnDimensions = new[] { new Dimension(), new Dimension(), new Dimension() },
                         Content = new[]
                         {
                             new Drawable[]
                             {
                                 performance = new ProfileValueDisplay(true) { Title = "Performance points" },
+                                estimatedRank = new ProfileValueDisplay(true) { Title = "Estimated global rank" },
                                 localRank = new ProfileValueDisplay(true) { Title = "Local rank" },
                             },
                         },
@@ -220,8 +223,6 @@ namespace osu.Game.Overlays.Profile
                             graphPlaceholder = new OsuSpriteText { Anchor = Anchor.Centre, Origin = Anchor.Centre, Text = "Play more scores to display the history", Font = OsuFont.GetFont(size: 12) },
                         },
                     },
-                    new OsuSpriteText { Text = "Rank history among local profiles", Font = OsuFont.GetFont(size: 12) },
-                    rankGraph = new RitsuRankGraph { RelativeSizeAxes = Axes.X, Height = 48 },
                     new FillFlowContainer
                     {
                         RelativeSizeAxes = Axes.X,
@@ -257,21 +258,30 @@ namespace osu.Game.Overlays.Profile
                 var stats = e.NewValue?.User.Statistics;
                 performance.Content.Text = stats?.PP != null ? $"{stats.PP.Value:N0}pp" : "0pp";
                 performance.Content.TooltipText = "PP estimated from scores associated with this local profile.";
+                estimatedRank.Content.Text = stats?.GlobalRank?.ToString("\\##,##0") ?? "–";
+                estimatedRank.Content.TooltipText = e.NewValue?.Ruleset.ShortName != "osu"
+                    ? "Estimated rank data is currently available for osu!standard only."
+                    : stats?.GlobalRank == null
+                        ? "Earn local PP to estimate a rank."
+                        : "Offline estimate from a 10,000-profile osu! sample (September 2026); this is not an official leaderboard rank.";
                 foreach (var entry in grades)
                     entry.Value.Text = (stats?.GradesCount[entry.Key] ?? 0).ToString("N0");
             }, true);
         }
 
-        public void SetHistories(IReadOnlyList<RitsuPpPoint> pp, IReadOnlyList<RitsuRankPoint> ranks) => Schedule(() =>
+        public void SetHistory(IReadOnlyList<RitsuPpPoint> pp) => Schedule(() =>
         {
-            localRank.Content.Text = ranks.Count == 0 ? "–" : $"#{ranks[^1].Rank:N0}";
-            localRank.Content.TooltipText = "Rank among local profiles for this mode, not an online ranking.";
             // Modosu shows a zero baseline when the profile has just one PP result.
             ppGraph.SetHistory(pp.Count == 1
                 ? new[] { new RitsuPpPoint(pp[0].Date.AddDays(-1), 0), pp[0] }
                 : pp.TakeLast(180));
-            rankGraph.SetHistory(ranks.TakeLast(180));
             graphPlaceholder.Alpha = pp.Count == 0 ? 1 : 0;
+        });
+
+        public void SetLocalRank(int? rank) => Schedule(() =>
+        {
+            localRank.Content.Text = rank.HasValue ? $"#{rank.Value:N0}" : "–";
+            localRank.Content.TooltipText = "Rank among this client's local profiles for this mode.";
         });
 
         private partial class RitsuPpGraph : UserGraph<DateTimeOffset, double>
@@ -281,12 +291,6 @@ namespace osu.Game.Overlays.Profile
             protected override UserGraphTooltipContent GetTooltipContent(DateTimeOffset date, double value) => new UserGraphTooltipContent { Name = "Estimated local PP", Count = $"{value:0.##} pp", Time = date.LocalDateTime.ToString("g") };
         }
 
-        private partial class RitsuRankGraph : UserGraph<DateTimeOffset, int>
-        {
-            public void SetHistory(IEnumerable<RitsuRankPoint> points) => Data = points.Select(p => new KeyValuePair<DateTimeOffset, int>(p.Date, p.Rank)).ToArray();
-            protected override float GetDataPointHeight(int value) => 100 - MathF.Log(value);
-            protected override UserGraphTooltipContent GetTooltipContent(DateTimeOffset date, int value) => new UserGraphTooltipContent { Name = "Local rank", Count = $"#{value:N0}", Time = date.LocalDateTime.ToString("g") };
-        }
     }
 
     public partial class RitsuLocalExtendedDetails : CompositeDrawable

@@ -8,6 +8,8 @@ using osu.Framework.Platform;
 using osu.Game.Database;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace osu.Game.Offline
 {
@@ -17,6 +19,7 @@ namespace osu.Game.Offline
         private const string filename = "profiles.json";
         private readonly object sync = new object();
         private readonly Storage storage;
+        private readonly Storage avatarStorage;
         private readonly RealmAccess realm;
         private readonly ProfileStore data;
 
@@ -26,6 +29,7 @@ namespace osu.Game.Offline
         public RitsuProfileManager(Storage storage, RealmAccess realm)
         {
             this.storage = storage.GetStorageForDirectory("ritsu");
+            avatarStorage = this.storage.GetStorageForDirectory("avatars");
             this.realm = realm;
 
             if (this.storage.Exists(filename))
@@ -40,7 +44,7 @@ namespace osu.Game.Offline
             }
             else
             {
-                var profile = new RitsuProfile { Id = Guid.NewGuid(), Name = "Joueur" };
+                var profile = new RitsuProfile { Id = Guid.NewGuid(), Name = "Guest" };
                 data = new ProfileStore { ActiveProfileId = profile.Id, Profiles = new List<RitsuProfile> { profile } };
                 save();
             }
@@ -49,11 +53,50 @@ namespace osu.Game.Offline
         public Guid ActiveProfileId { get { lock (sync) return data.ActiveProfileId; } }
         public string ActiveProfileName { get { lock (sync) return activeProfile().Name; } }
         public bool IncludeRelaxAutopilot { get { lock (sync) return activeProfile().IncludeRelaxAutopilot; } }
+        public Storage AvatarStorage => avatarStorage;
+
+        public string? GetAvatarFileName(Guid profileId)
+        {
+            lock (sync)
+                return data.Profiles.FirstOrDefault(p => p.Id == profileId)?.AvatarFileName;
+        }
+
+        public void SetAvatar(Guid profileId, FileInfo? imageFile)
+        {
+            string? avatarFileName = null;
+
+            if (imageFile != null)
+            {
+                if (!imageFile.Exists)
+                    throw new FileNotFoundException("The selected profile picture could not be found.", imageFile.FullName);
+
+                if (imageFile.Length > 10 * 1024 * 1024)
+                    throw new InvalidDataException("Profile pictures must be 10 MB or smaller.");
+
+                using var image = Image.Load<Rgba32>(imageFile.FullName);
+                if (image.Width > 4096 || image.Height > 4096)
+                    throw new InvalidDataException("Profile pictures must be 4096 × 4096 pixels or smaller.");
+
+                avatarFileName = $"profile-{profileId:N}-{Guid.NewGuid():N}";
+                using var stream = avatarStorage.CreateFileSafely($"{avatarFileName}.png");
+                image.SaveAsPng(stream);
+            }
+
+            lock (sync)
+            {
+                var profile = data.Profiles.SingleOrDefault(p => p.Id == profileId)
+                              ?? throw new InvalidOperationException("This local profile no longer exists.");
+                profile.AvatarFileName = avatarFileName;
+                save();
+            }
+
+            Changed?.Invoke();
+        }
 
         public IReadOnlyList<RitsuProfile> GetProfiles()
         {
             lock (sync)
-                return data.Profiles.Select(p => new RitsuProfile { Id = p.Id, Name = p.Name, IncludeRelaxAutopilot = p.IncludeRelaxAutopilot }).ToArray();
+                return data.Profiles.Select(p => new RitsuProfile { Id = p.Id, Name = p.Name, IncludeRelaxAutopilot = p.IncludeRelaxAutopilot, AvatarFileName = p.AvatarFileName }).ToArray();
         }
 
         public RitsuProfile GetActiveProfile()
@@ -61,7 +104,7 @@ namespace osu.Game.Offline
             lock (sync)
             {
                 var profile = activeProfile();
-                return new RitsuProfile { Id = profile.Id, Name = profile.Name, IncludeRelaxAutopilot = profile.IncludeRelaxAutopilot };
+                return new RitsuProfile { Id = profile.Id, Name = profile.Name, IncludeRelaxAutopilot = profile.IncludeRelaxAutopilot, AvatarFileName = profile.AvatarFileName };
             }
         }
 
@@ -243,51 +286,8 @@ namespace osu.Game.Offline
                 total += (417.0 - 1.0 / 3.0) * (1.0 - Math.Pow(0.995, historicalBest.Count));
                 history.Add(new RitsuPpPoint(score.Date, total));
             }
-            return new RitsuProfileStatistics(scores.Count, pp, accuracy, best, scores.OrderByDescending(s => s.Date).ToArray(), history.ToArray());
-        }
-
-        /// <summary>
-        /// Rank among local profiles only. It is reconstructed from their eligible scores using
-        /// the same weighted PP formula as the current totals, and is not an online rank.
-        /// </summary>
-        public IReadOnlyList<RitsuRankPoint> GetLocalRankHistory(Guid profileId, string ruleset)
-        {
-            var profiles = GetProfiles();
-            var events = profiles.SelectMany(profile => GetScores(profile.Id, ruleset)
-                .Where(score => score.TotalScore > 0 && score.PP.HasValue
-                                && score.Mods.All(mod => mod is not ModAutoplay)
-                                && (profile.IncludeRelaxAutopilot || score.Mods.All(mod => mod.Acronym != "RX" && mod.Acronym != "AP")))
-                .Select(score => (ProfileId: profile.Id, Score: score)))
-                .OrderBy(e => e.Score.Date).ThenBy(e => e.Score.ID).ToArray();
-
-            var best = profiles.ToDictionary(p => p.Id, _ => new Dictionary<string, double>());
-            var totals = profiles.ToDictionary(p => p.Id, _ => 0.0);
-            var history = new List<RitsuRankPoint>();
-            foreach (var e in events)
-            {
-                var profileBest = best[e.ProfileId];
-                double pp = e.Score.PP!.Value;
-                if (!profileBest.TryGetValue(e.Score.BeatmapHash, out double previous) || pp > previous)
-                {
-                    profileBest[e.Score.BeatmapHash] = pp;
-                    double weight = 1;
-                    double total = 0;
-                    foreach (double value in profileBest.Values.OrderByDescending(v => v))
-                    {
-                        total += value * weight;
-                        weight *= 0.95;
-                    }
-                    totals[e.ProfileId] = total + (417.0 - 1.0 / 3.0) * (1.0 - Math.Pow(0.995, profileBest.Count));
-                }
-
-                if (best.TryGetValue(profileId, out var activeBest) && activeBest.Count > 0)
-                {
-                    int rank = 1 + totals.Count(pair => pair.Key != profileId && pair.Value > totals[profileId]);
-                    history.Add(new RitsuRankPoint(e.Score.Date, rank));
-                }
-            }
-
-            return history;
+            int? estimatedGlobalRank = ruleset == "osu" && pp > 0 ? RitsuRankEstimator.EstimateGlobalRank(pp) : null;
+            return new RitsuProfileStatistics(scores.Count, pp, accuracy, estimatedGlobalRank, best, scores.OrderByDescending(s => s.Date).ToArray(), history.ToArray());
         }
 
         private RitsuProfile activeProfile() => data.Profiles.Single(p => p.Id == data.ActiveProfileId);
@@ -323,6 +323,7 @@ namespace osu.Game.Offline
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public bool IncludeRelaxAutopilot { get; set; }
+        public string? AvatarFileName { get; set; }
         public override string ToString() => Name;
     }
 
@@ -335,6 +336,45 @@ namespace osu.Game.Offline
     }
 
     public sealed record RitsuPpPoint(DateTimeOffset Date, double PP);
-    public sealed record RitsuRankPoint(DateTimeOffset Date, int Rank);
-    public sealed record RitsuProfileStatistics(int PlayCount, double PP, double Accuracy, IReadOnlyList<ScoreInfo> BestScores, IReadOnlyList<ScoreInfo> RecentScores, IReadOnlyList<RitsuPpPoint> History);
+    public sealed record RitsuProfileStatistics(int PlayCount, double PP, double Accuracy, int? EstimatedGlobalRank, IReadOnlyList<ScoreInfo> BestScores, IReadOnlyList<ScoreInfo> RecentScores, IReadOnlyList<RitsuPpPoint> History);
+
+    /// <summary>
+    /// Estimates global rank by linearly interpolating the September 2026 sampled osu! PP-to-rank curve.
+    /// This is an offline estimate, not an official leaderboard position.
+    /// </summary>
+    internal static class RitsuRankEstimator
+    {
+        // Curve copied from Modosu (Azuuryy), derived from MOsu (p-720), GPL-3.0.
+        // Its source is attributed to a September 2026 osu-local-profiles sample of 10,000 profiles.
+        private static readonly (double PP, int Rank)[] rankCurve =
+        {
+            (2.11, 2852394), (45.65, 2142296), (139.97, 1750230), (375.42, 1336787),
+            (721.22, 1020639), (1148.03, 779960), (1621.4, 595532), (2125.51, 454565),
+            (2708.02, 335739), (3302.75, 247883), (3978.95, 177279), (4665.01, 126882),
+            (5403.43, 87234), (6164.53, 58191), (6911.02, 39304), (7677.87, 26024),
+            (8519.1, 16828), (9518.04, 9896), (10741.3, 4951), (11762, 2910),
+            (13010.5, 1549), (15002.6, 553), (17051.7, 211), (18305.4, 120),
+        };
+
+        public static int EstimateGlobalRank(double pp)
+        {
+            if (pp <= rankCurve[0].PP)
+                return rankCurve[0].Rank;
+            if (pp >= rankCurve[^1].PP)
+                return rankCurve[^1].Rank;
+
+            for (int i = 1; i < rankCurve.Length; i++)
+            {
+                if (pp <= rankCurve[i].PP)
+                {
+                    var previous = rankCurve[i - 1];
+                    var next = rankCurve[i];
+                    double progress = (pp - previous.PP) / (next.PP - previous.PP);
+                    return (int)Math.Round(previous.Rank + (next.Rank - previous.Rank) * progress);
+                }
+            }
+
+            return rankCurve[^1].Rank;
+        }
+    }
 }
