@@ -1,33 +1,33 @@
-# Ritsu — démarrage rapide
+# Ritsu — quick start
 
-1. Extraire tout le ZIP dans un nouveau dossier.
-2. Ouvrir **Launch Ritsu.cmd**. Le programme reste nommé `torii.exe` et affiche l'identité Torii : c'est volontaire pour cette première version.
-3. Choisir le dossier osu!lazer détecté ou le sélectionner manuellement pour partager ses données. Il est aussi possible de conserver le dossier local. Après confirmation, rouvrir le jeu ; aucun compte n'est nécessaire.
-4. Glisser des maps `.osz` ou skins `.osk` dans la fenêtre. L'import est aussi disponible dans **Settings → Maintenance → Import files**.
-5. Choisir **Play → Solo**. Les mods Modosu sont disponibles dans la liste commune des mods osu!.
+1. Extract the entire ZIP into a new folder.
+2. Open **Launch Ritsu.cmd**. The program is still named `torii.exe` and retains the Torii identity; this is intentional for this first release.
+3. Choose the detected osu!lazer folder or select one manually to share its data. You can also keep local storage. Reopen the game after confirming; no account is required.
+4. Drag `.osz` maps or `.osk` skins into the window. Import is also available through **Settings → Maintenance → Import files**.
+5. Choose **Play → Solo**. Modosu mods are available in the shared osu! mod list.
 
-Les scores et replays des parties normales sont locaux. Le comportement d'autoplay et des replays reste celui de Torii : regarder un replay ne crée pas un nouveau score. Un fichier `.osr` importé nécessite sa map locale correspondante.
+Scores and replays from regular plays are local. Autoplay and replay behavior remain as in Torii: watching a replay does not create a new score. An imported `.osr` file requires its corresponding map to be available locally.
 
-Les archives d'origine sont conservées après import.
+Original archives are kept after import.
 
-## Profils et entraînement
+## Profiles and training
 
-Ouvrir les profils avec le bouton portant le nom du joueur dans la barre du haut, ou avec **Ctrl+P**. Les pastilles sous le nom permettent de choisir un profil ; le bouton **+** en crée un. Un clic droit sur une pastille permet de renommer ou supprimer le profil et, pour le profil actif, de configurer l'inclusion de Relax et Autopilot dans les PP. La page affiche ses scores récents et meilleures performances pour le mode sélectionné dans la barre du jeu.
+Open profiles with the player-name button in the top bar, or press **Ctrl+P**. Use the profile chips below the name to switch profiles; select **+** to create one. Right-click a chip to rename or delete that profile and, for the active profile, choose whether Relax and Autopilot count toward PP. The page shows recent scores and best performances for the mode selected in the game bar.
 
-Le profil actif reçoit les nouveaux scores ; les scores déjà présents ne sont pas automatiquement associés. Dans la sélection d'une map, ouvrir **Ranking**, puis choisir **All profiles** dans le menu du classement pour afficher tous les scores locaux de cette map, y compris ceux sans association à un profil. **Current profile** filtre sur le profil actif. Dans la sélection classique, ce même menu se trouve au-dessus des scores.
+New scores go to the active profile; existing scores are not associated automatically. On a map's selection screen, open **Ranking** and choose **All profiles** from the leaderboard menu to show every local score for that map, including scores that are not associated with a profile. **Current profile** filters to the active profile. In the classic selection screen, the same menu is above the scores.
 
-Les PP sont des estimations locales. Le rang et son graphique comparent uniquement les profils locaux pour le mode sélectionné : ils ne représentent pas un classement officiel. L'historique est reconstruit avec les profils et réglages PP actuels. Supprimer un profil retire ses associations mais conserve les scores et replays dans le stockage partagé.
+PP values are local estimates. The rank and graph compare local profiles only for the selected mode; they are not official rankings. History is reconstructed using the current profiles and PP settings. Deleting a profile removes its score associations but keeps scores and replays in shared storage.
 
-Les presets JSON s'importent et s'exportent dans **Settings → Maintenance → Mod Presets**. Dans l'éditeur de skin, ajouter **RitsuLiveStarCounter** aux composants du HUD puis le placer à l'endroit souhaité ; il affiche la difficulté cumulée pendant la partie. Le saut direct à la fin des pauses reste dans **Settings → Torii → Gameplay**.
+Import and export JSON presets through **Settings → Maintenance → Mod Presets**. In the skin editor, add **RitsuLiveStarCounter** to the HUD components and place it where you want; it displays cumulative difficulty during play. The option to skip directly to the end of breaks is under **Settings → Torii → Gameplay**.
 
-## Données et mises à jour
+## Data and updates
 
-Par défaut les données sont dans `%APPDATA%\Ritsu`. Si un dossier osu!lazer est choisi, Ritsu l'utilise directement : les changements apportés aux maps, scores, skins ou collections peuvent être visibles dans les deux clients. Éviter de faire fonctionner les deux clients simultanément sur les mêmes données. Le choix est également accessible dans **Settings → Torii → Data source**. Le fichier de configuration s'appelle encore `torii.ini`.
+By default, data is stored in `%APPDATA%\Ritsu`. If you choose an osu!lazer folder, Ritsu uses it directly: changes to maps, scores, skins, or collections may be visible in both clients. Avoid running both clients against the same data at the same time. The setting is also available under **Settings → Torii → Data source**. The configuration file is still named `torii.ini`.
 
-Pour mettre à jour cette version, fermer le jeu et extraire le nouveau paquet dans un autre dossier. Les mises à jour automatiques sont désactivées. Aucune association de fichiers du système n'est installée.
+To update this version, close the game and extract the new package into a different folder. Automatic updates are disabled. No system file associations are installed.
 
-## Fonctionnement hors ligne
+## Offline behavior
 
-Connexion, boutique, classements en ligne, chat, téléchargements, présence, télémétrie, envoi de rapports et ouverture de liens externes sont indisponibles. Les intégrations Discord, serveur WebSocket et ancien service TCP local sont désactivés. Le générateur de maps qui installe des outils externes n'est pas proposé ; l'éditeur de maps classique reste disponible.
+Sign-in, the store, online leaderboards, chat, downloads, presence, telemetry, report submission, and external links are unavailable. Discord, WebSocket server, and legacy local TCP integrations are disabled. The map generator that installs external tools is not offered; the classic map editor remains available.
 
-Les journaux locaux sont accessibles depuis **Settings → General → Open Torii folder**, puis `logs`. Ne pas utiliser les anciens outils Modosu de pare-feu ou d'installation de DLL avec ce client.
+Local logs are available from **Settings → General → Open Torii folder**, then `logs`. Do not use legacy Modosu firewall or DLL installation tools with this client.

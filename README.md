@@ -1,49 +1,49 @@
 # Ritsu — Torii offline foundation
 
-Premier jalon Windows x64 : un client Torii autonome pour le jeu local. Les noms et l'apparence Torii sont volontairement conservés ; le renommage est reporté.
+The first Windows x64 milestone is a standalone Torii client for local play. Torii's names and appearance are intentionally retained; renaming is deferred.
 
-## Jouer
+## Play
 
-Sous Windows x64, lance `Pipeline.ps1` pour compiler le client et créer l'archive `Ritsu-<version>-win-x64.zip` dans `artifacts/`, puis extrais-la et ouvre **Launch Ritsu.cmd**. La version courante est indiquée dans [`VERSION`](VERSION) et son historique dans [`CHANGELOG.md`](CHANGELOG.md). Choisis le dossier osu!lazer existant pour partager ses données ou conserve le stockage local par défaut dans `%APPDATA%\Ritsu`. Aucun compte, service ou accès réseau n'est nécessaire pour jouer. Ne place pas le paquet dans l'installation Torii ou lazer existante.
+On Windows x64, run `Pipeline.ps1` to build the client and create `Ritsu-<version>-win-x64.zip` in `artifacts/`. Extract it and open **Launch Ritsu.cmd**. The current version is listed in [`VERSION`](VERSION), with release history in [`CHANGELOG.md`](CHANGELOG.md). Choose an existing osu!lazer folder to share its data, or keep the default local storage in `%APPDATA%\Ritsu`. No account, service, or network access is required to play. Do not put the package inside an existing Torii or lazer installation.
 
-Importer les fichiers `.osz`, `.osk` et `.osr` par glisser-déposer ou via **Settings → Maintenance → Import files**. Les maps doivent être présentes localement pour lire leurs replays. Le dossier osu!lazer peut être détecté ou choisi manuellement et utilisé directement, sans copie. Aucun téléchargement de maps n'est proposé.
+Import `.osz`, `.osk`, and `.osr` files by dragging them into the window or through **Settings → Maintenance → Import files**. Maps must be available locally to play their replays. An osu!lazer folder can be detected or selected manually and used directly, without copying. Map downloads are not available.
 
-Voir [GUIDE.md](GUIDE.md), [ROADMAP.md](ROADMAP.md) et [VALIDATION.md](VALIDATION.md).
+See [GUIDE.md](GUIDE.md), [ROADMAP.md](ROADMAP.md), and [VALIDATION.md](VALIDATION.md).
 
-## Compiler
+## Build
 
-Prérequis : Windows x64, Git et SDK .NET 10 (validation réalisée avec 10.0.103, runtime livré 10.0.3). Le téléchargement des sources et des dépendances nécessite Internet ; le client produit fonctionne hors ligne.
+Requirements: Windows x64, Git, and the .NET 10 SDK (validated with 10.0.103; the packaged runtime is 10.0.3). Downloading source and dependencies requires Internet access; the resulting client works offline.
 
-Pipeline complète, sans ouverture du jeu :
+Run the full pipeline without opening the game:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Pipeline.ps1
 ```
 
-Pour exécuter séparément la préparation et la compilation :
+To prepare and build separately:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Bootstrap.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Build.ps1
 ```
 
-Les révisions sont fixées dans `dependencies.json`. Le dépôt contient déjà la source Torii épinglée et ses adaptations hors ligne. `Bootstrap.ps1` la vérifie et restaure le framework et les ressources nécessaires depuis leurs dépôts épinglés. Il refuse une révision différente et n'écrase pas les modifications locales. `Build.ps1` produit une distribution autonome avec les bibliothèques natives et un SHA-256. Les caches et journaux restent dans `.cache/`.
+Dependency revisions are pinned in `dependencies.json`. The repository already contains the pinned Torii source and its offline adaptations. `Bootstrap.ps1` verifies it and restores the required framework and resources from their pinned repositories. It rejects unexpected revisions and does not overwrite local changes. `Build.ps1` creates a self-contained distribution with native libraries and a SHA-256 checksum. Caches and logs stay in `.cache/`.
 
-Les contrôles développeur peuvent aussi être exécutés seuls :
+Developer checks can also be run on their own:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Verify.ps1
 ```
 
-Cette commande compile et exécute les contrôles hors ligne sans ouvrir le jeu. Les scénarios graphiques sont facultatifs et se lancent uniquement avec `-IncludeGameScenarios` ; ils nécessitent Python 3, ouvrent une fenêtre et utilisent un profil de test séparé. Le jeu n'est jamais lancé par `Build.ps1` ou `Pipeline.ps1`.
+This command builds and runs offline checks without opening the game. Optional graphical scenarios run only with `-IncludeGameScenarios`; they require Python 3, open a window, and use a separate test profile. `Build.ps1` and `Pipeline.ps1` never launch the game.
 
-La source cliente conserve l'historique Torii, avec les modifications de ce jalon sur `codex/ritsu-offline`. Les anciens workflows sont conservés avec l'extension `.disabled` ; ils ne s'exécutent pas sur GitHub.
+The client source retains Torii's history, with this milestone's changes on `codex/ritsu-offline`. Legacy workflows are kept with the `.disabled` extension and do not run on GitHub.
 
-## Origine et crédits
+## Origin and credits
 
-- **Torii**, par ShikkesoraSIM et ses contributeurs : base de ce client, de son flow et de ses interfaces. [Dépôt](https://github.com/ShikkesoraSIM/torii-osu).
-- **osu! / osu!framework**, par ppy et leurs contributeurs : moteur, gameplay et outils d'origine.
-- **Modosu**, le projet maintenu par l'utilisateur : source des fonctions d'entraînement. [Dépôt](https://github.com/Azuuryy/Modosu).
-- **MOsu**, par p-720 et ses contributeurs : origine du travail Modosu. [Dépôt](https://github.com/p-720/mosu).
+- **Torii**, by ShikkesoraSIM and its contributors: the foundation for this client, its flow, and its interfaces. [Repository](https://github.com/ShikkesoraSIM/torii-osu).
+- **osu! / osu!framework**, by ppy and their contributors: the engine, gameplay, and original tools.
+- **Modosu**, maintained by the user: the source of the training features. [Repository](https://github.com/Azuuryy/Modosu).
+- **MOsu**, by p-720 and its contributors: the origin of the Modosu work. [Repository](https://github.com/p-720/mosu).
 
-Les contributions de ces projets ne sont pas réattribuées à Ritsu. Les notices du client, du framework et des ressources sont conservées. Les mods métronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2 et Miss Challenge sont adaptés de Modosu/MOsu ; leur licence GPL-3.0 est conservée dans `client/LICENCE-Modosu.txt` et dans le paquet. Les nouvelles fonctions attendent leur validation en jeu.
+Contributions from these projects remain credited to their original authors. Client, framework, and resource notices are preserved. The Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2, and Miss Challenge mods are adapted from Modosu/MOsu; their GPL-3.0 license is kept in `client/LICENCE-Modosu.txt` and in the package. New features still need in-game validation.

@@ -1,35 +1,35 @@
-# Roadmap Ritsu
+# Ritsu roadmap
 
-## 0 — socle Torii hors ligne
+## 0 — Torii offline foundation
 
-Livrable courant : Windows x64 portable, instance propre, liaison facultative au dossier osu!lazer ou stockage local, imports de fichiers, jeu et éditeurs locaux, aucun service connecté. La liaison utilise directement les données partagées ; la détection et l'import osu!stable restent locaux. Les noms et l'apparence Torii sont conservés. Torii reste l'amont principal ; toute mise à jour doit préciser les trois révisions de dépendances et repasser les contrôles.
+Current deliverable: a portable Windows x64 client with an isolated instance, optional linking to an osu!lazer folder or local storage, local file imports, local play and editors, and no connected services. Linking uses the shared data directly; osu!stable detection and imports remain local. Torii's names and appearance are retained. Torii remains the primary upstream; every update must identify the three dependency revisions and pass the checks again.
 
-## 1 — intégrer Modosu
+## 1 — Integrate Modosu
 
-Intégrer les mods, profils, presets et statistiques du projet actuel dans le client. Les profils Ritsu partent de zéro : les anciens scores Modosu ne sont ni repris ni migrés. Garder les PP locaux identifiés avec la version du calculateur et les mods utilisés. Conserver les crédits Modosu et MOsu. Les imports et exports de collections et les suggestions de maps sont hors du périmètre de cette étape.
+Integrate the current project's mods, profiles, presets, and statistics into the client. Ritsu profiles start from scratch: existing Modosu scores are neither imported nor migrated. Keep local PP estimates identified by calculator version and mods used. Preserve credits to Modosu and MOsu. Collection imports/exports and map suggestions are outside this step's scope.
 
-Utiliser une seule liste de mods dans le ruleset existant et conserver le stockage partagé des scores et replays. Le comportement dans lazer et Torii sera vérifié par l'utilisateur après intégration ; il n'est pas encore validé pour les nouveaux mods. Prévoir plusieurs profils locaux avec estimation de PP configurable et identifiant interne stable. Les profils locaux doivent pouvoir cohabiter à terme avec les comptes et classements d'un serveur privé.
+Use one shared mod list in the existing ruleset and preserve shared score and replay storage. The user will check behavior in lazer and Torii after integration; new mods have not yet been verified there. Plan for multiple local profiles with configurable PP estimates and stable internal IDs. Local profiles should eventually coexist with accounts and leaderboards on a private server.
 
-Conserver séparément une copie de l'intégration locale Modosu → tosu dans `references/modosu-tosu/`, sans l'intégrer au client à ce stade. Prévoir ultérieurement sa réadaptation complète à Ritsu : identité du client et des mods, calculs de PP et difficultés, sélection, gameplay, résultats, compatibilité des compteurs et vérification des échanges locaux. Définir les scénarios et tester le protocole avant activation.
+Keep a separate copy of the local Modosu → tosu integration in `references/modosu-tosu/`; do not integrate it into the client yet. Plan a full adaptation to Ritsu later, covering client and mod identity, PP and difficulty calculations, selection, gameplay, results, counter compatibility, and local data exchange. Define scenarios and test the protocol before enabling it.
 
-## 2 — performances mesurées
+## 2 — Measured performance
 
-Établir les temps d'image, latences, mémoire et consommation de référence sur des maps et skins identiques. Examiner les idées d'EMPYREAN sans reprendre ses promesses comme des résultats démontrés. Conserver uniquement les changements mesurés sans régression de gameplay ni de rendu.
+Establish baseline frame times, latency, memory use, and resource consumption on identical maps and skins. Review EMPYREAN's ideas without treating its claims as proven results. Keep only changes measured to have no gameplay or rendering regressions.
 
-## 3 — tournoi
+## 3 — Tournament
 
-Définir un scénario LAN avant développement : organisateur, préparation des postes, lancement synchronisé, contrôles, reprise après incident et capture des résultats. Étudier inso comme référence. Un tournoi LAN n'implique pas nécessairement de serveur communautaire permanent.
+Define a LAN scenario before development: organizer, workstation preparation, synchronized launch, controls, incident recovery, and result capture. Study inso as a reference. A LAN tournament does not necessarily require a permanent community server.
 
-## 4 — éditeur visuel complet
+## 4 — Full visual editor
 
-Écrire un cahier des charges distinct avant développement. Ambition : composer menus, sélection, résultats et gameplay avec composants, calques, animations et réactions aux événements. Définir les limites, budgets de rendu, formats, compatibilité et scénarios de création. Les scripts et les changements de mécaniques propres aux maps ne sont pas implicites dans cette phase.
+Write a separate specification before development. The goal is to compose menus, selection, results, and gameplay from components, layers, animations, and event responses. Define limits, rendering budgets, formats, compatibility, and creation scenarios. Scripting and map-specific gameplay changes are not implied by this phase.
 
-## 5 — identité Ritsu
+## 5 — Ritsu identity
 
-Décider ce qui restera visuellement Torii et ce qui deviendra Ritsu. Avant tout renommage interne, cartographier les noms persistés dans les skins, profils, configurations et replays ; prévoir leur lecture et conversion. Les notices et crédits restent conservés.
+Decide which parts of Torii's visual identity remain and which become Ritsu. Before internal renaming, map names persisted in skins, profiles, settings, and replays; plan how to read and convert them. Keep notices and credits.
 
-## 6 — services facultatifs
+## 6 — Optional services
 
-Étudier indépendamment mises à jour, partage de créations, OAuth osu! et serveur communautaire. Étudier également une recherche de maps en ligne sans connexion du joueur, et décider séparément si leur téléchargement sera proposé. Comparer l'API officielle et ses exigences OAuth avec les miroirs publics, leurs fonctionnalités et leur disponibilité avant toute intégration. OAuth peut relier une identité et les données autorisées ; il ne valide pas nos scores pour les classements officiels. Le mode local doit rester utilisable sans ces services.
+Evaluate updates, sharing creations, osu! OAuth, and a community server independently. Also study map search without player sign-in and decide separately whether downloading maps should be offered. Compare the official API and its OAuth requirements with public mirrors, their features, and availability before integration. OAuth can link an identity and authorized data; it does not validate scores for official leaderboards. Local play must remain usable without these services.
 
-Un futur hébergement sera dimensionné sur les connexions simultanées, calculs, stockage et trafic observés. Aucun achat ni déploiement n'est inclus dans le jalon courant.
+Size any future hosting from observed concurrent connections, calculations, storage, and traffic. No purchase or deployment is included in the current milestone.

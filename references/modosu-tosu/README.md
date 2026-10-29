@@ -1,10 +1,10 @@
-# Référence Modosu → tosu
+# Modosu → tosu reference
 
-Copie de travail des fichiers de l'intégration native présents localement dans `C:\Users\natha\OneDrive\Documents\ChatGPT\Mosu clone\source`, sur la branche `codex/offline-practice` au commit `ef807e8df043323014a781ca74942c547986f56e`. Les fichiers d'intégration, les tests et certaines modifications des fichiers de contexte n'étaient pas committés au moment de la copie.
+Working copy of the native integration files found locally in `C:\Users\natha\OneDrive\Documents\ChatGPT\Mosu clone\source`, on branch `codex/offline-practice` at commit `ef807e8df043323014a781ca74942c547986f56e`. The integration files, tests, and some context-file changes were uncommitted when copied.
 
-- `Integration/` : producteur et calculs de l'export local.
-- `Tests/` : tests locaux de cette intégration.
-- `Source-context/` : fichiers locaux modifiés qui montrent les points d'accroche dans Modosu et ses tests. Ils ne sont pas autonomes.
-- `README-upstream.md` : documentation locale du protocole et de sa validation antérieure.
+- `Integration/`: local export producer and calculations.
+- `Tests/`: tests for this local integration.
+- `Source-context/`: locally modified files showing integration points in Modosu and its tests. They are not standalone.
+- `README-upstream.md`: local documentation of the protocol and its prior validation.
 
-Cette copie ne fait partie d'aucun projet compilé de Ritsu. Elle sert de référence à une adaptation ultérieure ; le code du fork tosu et ses tests ne sont pas inclus ici.
+This copy is not part of any compiled Ritsu project. It is a reference for a possible future adaptation; the tosu fork's code and tests are not included here.

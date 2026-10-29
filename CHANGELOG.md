@@ -1,6 +1,6 @@
 # Changelog
 
-Les changements notables de Ritsu sont consignés ici. Les dates suivent le calendrier ISO ; le détail des fonctionnalités prévues reste dans [ROADMAP.md](ROADMAP.md).
+Notable Ritsu changes are listed here. Dates use the ISO calendar; planned features are described in the [roadmap](ROADMAP.md).
 
 ## Unreleased
 
@@ -8,68 +8,68 @@ Les changements notables de Ritsu sont consignés ici. Les dates suivent le cale
 
 ### Added
 
-- Série complète des mods d'entraînement Modosu dans la liste commune du ruleset osu! : Metronome, Spacing Adjust, Fun Spacing (Spacing Overtime), Circle Generation, No Sliding, RandomV2 et Miss Challenge.
-- Présentation unifiée des mods Modosu avec style dédié, réglages et info-bulles adaptés ; réglages de replay pour RandomV2 et Spacing Adjust.
-- Import et export JSON des presets de mods, compteur d'étoiles en direct ajoutable au HUD depuis l'éditeur de skin et réglage de progression des replays.
+- The complete set of Modosu training mods in the shared osu! ruleset list: Metronome, Spacing Adjust, Fun Spacing (Spacing Overtime), Circle Generation, No Sliding, RandomV2, and Miss Challenge.
+- A consistent presentation for Modosu mods, with dedicated styling, settings, and tooltips; replay settings for RandomV2 and Spacing Adjust.
+- JSON mod preset import and export, a live star counter that can be added to the HUD in the skin editor, and a replay progress setting.
 
 ### Changed
 
-- Intégration des mods au ruleset osu! existant, sans créer de ruleset séparé ; la liste commune et les scores/replays partagés sont conservés.
-- Harmonisation visuelle avec les mods exclusifs Torii, avec une bordure dédiée aux mods Modosu et un style réutilisable pour les mods Ritsu.
+- Mods are integrated into the existing osu! ruleset rather than a separate ruleset; the shared mod list and shared score/replay behavior are preserved.
+- Modosu mods now use a unified visual style alongside Torii-exclusive mods, with a dedicated border and a reusable style for future Ritsu mods.
 
 ## [0.2.2] - 2026-10-29
 
 ### Added
 
-- Gestion de plusieurs profils locaux : création, sélection, renommage et suppression, avec un identifiant stable pour chaque profil.
-- Page de profil avec scores récents et meilleures performances par mode, estimation locale des PP et option par profil pour inclure Relax et Autopilot.
-- Classements locaux filtrables par profil actif ou sur l'ensemble des profils, y compris les scores historiques non associés.
+- Multiple local profiles can be created, selected, renamed, and deleted; each profile has a stable ID.
+- A profile page with recent scores and best performances by mode, local PP estimates, and a per-profile option to include Relax and Autopilot in PP.
+- Local leaderboards can be filtered to the active profile or show all profiles, including historical scores without a profile association.
 
 ### Changed
 
-- Association des nouveaux scores au profil actif via des métadonnées locales séparées ; les anciens scores restent dans le stockage partagé et ne sont associés à aucun profil automatiquement.
+- New scores are associated with the active profile through separate local metadata. Existing scores remain in shared storage and are not associated with any profile automatically.
 
 ### Fixed
 
-- Chargement des statistiques de profil avec une requête Realm compatible.
-- Affichage et navigation de l'interface de profils locaux.
+- Profile statistics now load with a Realm-compatible query.
+- Local profile interface display and navigation.
 
-Sur un build précédent, l'utilisateur a indiqué que les quatre modes, la séparation des scores par profil et le compteur d'étoiles fonctionnaient. La nouvelle interface et les corrections de chargement restent à vérifier manuellement. La compatibilité des mods, scores et replays avec les autres clients n'est pas encore validée.
+On an earlier build, the user reported that all four modes, profile-based score separation, and the star counter worked. The revised interface and loading fixes still need manual verification. Compatibility of mods, scores, and replays with other clients has not been verified.
 
 ## [0.2.1] - 2026-10-29
 
 ### Added
 
-- Profils locaux pour les quatre modes, avec association des nouveaux scores, filtres de classement local et estimation de PP configurable.
-- Mod Miss Challenge avec limite manuelle ou basée sur le meilleur score local.
-- Import et export JSON de presets de mods, compteur d'étoiles en jeu et réglage de progression des replays.
-- Bordure propre aux mods Modosu et style préparé pour les futurs mods Ritsu.
-- Option de saut directement à la fin des pauses.
+- Local profiles for all four modes, with new-score association, local leaderboard filters, and configurable PP estimates.
+- Miss Challenge mod with a manual limit or a limit based on the best local score.
+- JSON mod preset import and export, an in-game star counter, and a replay progress setting.
+- A dedicated border for Modosu mods and a style prepared for future Ritsu mods.
+- An option to skip directly to the end of breaks.
 
 ### Changed
 
-- Accès aux profils depuis la barre supérieure, avec une page de statistiques, de scores, d'historique de PP et de classement local.
-- Ajout du compteur d'étoiles dans l'éditeur de skin pour le placer librement sur le HUD.
-- Présentation des mods Modosu rapprochée des exclusivités Torii et filtre de tous les profils rendu plus visible.
+- Access profiles from the top bar, with a page for statistics, scores, PP history, and local rankings.
+- The star counter can be added and positioned freely in the skin editor.
+- Modosu mods are styled more like Torii-exclusive mods, and the all-profiles filter is easier to find.
 
-Sur un build précédent, l'utilisateur a indiqué que les quatre modes, la séparation des scores par profil et le compteur d'étoiles fonctionnaient. Le déplacement des profils et du compteur, les changements visuels et la compatibilité avec les autres clients restent à vérifier manuellement.
+On an earlier build, the user reported that all four modes, profile-based score separation, and the star counter worked. Moving profiles and the counter, visual changes, and compatibility with other clients still need manual verification.
 
 ## [0.2.0] - 2026-10-28
 
 ### Added
 
-- Liaison facultative au dossier osu!lazer existant, avec détection locale et accès direct aux données partagées ; le stockage local Ritsu reste disponible.
-- Première série de mods Modosu intégrés à la liste commune du ruleset osu! : Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding et RandomV2.
-- Réglages de replay pour RandomV2 et Spacing Adjust.
-- Conservation de la licence Modosu dans le paquet distribué.
+- Optional linking to an existing osu!lazer folder, with local detection and direct access to shared data; local Ritsu storage remains available.
+- The first set of Modosu mods in the shared osu! ruleset list: Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, and RandomV2.
+- Replay settings for RandomV2 and Spacing Adjust.
+- The Modosu license is included in the distributed package.
 
 ### Changed
 
-- Le menu du métronome propose les taux 0,25×, 0,5×, 1×, 2× et 3×.
-- Le calcul des subdivisions du métronome évite le ralentissement des ticks aux taux élevés.
-- Le contrôle des données liées et le premier démarrage permettent de choisir explicitement le stockage osu!lazer partagé.
+- The metronome menu offers rates of 0.25×, 0.5×, 1×, 2×, and 3×.
+- Metronome subdivision calculations avoid slowing down ticks at higher rates.
+- Linked-data controls and first-run setup let users explicitly choose shared osu!lazer storage.
 
 ### Fixed
 
-- Restauration de la détection et de l'import local depuis les installations osu!stable.
-- Recherche des fixtures de validation dans leur dossier source `tools/fixtures`.
+- Restored local detection and import from osu!stable installations.
+- Validation fixtures are found in their source folder, `tools/fixtures`.
