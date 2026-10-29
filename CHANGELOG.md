@@ -4,6 +4,16 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
+### Added
+
+- Restored the beatmap catalogue button in the top bar, with an offline placeholder. Online search, downloads, and sign-in remain unavailable.
+
+### Fixed
+
+- New local scores use the active profile's name. Scores already associated with a Ritsu profile display its current name without changing shared score data.
+
+These changes still require manual verification by the user.
+
 ## [0.2.3] - 2026-10-29
 
 ### Added

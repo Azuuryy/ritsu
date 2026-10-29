@@ -288,7 +288,8 @@ namespace osu.Game.Overlays.Toolbar
                                         AutoSizeAxes = Axes.X,
                                         Children = new Drawable[]
                                         {
-                                            // Ritsu local toolbar: no account, server or shop controls.
+                                            // The beatmap catalogue button opens an offline placeholder.
+                                            new ToolbarBeatmapListingButton(),
                                             new ToolbarMusicButton(),
                                             new ToolbarClock(),
                                             new ToolbarNotificationButton(),

@@ -6462,7 +6462,7 @@ index 0000000000..5420ffd643
 +}
 diff --git a/osu.Game.Rulesets.Osu.Tests/ModosuSpacingTest.cs b/osu.Game.Rulesets.Osu.Tests/ModosuSpacingTest.cs
 new file mode 100644
-index 0000000000..3a5f6515e8
+index 0000000000..a53f1d9604
 --- /dev/null
 +++ b/osu.Game.Rulesets.Osu.Tests/ModosuSpacingTest.cs
 @@ -0,0 +1,91 @@
@@ -6499,7 +6499,7 @@ index 0000000000..3a5f6515e8
 +        [Test]
 +        public void FunSpacingAcceptsEmptyBeatmap()
 +        {
-+            Assert.DoesNotThrow(() => new OsuModFunSpacingAdjust().ApplyToBeatmap(new OsuBeatmap()));
++            Assert.DoesNotThrow(() => new OsuModSpacingOvertime().ApplyToBeatmap(new OsuBeatmap()));
 +        }
 +
 +        [Test]
@@ -7195,107 +7195,6 @@ index 0000000000..d4cad241be
 +        public partial class CGObjectCountSliderBar : RoundedSliderBar<int>
 +        {
 +            public override LocalisableString TooltipText => Current.Value == 0 ? "No limit" : base.TooltipText;
-+        }
-+    }
-+}
-diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModFunSpacingAdjust.cs b/osu.Game.Rulesets.Osu/Mods/OsuModFunSpacingAdjust.cs
-new file mode 100644
-index 0000000000..f5eb6469ad
---- /dev/null
-+++ b/osu.Game.Rulesets.Osu/Mods/OsuModFunSpacingAdjust.cs
-@@ -0,0 +1,95 @@
-+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
-+// See the LICENCE file in the repository root for full licence text.
-+
-+using System;
-+using System.Linq;
-+using osu.Framework.Bindables;
-+using osu.Framework.Localisation;
-+using osu.Game.Beatmaps;
-+using osu.Game.Configuration;
-+using osu.Game.Rulesets.Mods;
-+using osu.Game.Rulesets.Objects;
-+using osu.Game.Rulesets.Osu.Beatmaps;
-+using osu.Game.Rulesets.Osu.Mods;
-+using osu.Game.Rulesets.Modosu.Utils;
-+
-+namespace osu.Game.Rulesets.Osu.Mods
-+{
-+    public class OsuModFunSpacingAdjust : Mod, IApplicableToBeatmap, IModosuMod
-+    {
-+        public override bool Ranked => false;
-+        public override bool AlwaysValidForSubmission => false;
-+        public override bool ValidForMultiplayer => false;
-+        public override bool ValidForMultiplayerAsFreeMod => false;
-+
-+        public override string Name => "Fun Spacing";
-+
-+        public override LocalisableString Description => "Spacing grows/shrinks over time.";
-+
-+
-+        public override string Acronym => "FSA";
-+
-+        public override ModType Type => ModType.Fun;
-+
-+        public override bool RequiresConfiguration => true;
-+
-+        private readonly ModosuHitObjectGenerationUtils.OriginalHitObjectStateStore originalState = new();
-+
-+        [SettingSource("Starting spacing", "Spacing multiplier at the start of the beatmap.")]
-+        public BindableNumber<float> StartSpacing { get; } = new BindableFloat
-+        {
-+            MinValue = 0.1f,
-+            MaxValue = 3f,
-+            Default = 1f,
-+            Value = 1f,
-+            Precision = 0.01f,
-+        };
-+
-+        [SettingSource("Ending spacing", "Spacing multiplier at the end of the beatmap.")]
-+        public BindableNumber<float> EndSpacing { get; } = new BindableFloat
-+        {
-+            MinValue = 0.1f,
-+            MaxValue = 3f,
-+            Default = 2f,
-+            Value = 2f,
-+            Precision = 0.01f,
-+        };
-+
-+        public void ApplyToBeatmap(IBeatmap beatmap)
-+        {
-+            if (!(beatmap is OsuBeatmap osuBeatmap))
-+                return;
-+
-+            if (osuBeatmap.HitObjects.Count == 0)
-+                return;
-+
-+            originalState.Restore(osuBeatmap);
-+
-+            var positionInfos = ModosuHitObjectGenerationUtils.GeneratePositionInfos(osuBeatmap.HitObjects);
-+
-+            double startTime = osuBeatmap.HitObjects[0]?.StartTime ?? 0;
-+            double endTime = osuBeatmap.HitObjects.LastOrDefault()?.GetEndTime() ?? 1;
-+            double duration = endTime - startTime;
-+
-+            for (int i = 0; i < positionInfos.Count; i++)
-+            {
-+                var positionInfo = positionInfos[i];
-+                double progress = duration > 0 ? (positionInfo.HitObject.StartTime - startTime) / duration : 0;
-+
-+                // Linear interpolation from start to end spacing
-+                float spacingMultiplier = StartSpacing.Value + (EndSpacing.Value - StartSpacing.Value) * (float)progress;
-+
-+                if (spacingMultiplier >= 1)
-+                {
-+                    positionInfo.DistanceFromPrevious *= MathF.Pow(spacingMultiplier, 1f - positionInfo.DistanceFromPrevious / 640f);
-+                }
-+                else
-+                {
-+                    positionInfo.DistanceFromPrevious *= MathF.Pow(spacingMultiplier, positionInfo.DistanceFromPrevious / 640f);
-+                }
-+            }
-+
-+            osuBeatmap.HitObjects = ModosuHitObjectGenerationUtils.RepositionHitObjectsClampOnly(positionInfos);
 +        }
 +    }
 +}
@@ -8366,19 +8265,21 @@ index 0000000000..077ed781c1
 +}
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModSpacingAdjust.cs b/osu.Game.Rulesets.Osu/Mods/OsuModSpacingAdjust.cs
 new file mode 100644
-index 0000000000..16f65ec32d
+index 0000000000..50e39e05bc
 --- /dev/null
 +++ b/osu.Game.Rulesets.Osu/Mods/OsuModSpacingAdjust.cs
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,90 @@
 +// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 +// See the LICENCE file in the repository root for full licence text.
 +
 +using System;
++using System.Linq;
 +using osu.Framework.Bindables;
 +using osu.Framework.Localisation;
 +using osu.Game.Beatmaps;
 +using osu.Game.Configuration;
 +using osu.Game.Rulesets.Mods;
++using osu.Game.Rulesets.Objects;
 +using osu.Game.Rulesets.Osu.Beatmaps;
 +using osu.Game.Rulesets.Modosu.Utils;
 +
@@ -8401,6 +8302,10 @@ index 0000000000..16f65ec32d
 +        public override ModType Type => ModType.Conversion;
 +
 +        public override bool RequiresConfiguration => true;
++
++        public override Type[] IncompatibleMods => base.IncompatibleMods
++            .Concat(new[] { typeof(OsuModSpacingOvertime) })
++            .ToArray();
 +
 +        private readonly ModosuHitObjectGenerationUtils.OriginalHitObjectStateStore originalState = new();
 +
@@ -8454,8 +8359,111 @@ index 0000000000..16f65ec32d
 +        }
 +    }
 +}
+diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModSpacingOvertime.cs b/osu.Game.Rulesets.Osu/Mods/OsuModSpacingOvertime.cs
+new file mode 100644
+index 0000000000..74ebc87bb8
+--- /dev/null
++++ b/osu.Game.Rulesets.Osu/Mods/OsuModSpacingOvertime.cs
+@@ -0,0 +1,97 @@
++// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
++// See the LICENCE file in the repository root for full licence text.
++
++using System;
++using System.Linq;
++using osu.Framework.Bindables;
++using osu.Framework.Localisation;
++using osu.Game.Beatmaps;
++using osu.Game.Configuration;
++using osu.Game.Rulesets.Mods;
++using osu.Game.Rulesets.Objects;
++using osu.Game.Rulesets.Osu.Beatmaps;
++using osu.Game.Rulesets.Modosu.Utils;
++
++namespace osu.Game.Rulesets.Osu.Mods
++{
++    public class OsuModSpacingOvertime : Mod, IApplicableToBeatmap, IRitsuExclusiveMod
++    {
++        public override bool Ranked => false;
++        public override bool AlwaysValidForSubmission => false;
++        public override bool ValidForMultiplayer => false;
++        public override bool ValidForMultiplayerAsFreeMod => false;
++
++        public override string Name => "Spacing Overtime";
++
++        public override LocalisableString Description => "Spacing grows/shrinks over time.";
++
++        public override string Acronym => "SO";
++
++        public override ModType Type => ModType.Conversion;
++
++        public override bool RequiresConfiguration => true;
++
++        public override Type[] IncompatibleMods => base.IncompatibleMods
++            .Concat(new[] { typeof(OsuModSpacingAdjust) })
++            .ToArray();
++
++        private readonly ModosuHitObjectGenerationUtils.OriginalHitObjectStateStore originalState = new();
++
++        [SettingSource("Starting spacing", "Spacing multiplier at the start of the beatmap.")]
++        public BindableNumber<float> StartSpacing { get; } = new BindableFloat
++        {
++            MinValue = 0.1f,
++            MaxValue = 3f,
++            Default = 1f,
++            Value = 1f,
++            Precision = 0.01f,
++        };
++
++        [SettingSource("Ending spacing", "Spacing multiplier at the end of the beatmap.")]
++        public BindableNumber<float> EndSpacing { get; } = new BindableFloat
++        {
++            MinValue = 0.1f,
++            MaxValue = 3f,
++            Default = 2f,
++            Value = 2f,
++            Precision = 0.01f,
++        };
++
++        public void ApplyToBeatmap(IBeatmap beatmap)
++        {
++            if (!(beatmap is OsuBeatmap osuBeatmap))
++                return;
++
++            if (osuBeatmap.HitObjects.Count == 0)
++                return;
++
++            originalState.Restore(osuBeatmap);
++
++            var positionInfos = ModosuHitObjectGenerationUtils.GeneratePositionInfos(osuBeatmap.HitObjects);
++
++            double startTime = osuBeatmap.HitObjects[0]?.StartTime ?? 0;
++            double endTime = osuBeatmap.HitObjects.LastOrDefault()?.GetEndTime() ?? 1;
++            double duration = endTime - startTime;
++
++            for (int i = 0; i < positionInfos.Count; i++)
++            {
++                var positionInfo = positionInfos[i];
++                double progress = duration > 0 ? (positionInfo.HitObject.StartTime - startTime) / duration : 0;
++
++                // Linear interpolation from start to end spacing
++                float spacingMultiplier = StartSpacing.Value + (EndSpacing.Value - StartSpacing.Value) * (float)progress;
++
++                if (spacingMultiplier >= 1)
++                {
++                    positionInfo.DistanceFromPrevious *= MathF.Pow(spacingMultiplier, 1f - positionInfo.DistanceFromPrevious / 640f);
++                }
++                else
++                {
++                    positionInfo.DistanceFromPrevious *= MathF.Pow(spacingMultiplier, positionInfo.DistanceFromPrevious / 640f);
++                }
++            }
++
++            osuBeatmap.HitObjects = ModosuHitObjectGenerationUtils.RepositionHitObjectsClampOnly(positionInfos);
++        }
++    }
++}
 diff --git a/osu.Game.Rulesets.Osu/OsuRuleset.cs b/osu.Game.Rulesets.Osu/OsuRuleset.cs
-index 0988bb3342..de95b50abc 100644
+index 0988bb3342..a84d208672 100644
 --- a/osu.Game.Rulesets.Osu/OsuRuleset.cs
 +++ b/osu.Game.Rulesets.Osu/OsuRuleset.cs
 @@ -198,6 +198,7 @@ public override IEnumerable<Mod> GetModsFor(ModType type)
@@ -8474,16 +8482,15 @@ index 0988bb3342..de95b50abc 100644
 +                        new OsuModRandomV2(),
 +                        new OsuModNoSliding(),
                          new OsuModRandom(),
-+                        new OsuModSpacingAdjust(),
++                        new MultiMod(new OsuModSpacingAdjust(), new OsuModSpacingOvertime()),
                          new OsuModMirror(),
                          new MultiMod(new OsuModAlternate(), new OsuModSingleTap())
                      };
-@@ -223,6 +228,8 @@ public override IEnumerable<Mod> GetModsFor(ModType type)
+@@ -223,6 +228,7 @@ public override IEnumerable<Mod> GetModsFor(ModType type)
                  case ModType.Fun:
                      return new Mod[]
                      {
 +                        new OsuModMetronome(),
-+                        new OsuModFunSpacingAdjust(),
                          new OsuModHitSounder(),
                          new ModPitchAdjust(),
                          new OsuModTransform(),
@@ -10318,10 +10325,10 @@ index 0000000000..c8b4957adb
 +}
 diff --git a/osu.Game/Offline/RitsuProfileManager.cs b/osu.Game/Offline/RitsuProfileManager.cs
 new file mode 100644
-index 0000000000..7476a8dfbc
+index 0000000000..d056539a1e
 --- /dev/null
 +++ b/osu.Game/Offline/RitsuProfileManager.cs
-@@ -0,0 +1,310 @@
+@@ -0,0 +1,340 @@
 +// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 +using System;
 +using System.Collections.Generic;
@@ -10378,6 +10385,15 @@ index 0000000000..7476a8dfbc
 +        {
 +            lock (sync)
 +                return data.Profiles.Select(p => new RitsuProfile { Id = p.Id, Name = p.Name, IncludeRelaxAutopilot = p.IncludeRelaxAutopilot }).ToArray();
++        }
++
++        public RitsuProfile GetActiveProfile()
++        {
++            lock (sync)
++            {
++                var profile = activeProfile();
++                return new RitsuProfile { Id = profile.Id, Name = profile.Name, IncludeRelaxAutopilot = profile.IncludeRelaxAutopilot };
++            }
 +        }
 +
 +        public void AddProfile(string name)
@@ -10485,6 +10501,24 @@ index 0000000000..7476a8dfbc
 +                return data.Scores.TryGetValue(scoreId, out var metadata) && metadata.ProfileId == data.ActiveProfileId;
 +        }
 +
++        /// <summary>
++        /// Uses an existing Ritsu association for display only; never changes the shared score database.
++        /// </summary>
++        public void ApplyProfileNameToDetachedScore(ScoreInfo score)
++        {
++            if (score.IsManaged)
++                throw new InvalidOperationException("Profile names can only be applied to detached scores.");
++
++            string? profileName;
++            lock (sync)
++                profileName = data.Scores.TryGetValue(score.ID, out var metadata)
++                    ? data.Profiles.FirstOrDefault(p => p.Id == metadata.ProfileId)?.Name
++                    : null;
++
++            if (profileName != null)
++                score.User.Username = profileName;
++        }
++
 +        public List<ScoreInfo> GetScores(Guid profileId, string ruleset)
 +        {
 +            HashSet<Guid> ids;
@@ -10493,10 +10527,13 @@ index 0000000000..7476a8dfbc
 +
 +            // Realm's LINQ provider cannot compare a linked object's ShortName. Resolve
 +            // scores by their primary keys, then inspect the linked ruleset in memory.
-+            return realm.Run(r => ids.Select(id => r.Find<ScoreInfo>(id))
-+                                   .Where(s => s != null && !s.DeletePending && s.Ruleset.ShortName == ruleset)
-+                                   .Select(s => s!)
-+                                   .Detach());
++            var scores = realm.Run(r => ids.Select(id => r.Find<ScoreInfo>(id))
++                                           .Where(s => s != null && !s.DeletePending && s.Ruleset.ShortName == ruleset)
++                                           .Select(s => s!)
++                                           .Detach());
++            foreach (var score in scores)
++                ApplyProfileNameToDetachedScore(score);
++            return scores;
 +        }
 +
 +        public RitsuProfileStatistics GetStatistics(string ruleset) => GetStatistics(ActiveProfileId, ruleset);
@@ -10661,6 +10698,27 @@ index eb0c82e790..5ef83dc899 100644
                  throw new InvalidOperationException("Should not attempt to request online scores for a local scoped leaderboard");
  
              this.beatmapInfo = beatmapInfo;
+diff --git a/osu.Game/Online/API/Requests/Responses/APIUser.cs b/osu.Game/Online/API/Requests/Responses/APIUser.cs
+index dc329bccdc..27f123f5e2 100644
+--- a/osu.Game/Online/API/Requests/Responses/APIUser.cs
++++ b/osu.Game/Online/API/Requests/Responses/APIUser.cs
+@@ -334,7 +334,15 @@ private APIRankHistory rankHistory
+ 
+         public int OnlineID => Id;
+ 
+-        public bool Equals(APIUser other) => this.MatchesOnlineID(other);
++        public bool Equals(APIUser other)
++        {
++            // Local profiles share the system user ID, so their names must also be
++            // compared for bindables to propagate profile switches and renames.
++            if (Offline.RitsuOffline.Enabled && other != null && Id == SYSTEM_USER_ID && other.Id == SYSTEM_USER_ID)
++                return string.Equals(Username, other.Username, StringComparison.Ordinal);
++
++            return this.MatchesOnlineID(other);
++        }
+ 
+ #pragma warning disable 649
+         private class Country
 diff --git a/osu.Game/Online/Chat/ExternalLinkOpener.cs b/osu.Game/Online/Chat/ExternalLinkOpener.cs
 index 708e9edefa..b0e499f189 100644
 --- a/osu.Game/Online/Chat/ExternalLinkOpener.cs
@@ -10685,7 +10743,7 @@ index 708e9edefa..b0e499f189 100644
  
              if (url.StartsWith('/'))
 diff --git a/osu.Game/Online/Leaderboards/LeaderboardManager.cs b/osu.Game/Online/Leaderboards/LeaderboardManager.cs
-index 0d71cae097..86e241b2a0 100644
+index 0d71cae097..9757976488 100644
 --- a/osu.Game/Online/Leaderboards/LeaderboardManager.cs
 +++ b/osu.Game/Online/Leaderboards/LeaderboardManager.cs
 @@ -47,6 +47,22 @@ public partial class LeaderboardManager : Component
@@ -10704,7 +10762,7 @@ index 0d71cae097..86e241b2a0 100644
 +
 +        private void onProfilesChanged() => Schedule(() =>
 +        {
-+            if (CurrentCriteria?.Scope == BeatmapLeaderboardScope.Local)
++            if (CurrentCriteria?.Scope is BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll)
 +                FetchWithCriteria(CurrentCriteria, true);
 +        });
 +
@@ -10729,17 +10787,22 @@ index 0d71cae097..86e241b2a0 100644
              if (CurrentCriteria.ExactMods != null)
              {
                  if (!CurrentCriteria.ExactMods.Any())
-@@ -225,7 +245,8 @@ private void localScoresChanged(IRealmCollection<ScoreInfo> sender, ChangeSet? c
+@@ -225,7 +245,13 @@ private void localScoresChanged(IRealmCollection<ScoreInfo> sender, ChangeSet? c
              newScores = newScores.Detach().OrderByCriteria(CurrentCriteria.Sorting);
  
              var newScoresArray = newScores.ToArray();
 -            scores.Value = LeaderboardScores.Success(newScoresArray, scoresRequested: newScoresArray.Length, totalScores: newScoresArray.Length, null);
++            if (ritsuProfiles != null)
++            {
++                foreach (var score in newScoresArray)
++                    ritsuProfiles.ApplyProfileNameToDetachedScore(score);
++            }
 +            var personalBest = ritsuProfiles == null ? null : newScoresArray.Where(s => ritsuProfiles.BelongsToActiveProfile(s.ID)).OrderByDescending(s => s.TotalScore).FirstOrDefault();
 +            scores.Value = LeaderboardScores.Success(newScoresArray, scoresRequested: newScoresArray.Length, totalScores: newScoresArray.Length, personalBest);
          }
  
          protected override void Dispose(bool isDisposing)
-@@ -235,6 +256,8 @@ protected override void Dispose(bool isDisposing)
+@@ -235,6 +261,8 @@ protected override void Dispose(bool isDisposing)
              localScoreSubscription?.Dispose();
              beatmapUpdateSubscription?.Dispose();
              inFlightOnlineRequest?.Cancel();
@@ -10763,7 +10826,7 @@ index f4326de89b..0b12a49e19 100644
              // torii.local es el host del stack de dev; solo resuelve a 127.0.0.1 via el hosts, asi
              // que confiarlo es inofensivo en prod (no resuelve en una maquina normal).
 diff --git a/osu.Game/OsuGame.cs b/osu.Game/OsuGame.cs
-index b3e44cc872..394c6ec20a 100644
+index b3e44cc872..d0b4ab730a 100644
 --- a/osu.Game/OsuGame.cs
 +++ b/osu.Game/OsuGame.cs
 @@ -104,11 +104,11 @@ public partial class OsuGame : OsuGameBase, IKeyBindingHandler<GlobalAction>, IL
@@ -10788,16 +10851,27 @@ index b3e44cc872..394c6ec20a 100644
  
          private LoginOverlay loginOverlay;
  
-@@ -774,6 +775,8 @@ public void ShowChannel(string channel) => waitForReady(() => channelManager, _
+@@ -774,6 +775,10 @@ public void ShowChannel(string channel) => waitForReady(() => channelManager, _
          /// <param name="user">The user to display.</param>
          public void ShowUser(IUser user) => waitForReady(() => userProfile, _ => userProfile.ShowUser(user));
  
 +        public void ToggleLocalProfile() => waitForReady(() => localProfiles, overlay => overlay.ToggleVisibility());
 +
++        public void ToggleBeatmapListing() => waitForReady(() => beatmapListing, overlay => overlay.ToggleVisibility());
++
          /// <summary>
          /// Show a beatmap's set as an overlay, displaying the given beatmap.
          /// </summary>
-@@ -1513,7 +1516,7 @@ protected override void LoadComplete()
+@@ -1039,6 +1044,8 @@ public void PresentScore(IScoreInfo score, ScorePresentType presentType = ScoreP
+ 
+             if (databasedScore == null) return;
+ 
++            Dependencies.Get<Offline.RitsuProfileManager>()?.ApplyProfileNameToDetachedScore(databasedScore.ScoreInfo);
++
+             if (databasedScore.Replay == null)
+             {
+                 Logger.Log("The loaded score has no replay data.", LoggingTarget.Information, LogLevel.Important);
+@@ -1513,7 +1520,7 @@ protected override void LoadComplete()
              // per-frame work. The settings toggle prompts for a restart to apply a change.
              osu.Game.Online.Server.ToriiServerPulse.SetFromConfig(LocalConfig.Get<bool>(OsuSetting.ToriiServerPulseEnabled));
  
@@ -10806,7 +10880,7 @@ index b3e44cc872..394c6ec20a 100644
                  loadComponentSingleFile(new osu.Game.Online.Server.ToriiServerPulseProvider(), Add, true);
  
              // Torii: points-earned summary watcher. Hosts its own card layer; the
-@@ -1684,6 +1687,7 @@ protected override void LoadComplete()
+@@ -1684,6 +1691,7 @@ protected override void LoadComplete()
  
              loadComponentSingleFile(new AccountCreationOverlay(), topMostOverlayContent.Add, true);
              loadComponentSingleFile<IDialogOverlay>(dialogOverlay = new DialogOverlay(), topMostOverlayContent.Add, true);
@@ -10814,7 +10888,7 @@ index b3e44cc872..394c6ec20a 100644
              loadComponentSingleFile(new MedalOverlay(), topMostOverlayContent.Add);
  
              // Torii: restriction notice — watches api.State/LastLoginError and shows
-@@ -1713,7 +1717,7 @@ protected override void LoadComplete()
+@@ -1713,7 +1721,7 @@ protected override void LoadComplete()
              }
  
              // eventually informational overlays should be displayed in a stack, but for now let's only allow one to stay open at a time.
@@ -10823,7 +10897,7 @@ index b3e44cc872..394c6ec20a 100644
  
              foreach (var overlay in informationalOverlays)
              {
-@@ -1902,7 +1906,7 @@ private void forwardGeneralLogToNotifications(LogEntry entry)
+@@ -1902,7 +1910,7 @@ private void forwardGeneralLogToNotifications(LogEntry entry)
              {
                  LocalisableString message;
  
@@ -10832,7 +10906,7 @@ index b3e44cc872..394c6ec20a 100644
                      message = LocalisableString.Interpolate($"{entry.Message.Truncate(256)}\n\n{NotificationsStrings.ErrorAutomaticallyReported}");
                  else
                      message = entry.Message.Truncate(256);
-@@ -2090,7 +2094,9 @@ public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
+@@ -2090,7 +2098,9 @@ public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
                      return true;
  
                  case GlobalAction.ToggleProfile:
@@ -10974,6 +11048,118 @@ index 7b981b567f..84cb3945a5 100644
  
              base.Content.Add(SpectatorClient);
              base.Content.Add(MultiplayerClient);
+diff --git a/osu.Game/Overlays/BeatmapListing/BeatmapListingFilterControl.cs b/osu.Game/Overlays/BeatmapListing/BeatmapListingFilterControl.cs
+index 6bc4411ce0..986604bd0b 100644
+--- a/osu.Game/Overlays/BeatmapListing/BeatmapListingFilterControl.cs
++++ b/osu.Game/Overlays/BeatmapListing/BeatmapListingFilterControl.cs
+@@ -212,6 +212,9 @@ protected override void LoadComplete()
+         /// </summary>
+         public void FetchNextPage()
+         {
++            if (Offline.RitsuOffline.Enabled)
++                return;
++
+             // there may be no results left.
+             if (noMoreResults)
+                 return;
+@@ -230,6 +233,9 @@ public void FetchNextPage()
+ 
+         private void queueUpdateSearch(bool queryTextChanged = false)
+         {
++            if (Offline.RitsuOffline.Enabled)
++                return;
++
+             SearchStarted?.Invoke();
+ 
+             resetSearch();
+diff --git a/osu.Game/Overlays/BeatmapListingOverlay.cs b/osu.Game/Overlays/BeatmapListingOverlay.cs
+index c21fc66827..a8b9bb6573 100644
+--- a/osu.Game/Overlays/BeatmapListingOverlay.cs
++++ b/osu.Game/Overlays/BeatmapListingOverlay.cs
+@@ -34,6 +34,8 @@ namespace osu.Game.Overlays
+ {
+     public partial class BeatmapListingOverlay : OnlineOverlay<BeatmapListingHeader>
+     {
++        protected override bool AllowOfflineDisplay => true;
++
+         [Resolved]
+         private PreviewTrackManager previewTrackManager { get; set; }
+ 
+@@ -48,8 +50,10 @@ public partial class BeatmapListingOverlay : OnlineOverlay<BeatmapListingHeader>
+         private BeatmapListingFilterControl filterControl => Header.FilterControl;
+ 
+         public BeatmapListingOverlay()
+-            : base(OverlayColourScheme.Blue)
++            : base(OverlayColourScheme.Blue, requiresSignIn: !Offline.RitsuOffline.Enabled)
+         {
++            if (Offline.RitsuOffline.Enabled)
++                filterControl.Alpha = 0;
+         }
+ 
+         [BackgroundDependencyLoader]
+@@ -85,6 +89,24 @@ private void load()
+                 }
+             };
+ 
++            if (Offline.RitsuOffline.Enabled)
++            {
++                panelTarget.Child = new FillFlowContainer
++                {
++                    RelativeSizeAxes = Axes.X,
++                    AutoSizeAxes = Axes.Y,
++                    Direction = FillDirection.Vertical,
++                    Padding = new MarginPadding { Vertical = 40 },
++                    Spacing = new Vector2(0, 12),
++                    Children = new Drawable[]
++                    {
++                        new OsuSpriteText { Text = "Beatmap catalogue", Font = OsuFont.GetFont(size: 24, weight: FontWeight.SemiBold) },
++                        new OsuSpriteText { Text = "Online search and downloads are unavailable in offline mode.", Font = OsuFont.GetFont(size: 16) },
++                        new OsuSpriteText { Text = "Play imported beatmaps from Play > Solo.", Font = OsuFont.GetFont(size: 16) },
++                    },
++                };
++            }
++
+             filterControl.TypingStarted = onTypingStarted;
+             filterControl.SearchStarted = onSearchStarted;
+             filterControl.SearchFinished = onSearchFinished;
+@@ -112,7 +134,8 @@ public static string EscapeKeywordSearchTerm(string term)
+ 
+         public void ShowWithSearch(string query)
+         {
+-            filterControl.Search(query);
++            if (!Offline.RitsuOffline.Enabled)
++                filterControl.Search(query);
+             Show();
+             ScrollFlow.ScrollToStart();
+         }
+@@ -120,13 +143,15 @@ public void ShowWithSearch(string query)
+         public void ShowWithGenreFilter(SearchGenre genre)
+         {
+             ShowWithSearch(string.Empty);
+-            filterControl.FilterGenre(genre);
++            if (!Offline.RitsuOffline.Enabled)
++                filterControl.FilterGenre(genre);
+         }
+ 
+         public void ShowWithLanguageFilter(SearchLanguage language)
+         {
+             ShowWithSearch(string.Empty);
+-            filterControl.FilterLanguage(language);
++            if (!Offline.RitsuOffline.Enabled)
++                filterControl.FilterLanguage(language);
+         }
+ 
+         protected override BeatmapListingHeader CreateHeader() => new BeatmapListingHeader();
+@@ -143,7 +168,8 @@ protected override void OnFocus(FocusEvent e)
+         {
+             base.OnFocus(e);
+ 
+-            filterControl.TakeFocus();
++            if (!Offline.RitsuOffline.Enabled)
++                filterControl.TakeFocus();
+         }
+ 
+         private CancellationTokenSource cancellationToken;
 diff --git a/osu.Game/Overlays/ChatOverlay.cs b/osu.Game/Overlays/ChatOverlay.cs
 index 17f6b0189f..78bb0ad3f1 100644
 --- a/osu.Game/Overlays/ChatOverlay.cs
@@ -11009,7 +11195,7 @@ index 75b0806447..bbeb8244ac 100644
          private void load(OsuConfigManager config)
          {
 diff --git a/osu.Game/Overlays/Mods/ModPanel.cs b/osu.Game/Overlays/Mods/ModPanel.cs
-index 295663f9fb..b974e669da 100644
+index 295663f9fb..4925b13b34 100644
 --- a/osu.Game/Overlays/Mods/ModPanel.cs
 +++ b/osu.Game/Overlays/Mods/ModPanel.cs
 @@ -6,8 +6,11 @@
@@ -11024,33 +11210,45 @@ index 295663f9fb..b974e669da 100644
  using osu.Framework.Localisation;
  using osu.Game.Graphics;
  using osu.Game.Graphics.Sprites;
-@@ -31,9 +34,25 @@ public partial class ModPanel : ModSelectPanel, IFilterable
+@@ -31,9 +34,35 @@ public partial class ModPanel : ModSelectPanel, IFilterable
          // rojo de la gate torii (mismo vermillion que usan los auras Founder).
          private static readonly Color4 torii_red = new Color4(255, 80, 60, 255);
          private static readonly Color4 torii_badge_active = new Color4(70, 20, 35, 255);
-+        private static readonly Color4 modosu_border = new Color4(217, 175, 79, 255);
++        private static readonly Color4 modosu_gold = new Color4(217, 175, 79, 255);
++        private static readonly Color4 modosu_badge_active = new Color4(72, 50, 20, 255);
 +        private static readonly Color4 ritsu_blue = new Color4(158, 203, 248, 255);
 +        private static readonly Color4 ritsu_lavender = new Color4(209, 198, 245, 255);
++        private static readonly Color4 ritsu_badge_active = new Color4(35, 48, 85, 255);
 +
-+        private Texture? ritsuLogo;
++        /// <summary>
++        /// Style of the "exclusive" badge associated with this panel's mod, if any.
++        /// Single source of truth for badge, border and edge glow of all exclusive mods.
++        /// </summary>
++        private ExclusiveStyle? exclusiveStyle;
++
++        private sealed record ExclusiveStyle(
++            LocalisableString Text,
++            Drawable? Icon,
++            bool TintIcon,
++            Color4 IdleColour,
++            Color4 ActiveColour,
++            Color4 BorderStart,
++            Color4 BorderEnd,
++            Color4 EdgeColour);
 +
 +        protected override ColourInfo BorderColourFor(Colour4 background, Colour4 foreground)
 +        {
-+            if (Mod is IModosuMod)
-+                return ColourInfo.GradientVertical(modosu_border, modosu_border);
-+            if (Mod is IRitsuExclusiveMod)
-+                return ColourInfo.GradientVertical(ritsu_blue, ritsu_lavender);
++            if (exclusiveStyle != null)
++                return ColourInfo.GradientVertical(exclusiveStyle.BorderStart, exclusiveStyle.BorderEnd);
+ 
+-        private SpriteIcon toriiExclusiveIcon = null!;
+-        private OsuSpriteText toriiExclusiveText = null!;
 +            return base.BorderColourFor(background, foreground);
 +        }
  
-         private SpriteIcon toriiExclusiveIcon = null!;
-         private OsuSpriteText toriiExclusiveText = null!;
-+        private OsuSpriteText modosuExclusiveText = null!;
-+        private OsuSpriteText ritsuExclusiveText = null!;
- 
          public ModPanel(ModState modState)
          {
-@@ -58,9 +77,26 @@ public ModPanel(Mod mod)
+@@ -58,9 +87,54 @@ public ModPanel(Mod mod)
          }
  
          [BackgroundDependencyLoader]
@@ -11058,83 +11256,191 @@ index 295663f9fb..b974e669da 100644
 +        private void load(OsuColour colours, TextureStore textures)
          {
              AccentColour = colours.ForModType(Mod.Type);
-+            if (Mod is IModosuMod)
-+            {
-+                MainContentContainer.Add(modosuExclusiveText = new OsuSpriteText
-+                {
-+                    Anchor = Anchor.TopRight,
-+                    Origin = Anchor.TopRight,
-+                    Margin = new MarginPadding { Right = 6, Top = 5 },
-+                    Shear = -OsuGame.SHEAR,
-+                    Text = "modosu exclusive",
-+                    Font = OsuFont.Default.With(size: 9, weight: FontWeight.SemiBold),
-+                    Colour = modosu_border,
-+                });
-+                Active.BindValueChanged(e => modosuExclusiveText.FadeColour(e.NewValue ? new Color4(72, 50, 20, 255) : modosu_border, TRANSITION_DURATION, Easing.OutQuint), true);
-+            }
 +
-+            if (Mod is IRitsuExclusiveMod)
-+                ritsuLogo = textures.Get("Ritsu/logo");
++            exclusiveStyle = Mod switch
++            {
++                IToriiExclusiveMod => new ExclusiveStyle(
++                    "from torii",
++                    new SpriteIcon { Icon = FontAwesome.Solid.ToriiGate, Size = new Vector2(12) },
++                    TintIcon: true,
++                    torii_red, torii_badge_active,
++                    torii_red, torii_red, torii_red),
++
++                IModosuMod => new ExclusiveStyle(
++                    "from modosu",
++                    new Container
++                    {
++                        Size = new Vector2(9),
++                        Children = new Drawable[]
++                        {
++                            new Circle
++                            {
++                                RelativeSizeAxes = Axes.Both,
++                                Colour = Color4.White,
++                            },
++                            new OsuSpriteText
++                            {
++                                Anchor = Anchor.Centre,
++                                Origin = Anchor.Centre,
++                                Colour = Color4.Black,
++                                Text = "M",
++                                Font = OsuFont.Default.With(size: 7, weight: FontWeight.Bold)
++                            }
++                        }
++                    },
++                    TintIcon: false,
++                    modosu_gold, modosu_badge_active,
++                    modosu_gold, modosu_gold, modosu_gold),
++
++                IRitsuExclusiveMod => new ExclusiveStyle(
++                    "from ritsu",
++                    new Sprite { Texture = textures.Get("Ritsu/logo"), Size = new Vector2(16) },
++                    TintIcon: false,
++                    ritsu_blue, ritsu_badge_active,
++                    ritsu_blue, ritsu_lavender, ritsu_blue),
++
++                _ => null,
++            };
          }
  
          protected override void LoadComplete()
-@@ -71,8 +107,13 @@ protected override void LoadComplete()
+@@ -70,63 +144,69 @@ protected override void LoadComplete()
+             modState.ValidForSelection.BindValueChanged(_ => updateFilterState());
              modState.MatchingTextFilter.BindValueChanged(_ => updateFilterState(), true);
  
-             // el marco mas grueso va con el badge, no con un mod en particular.
+-            // el marco mas grueso va con el badge, no con un mod en particular.
 -            if (Mod is IToriiExclusiveMod)
-+            if (Mod is IToriiExclusiveMod or IModosuMod or IRitsuExclusiveMod)
-+            {
-                 Content.BorderThickness = 3;
-+                // Borders are rendered by the mask shader on its children. The text background
-+                // has its own mask, so repaint the border on a transparent box in front of it.
-+                Content.Add(new Box { RelativeSizeAxes = Axes.Both, Colour = Colour4.Transparent, Depth = float.MinValue });
-+            }
- 
+-                Content.BorderThickness = 3;
+-
              modState.Preselected.BindValueChanged(b => updateEdgeEffect(b.NewValue), true);
  
-@@ -116,6 +157,26 @@ protected override void LoadComplete()
- 
-                 Active.BindValueChanged(_ => updateToriiBadgeColour(), true);
-             }
+-            // badge "torii exclusive" con la gate roja para los mods propios de torii.
+-            if (Mod is IToriiExclusiveMod)
++            if (exclusiveStyle != null)
++                createExclusiveBadge(exclusiveStyle);
++        }
 +
-+            if (Mod is IRitsuExclusiveMod)
++        private void createExclusiveBadge(ExclusiveStyle style)
++        {
++            // el marco mas grueso va con el badge, no con un mod en particular.
++            Content.BorderThickness = 2;
++            // Borders are rendered by the mask shader on its children. The text background
++            // has its own mask, so repaint the border on a transparent box in front of it.
++            Content.Add(new Box { RelativeSizeAxes = Axes.Both, Colour = Colour4.Transparent, Depth = float.MinValue });
++
++            if (style.Icon != null)
+             {
+-                MainContentContainer.Add(new Container
+-                {
+-                    Anchor = Anchor.TopRight,
+-                    Origin = Anchor.TopRight,
+-                    AutoSizeAxes = Axes.Both,
+-                    Margin = new MarginPadding { Right = 6, Top = 5 },
+-                    Shear = -OsuGame.SHEAR,
+-                    Child = new FillFlowContainer
+-                    {
+-                        AutoSizeAxes = Axes.Both,
+-                        Direction = FillDirection.Horizontal,
+-                        Spacing = new Vector2(3, 0),
+-                        Children = new Drawable[]
+-                        {
+-                            toriiExclusiveIcon = new SpriteIcon
+-                            {
+-                                Icon = FontAwesome.Solid.ToriiGate,
+-                                Size = new Vector2(9),
+-                                Colour = torii_red,
+-                                // mismo anchor X que el texto, sino el flow crashea.
+-                                Anchor = Anchor.CentreLeft,
+-                                Origin = Anchor.CentreLeft,
+-                            },
+-                            toriiExclusiveText = new OsuSpriteText
+-                            {
+-                                Text = "torii exclusive",
+-                                Font = OsuFont.Default.With(size: 9, weight: FontWeight.SemiBold),
+-                                Colour = torii_red,
+-                                Anchor = Anchor.CentreLeft,
+-                                Origin = Anchor.CentreLeft,
+-                            },
+-                        },
+-                    },
+-                });
++                // mismo anchor X que el texto, sino el flow crashea.
++                style.Icon.Anchor = Anchor.CentreLeft;
++                style.Icon.Origin = Anchor.CentreLeft;
+ 
+-                Active.BindValueChanged(_ => updateToriiBadgeColour(), true);
++                if (style.TintIcon)
++                    style.Icon.Colour = style.IdleColour;
+             }
+-        }
+ 
+-        private void updateToriiBadgeColour()
+-        {
+-            if (toriiExclusiveIcon == null || toriiExclusiveText == null)
+-                return;
++            var text = new OsuSpriteText
 +            {
-+                MainContentContainer.Add(new FillFlowContainer
-+                {
-+                    Anchor = Anchor.TopRight,
-+                    Origin = Anchor.TopRight,
-+                    AutoSizeAxes = Axes.Both,
-+                    Direction = FillDirection.Horizontal,
-+                    Spacing = new Vector2(3, 0),
-+                    Margin = new MarginPadding { Right = 6, Top = 4 },
-+                    Shear = -OsuGame.SHEAR,
-+                    Children = new Drawable[]
-+                    {
-+                        new Sprite { Texture = ritsuLogo, Size = new Vector2(14), Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft },
-+                        ritsuExclusiveText = new OsuSpriteText { Text = "ritsu exclusive", Font = OsuFont.Default.With(size: 9, weight: FontWeight.SemiBold), Colour = ritsu_blue, Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft },
-+                    },
-+                });
-+                Active.BindValueChanged(e => ritsuExclusiveText.FadeColour(e.NewValue ? new Color4(35, 48, 85, 255) : ritsu_blue, TRANSITION_DURATION, Easing.OutQuint), true);
-+            }
++                Text = style.Text,
++                Font = OsuFont.Default.With(size: 9, weight: FontWeight.SemiBold),
++                Colour = style.IdleColour,
++                Anchor = Anchor.CentreLeft,
++                Origin = Anchor.CentreLeft,
++            };
++
++            var flow = new FillFlowContainer
++            {
++                AutoSizeAxes = Axes.Both,
++                Direction = FillDirection.Horizontal,
++                Spacing = new Vector2(3, 0),
++            };
++
++            if (style.Icon != null)
++                flow.Add(style.Icon);
++            flow.Add(text);
++
++            MainContentContainer.Add(new Container
++            {
++                Anchor = Anchor.TopRight,
++                Origin = Anchor.TopRight,
++                AutoSizeAxes = Axes.Both,
++                Margin = new MarginPadding { Right = 6, Top = 5 },
++                Shear = -OsuGame.SHEAR,
++                Child = flow,
++            });
++
++            Active.BindValueChanged(_ =>
++            {
++                Color4 colour = Active.Value ? style.ActiveColour : style.IdleColour;
+ 
+-            Color4 colour = Active.Value ? torii_badge_active : torii_red;
++                if (style.Icon != null && style.TintIcon)
++                    style.Icon.FadeColour(colour, TRANSITION_DURATION, Easing.OutQuint);
+ 
+-            toriiExclusiveIcon.FadeColour(colour, TRANSITION_DURATION, Easing.OutQuint);
+-            toriiExclusiveText.FadeColour(colour, TRANSITION_DURATION, Easing.OutQuint);
++                text.FadeColour(colour, TRANSITION_DURATION, Easing.OutQuint);
++            }, true);
          }
  
-         private void updateToriiBadgeColour()
-@@ -144,12 +205,12 @@ private void updateEdgeEffect(bool preselected)
+         private void updateEdgeEffect(bool preselected)
+@@ -144,14 +224,14 @@ private void updateEdgeEffect(bool preselected)
                  return;
              }
  
 -            if (Mod is IToriiExclusiveMod)
-+            if (Mod is IToriiExclusiveMod or IModosuMod or IRitsuExclusiveMod)
++            if (exclusiveStyle != null)
              {
                  Content.EdgeEffect = new EdgeEffectParameters
                  {
                      Type = EdgeEffectType.Glow,
 -                    Colour = torii_red,
-+                    Colour = Mod is IToriiExclusiveMod ? torii_red : Mod is IModosuMod ? modosu_border : ritsu_blue,
++                    Colour = exclusiveStyle.EdgeColour,
                      Hollow = true,
-                     Radius = 3,
+-                    Radius = 3,
++                    Radius = 1,
                  };
+ 
+                 return;
 diff --git a/osu.Game/Overlays/Mods/ModSelectPanel.cs b/osu.Game/Overlays/Mods/ModSelectPanel.cs
 index 5cf858fc1d..3a3c929f28 100644
 --- a/osu.Game/Overlays/Mods/ModSelectPanel.cs
@@ -11157,16 +11463,18 @@ index 5cf858fc1d..3a3c929f28 100644
              SwitchContainer.ResizeWidthTo(targetWidth, transitionDuration, Easing.OutQuint);
              MainContentContainer.TransformTo(nameof(Padding), new MarginPadding
 diff --git a/osu.Game/Overlays/OnlineOverlay.cs b/osu.Game/Overlays/OnlineOverlay.cs
-index cc5a1b9d2d..4e52a87fcb 100644
+index cc5a1b9d2d..901af9f6f0 100644
 --- a/osu.Game/Overlays/OnlineOverlay.cs
 +++ b/osu.Game/Overlays/OnlineOverlay.cs
-@@ -24,6 +24,12 @@ public abstract partial class OnlineOverlay<T> : FullscreenOverlay<T>
+@@ -24,6 +24,14 @@ public abstract partial class OnlineOverlay<T> : FullscreenOverlay<T>
          private readonly Container loadingContainer;
          private readonly Container content;
  
++        protected virtual bool AllowOfflineDisplay => false;
++
 +        public override void Show()
 +        {
-+            if (!Offline.RitsuOffline.Enabled)
++            if (!Offline.RitsuOffline.Enabled || AllowOfflineDisplay)
 +                base.Show();
 +        }
 +
@@ -12525,19 +12833,19 @@ index 178445d5d8..07a1d4fd2c 100644
              foreach (var s in subPanels)
                  ContentContainer.Add(s);
 diff --git a/osu.Game/Overlays/Toolbar/Toolbar.cs b/osu.Game/Overlays/Toolbar/Toolbar.cs
-index 2b5757b7bb..ce98aaea3d 100644
+index 2b5757b7bb..d9b536be00 100644
 --- a/osu.Game/Overlays/Toolbar/Toolbar.cs
 +++ b/osu.Game/Overlays/Toolbar/Toolbar.cs
-@@ -288,26 +288,11 @@ private void load(OsuGame osuGame, OsuConfigManager config)
+@@ -288,26 +288,12 @@ private void load(OsuGame osuGame, OsuConfigManager config)
                                          AutoSizeAxes = Axes.X,
                                          Children = new Drawable[]
                                          {
 -                                            // torii: News / Changelog / Wiki sacados del toolbar (no los usamos).
 -                                            new ToolbarRankingsButton(),
--                                            new ToolbarBeatmapListingButton(),
++                                            // The beatmap catalogue button opens an offline placeholder.
+                                             new ToolbarBeatmapListingButton(),
 -                                            new ToolbarChatButton(),
 -                                            new ToolbarSocialButton(),
-+                                            // Ritsu local toolbar: no account, server or shop controls.
                                              new ToolbarMusicButton(),
 -                                            userButton = new ToolbarUserButton(),
 -                                            new ToolbarAdminButton(),
@@ -12557,7 +12865,7 @@ index 2b5757b7bb..ce98aaea3d 100644
                                          }
                                      },
                                  }
-@@ -529,7 +514,7 @@ protected override void PopIn()
+@@ -529,7 +515,7 @@ protected override void PopIn()
  
          protected override void PopOut()
          {
@@ -12566,6 +12874,41 @@ index 2b5757b7bb..ce98aaea3d 100644
  
              this.MoveToY(-DrawSize.Y, transition_time, Easing.OutQuint);
              this.FadeOut(transition_time, Easing.InQuint);
+diff --git a/osu.Game/Overlays/Toolbar/ToolbarBeatmapListingButton.cs b/osu.Game/Overlays/Toolbar/ToolbarBeatmapListingButton.cs
+index 247be553e1..7c685284a8 100644
+--- a/osu.Game/Overlays/Toolbar/ToolbarBeatmapListingButton.cs
++++ b/osu.Game/Overlays/Toolbar/ToolbarBeatmapListingButton.cs
+@@ -3,6 +3,7 @@
+ 
+ using osu.Framework.Allocation;
+ using osu.Framework.Graphics;
++using osu.Game.Graphics;
+ using osu.Game.Input.Bindings;
+ 
+ namespace osu.Game.Overlays.Toolbar
+@@ -17,9 +18,20 @@ public ToolbarBeatmapListingButton()
+         }
+ 
+         [BackgroundDependencyLoader(true)]
+-        private void load(BeatmapListingOverlay beatmapListing)
++        private void load(BeatmapListingOverlay beatmapListing, OsuGame game)
+         {
+-            StateContainer = beatmapListing;
++            if (beatmapListing != null)
++                StateContainer = beatmapListing;
++            else
++            {
++                // The toolbar can load before the listing has been cached.
++                SetIcon(OsuIcon.Beatmap);
++                TooltipMain = "Beatmaps";
++                Action = () => game?.ToggleBeatmapListing();
++            }
++
++            if (Offline.RitsuOffline.Enabled)
++                TooltipSub = "Online search and downloads are unavailable in offline mode";
+         }
+     }
+ }
 diff --git a/osu.Game/Overlays/Toolbar/ToolbarLocalProfileButton.cs b/osu.Game/Overlays/Toolbar/ToolbarLocalProfileButton.cs
 new file mode 100644
 index 0000000000..266695141a
@@ -12845,10 +13188,18 @@ index 555a2a72c5..d3b9b269f1 100644
      }
  }
 diff --git a/osu.Game/Screens/Play/Player.cs b/osu.Game/Screens/Play/Player.cs
-index 9aeb74e056..072fd4ad2c 100644
+index 9aeb74e056..3a9ec13dc4 100644
 --- a/osu.Game/Screens/Play/Player.cs
 +++ b/osu.Game/Screens/Play/Player.cs
-@@ -137,6 +137,14 @@ public override bool RequiresPortraitOrientation
+@@ -28,6 +28,7 @@
+ using osu.Game.Graphics.Containers;
+ using osu.Game.IO.Archives;
+ using osu.Game.Online.API;
++using osu.Game.Online.API.Requests.Responses;
+ using osu.Game.Overlays;
+ using osu.Game.Rulesets;
+ using osu.Game.Rulesets.Mods;
+@@ -137,6 +138,14 @@ public override bool RequiresPortraitOrientation
          [Resolved]
          private IAPIProvider api { get; set; }
  
@@ -12863,7 +13214,7 @@ index 9aeb74e056..072fd4ad2c 100644
          [Resolved]
          private MusicController musicController { get; set; }
  
-@@ -1427,25 +1435,51 @@ public override bool OnExiting(ScreenExitEvent e)
+@@ -1427,25 +1436,57 @@ public override bool OnExiting(ScreenExitEvent e)
          /// </summary>
          /// <param name="beatmap"></param>
          /// <returns>The <see cref="Scoring.Score"/>.</returns>
@@ -12871,7 +13222,8 @@ index 9aeb74e056..072fd4ad2c 100644
 +        protected virtual Score CreateScore(IBeatmap beatmap)
          {
 -            ScoreInfo = new ScoreInfo
-+            localProfileId = ritsuProfiles?.ActiveProfileId;
++            var profile = ritsuProfiles?.GetActiveProfile();
++            localProfileId = profile?.Id;
 +            return new Score
              {
 -                User = api.LocalUser.Value,
@@ -12880,7 +13232,12 @@ index 9aeb74e056..072fd4ad2c 100644
 -        };
 +                ScoreInfo = new ScoreInfo
 +                {
-+                    User = api.LocalUser.Value,
++                    User = profile == null ? api.LocalUser.Value : new APIUser
++                    {
++                        Id = APIUser.SYSTEM_USER_ID,
++                        Username = profile.Name,
++                        CountryCode = api.LocalUser.Value.CountryCode,
++                    },
 +                    ClientVersion = game.Version,
 +                },
 +            };
@@ -12923,7 +13280,7 @@ index 9aeb74e056..072fd4ad2c 100644
  
              ByteArrayArchiveReader replayReader = null;
  
-@@ -1460,11 +1494,12 @@ protected virtual Task ImportScore(Score score)
+@@ -1460,11 +1501,12 @@ protected virtual Task ImportScore(Score score)
  
              // the import process will re-attach managed beatmap/rulesets to this score. we don't want this for now, so create a temporary copy to import.
              var importableScore = score.ScoreInfo.DeepClone();
@@ -12937,7 +13294,7 @@ index 9aeb74e056..072fd4ad2c 100644
              {
                  // because of the clone above, it's required that we copy back the post-import hash/ID to use for availability matching.
                  score.ScoreInfo.Hash = s.Hash;
-@@ -1472,7 +1507,9 @@ protected virtual Task ImportScore(Score score)
+@@ -1472,7 +1514,9 @@ protected virtual Task ImportScore(Score score)
                  score.ScoreInfo.Files.AddRange(s.Files.Detach());
              });
  

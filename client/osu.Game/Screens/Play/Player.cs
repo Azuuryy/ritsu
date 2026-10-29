@@ -28,6 +28,7 @@ using osu.Game.Extensions;
 using osu.Game.Graphics.Containers;
 using osu.Game.IO.Archives;
 using osu.Game.Online.API;
+using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Overlays;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
@@ -1437,12 +1438,18 @@ namespace osu.Game.Screens.Play
         /// <returns>The <see cref="Scoring.Score"/>.</returns>
         protected virtual Score CreateScore(IBeatmap beatmap)
         {
-            localProfileId = ritsuProfiles?.ActiveProfileId;
+            var profile = ritsuProfiles?.GetActiveProfile();
+            localProfileId = profile?.Id;
             return new Score
             {
                 ScoreInfo = new ScoreInfo
                 {
-                    User = api.LocalUser.Value,
+                    User = profile == null ? api.LocalUser.Value : new APIUser
+                    {
+                        Id = APIUser.SYSTEM_USER_ID,
+                        Username = profile.Name,
+                        CountryCode = api.LocalUser.Value.CountryCode,
+                    },
                     ClientVersion = game.Version,
                 },
             };

@@ -777,6 +777,8 @@ namespace osu.Game
 
         public void ToggleLocalProfile() => waitForReady(() => localProfiles, overlay => overlay.ToggleVisibility());
 
+        public void ToggleBeatmapListing() => waitForReady(() => beatmapListing, overlay => overlay.ToggleVisibility());
+
         /// <summary>
         /// Show a beatmap's set as an overlay, displaying the given beatmap.
         /// </summary>
@@ -1041,6 +1043,8 @@ namespace osu.Game
             }
 
             if (databasedScore == null) return;
+
+            Dependencies.Get<Offline.RitsuProfileManager>()?.ApplyProfileNameToDetachedScore(databasedScore.ScoreInfo);
 
             if (databasedScore.Replay == null)
             {

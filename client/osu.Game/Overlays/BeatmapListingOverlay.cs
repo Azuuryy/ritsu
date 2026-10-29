@@ -34,6 +34,8 @@ namespace osu.Game.Overlays
 {
     public partial class BeatmapListingOverlay : OnlineOverlay<BeatmapListingHeader>
     {
+        protected override bool AllowOfflineDisplay => true;
+
         [Resolved]
         private PreviewTrackManager previewTrackManager { get; set; }
 
@@ -48,8 +50,10 @@ namespace osu.Game.Overlays
         private BeatmapListingFilterControl filterControl => Header.FilterControl;
 
         public BeatmapListingOverlay()
-            : base(OverlayColourScheme.Blue)
+            : base(OverlayColourScheme.Blue, requiresSignIn: !Offline.RitsuOffline.Enabled)
         {
+            if (Offline.RitsuOffline.Enabled)
+                filterControl.Alpha = 0;
         }
 
         [BackgroundDependencyLoader]
@@ -85,6 +89,24 @@ namespace osu.Game.Overlays
                 }
             };
 
+            if (Offline.RitsuOffline.Enabled)
+            {
+                panelTarget.Child = new FillFlowContainer
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Direction = FillDirection.Vertical,
+                    Padding = new MarginPadding { Vertical = 40 },
+                    Spacing = new Vector2(0, 12),
+                    Children = new Drawable[]
+                    {
+                        new OsuSpriteText { Text = "Beatmap catalogue", Font = OsuFont.GetFont(size: 24, weight: FontWeight.SemiBold) },
+                        new OsuSpriteText { Text = "Online search and downloads are unavailable in offline mode.", Font = OsuFont.GetFont(size: 16) },
+                        new OsuSpriteText { Text = "Play imported beatmaps from Play > Solo.", Font = OsuFont.GetFont(size: 16) },
+                    },
+                };
+            }
+
             filterControl.TypingStarted = onTypingStarted;
             filterControl.SearchStarted = onSearchStarted;
             filterControl.SearchFinished = onSearchFinished;
@@ -112,7 +134,8 @@ namespace osu.Game.Overlays
 
         public void ShowWithSearch(string query)
         {
-            filterControl.Search(query);
+            if (!Offline.RitsuOffline.Enabled)
+                filterControl.Search(query);
             Show();
             ScrollFlow.ScrollToStart();
         }
@@ -120,13 +143,15 @@ namespace osu.Game.Overlays
         public void ShowWithGenreFilter(SearchGenre genre)
         {
             ShowWithSearch(string.Empty);
-            filterControl.FilterGenre(genre);
+            if (!Offline.RitsuOffline.Enabled)
+                filterControl.FilterGenre(genre);
         }
 
         public void ShowWithLanguageFilter(SearchLanguage language)
         {
             ShowWithSearch(string.Empty);
-            filterControl.FilterLanguage(language);
+            if (!Offline.RitsuOffline.Enabled)
+                filterControl.FilterLanguage(language);
         }
 
         protected override BeatmapListingHeader CreateHeader() => new BeatmapListingHeader();
@@ -143,7 +168,8 @@ namespace osu.Game.Overlays
         {
             base.OnFocus(e);
 
-            filterControl.TakeFocus();
+            if (!Offline.RitsuOffline.Enabled)
+                filterControl.TakeFocus();
         }
 
         private CancellationTokenSource cancellationToken;

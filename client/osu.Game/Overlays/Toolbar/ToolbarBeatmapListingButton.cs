@@ -3,6 +3,7 @@
 
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
+using osu.Game.Graphics;
 using osu.Game.Input.Bindings;
 
 namespace osu.Game.Overlays.Toolbar
@@ -17,9 +18,20 @@ namespace osu.Game.Overlays.Toolbar
         }
 
         [BackgroundDependencyLoader(true)]
-        private void load(BeatmapListingOverlay beatmapListing)
+        private void load(BeatmapListingOverlay beatmapListing, OsuGame game)
         {
-            StateContainer = beatmapListing;
+            if (beatmapListing != null)
+                StateContainer = beatmapListing;
+            else
+            {
+                // The toolbar can load before the listing has been cached.
+                SetIcon(OsuIcon.Beatmap);
+                TooltipMain = "Beatmaps";
+                Action = () => game?.ToggleBeatmapListing();
+            }
+
+            if (Offline.RitsuOffline.Enabled)
+                TooltipSub = "Online search and downloads are unavailable in offline mode";
         }
     }
 }

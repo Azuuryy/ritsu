@@ -24,9 +24,11 @@ namespace osu.Game.Overlays
         private readonly Container loadingContainer;
         private readonly Container content;
 
+        protected virtual bool AllowOfflineDisplay => false;
+
         public override void Show()
         {
-            if (!Offline.RitsuOffline.Enabled)
+            if (!Offline.RitsuOffline.Enabled || AllowOfflineDisplay)
                 base.Show();
         }
 

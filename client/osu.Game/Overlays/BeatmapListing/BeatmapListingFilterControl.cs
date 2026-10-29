@@ -212,6 +212,9 @@ namespace osu.Game.Overlays.BeatmapListing
         /// </summary>
         public void FetchNextPage()
         {
+            if (Offline.RitsuOffline.Enabled)
+                return;
+
             // there may be no results left.
             if (noMoreResults)
                 return;
@@ -230,6 +233,9 @@ namespace osu.Game.Overlays.BeatmapListing
 
         private void queueUpdateSearch(bool queryTextChanged = false)
         {
+            if (Offline.RitsuOffline.Enabled)
+                return;
+
             SearchStarted?.Invoke();
 
             resetSearch();

@@ -14,9 +14,11 @@ Original archives are kept after import.
 
 Open profiles with the player-name button in the top bar, or press **Ctrl+P**. Use the profile chips below the name to switch profiles; select **+** to create one. Right-click a chip to rename or delete that profile and, for the active profile, choose whether Relax and Autopilot count toward PP. The page shows recent scores and best performances for the mode selected in the game bar.
 
-New scores go to the active profile; existing scores are not associated automatically. On a map's selection screen, open **Ranking** and choose **All profiles** from the leaderboard menu to show every local score for that map, including scores that are not associated with a profile. **Current profile** filters to the active profile. In the classic selection screen, the same menu is above the scores.
+New scores go to the active profile; existing scores are not associated automatically. Scores already associated with a Ritsu profile display that profile's current name without changing the shared score database. On a map's selection screen, open **Ranking** and choose **All profiles** from the leaderboard menu to show every local score for that map, including scores that are not associated with a profile. **Current profile** filters to the active profile. In the classic selection screen, the same menu is above the scores.
 
 PP values are local estimates. The rank and graph compare local profiles only for the selected mode; they are not official rankings. History is reconstructed using the current profiles and PP settings. Deleting a profile removes its score associations but keeps scores and replays in shared storage.
+
+The beatmap catalogue button is available in the top bar and opens an offline placeholder. Online search, downloads, and sign-in remain unavailable. Locally imported beatmaps can be played through **Play → Solo**.
 
 Import and export JSON presets through **Settings → Maintenance → Mod Presets**. In the skin editor, add **RitsuLiveStarCounter** to the HUD components and place it where you want; it displays cumulative difficulty during play. The option to skip directly to the end of breaks is under **Settings → Torii → Gameplay**.
 

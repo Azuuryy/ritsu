@@ -334,7 +334,15 @@ namespace osu.Game.Online.API.Requests.Responses
 
         public int OnlineID => Id;
 
-        public bool Equals(APIUser other) => this.MatchesOnlineID(other);
+        public bool Equals(APIUser other)
+        {
+            // Local profiles share the system user ID, so their names must also be
+            // compared for bindables to propagate profile switches and renames.
+            if (Offline.RitsuOffline.Enabled && other != null && Id == SYSTEM_USER_ID && other.Id == SYSTEM_USER_ID)
+                return string.Equals(Username, other.Username, StringComparison.Ordinal);
+
+            return this.MatchesOnlineID(other);
+        }
 
 #pragma warning disable 649
         private class Country

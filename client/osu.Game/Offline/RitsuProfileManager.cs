@@ -56,6 +56,15 @@ namespace osu.Game.Offline
                 return data.Profiles.Select(p => new RitsuProfile { Id = p.Id, Name = p.Name, IncludeRelaxAutopilot = p.IncludeRelaxAutopilot }).ToArray();
         }
 
+        public RitsuProfile GetActiveProfile()
+        {
+            lock (sync)
+            {
+                var profile = activeProfile();
+                return new RitsuProfile { Id = profile.Id, Name = profile.Name, IncludeRelaxAutopilot = profile.IncludeRelaxAutopilot };
+            }
+        }
+
         public void AddProfile(string name)
         {
             lock (sync)
@@ -161,6 +170,24 @@ namespace osu.Game.Offline
                 return data.Scores.TryGetValue(scoreId, out var metadata) && metadata.ProfileId == data.ActiveProfileId;
         }
 
+        /// <summary>
+        /// Uses an existing Ritsu association for display only; never changes the shared score database.
+        /// </summary>
+        public void ApplyProfileNameToDetachedScore(ScoreInfo score)
+        {
+            if (score.IsManaged)
+                throw new InvalidOperationException("Profile names can only be applied to detached scores.");
+
+            string? profileName;
+            lock (sync)
+                profileName = data.Scores.TryGetValue(score.ID, out var metadata)
+                    ? data.Profiles.FirstOrDefault(p => p.Id == metadata.ProfileId)?.Name
+                    : null;
+
+            if (profileName != null)
+                score.User.Username = profileName;
+        }
+
         public List<ScoreInfo> GetScores(Guid profileId, string ruleset)
         {
             HashSet<Guid> ids;
@@ -169,10 +196,13 @@ namespace osu.Game.Offline
 
             // Realm's LINQ provider cannot compare a linked object's ShortName. Resolve
             // scores by their primary keys, then inspect the linked ruleset in memory.
-            return realm.Run(r => ids.Select(id => r.Find<ScoreInfo>(id))
-                                   .Where(s => s != null && !s.DeletePending && s.Ruleset.ShortName == ruleset)
-                                   .Select(s => s!)
-                                   .Detach());
+            var scores = realm.Run(r => ids.Select(id => r.Find<ScoreInfo>(id))
+                                           .Where(s => s != null && !s.DeletePending && s.Ruleset.ShortName == ruleset)
+                                           .Select(s => s!)
+                                           .Detach());
+            foreach (var score in scores)
+                ApplyProfileNameToDetachedScore(score);
+            return scores;
         }
 
         public RitsuProfileStatistics GetStatistics(string ruleset) => GetStatistics(ActiveProfileId, ruleset);

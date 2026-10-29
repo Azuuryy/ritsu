@@ -59,7 +59,7 @@ namespace osu.Game.Online.Leaderboards
 
         private void onProfilesChanged() => Schedule(() =>
         {
-            if (CurrentCriteria?.Scope == BeatmapLeaderboardScope.Local)
+            if (CurrentCriteria?.Scope is BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll)
                 FetchWithCriteria(CurrentCriteria, true);
         });
 
@@ -245,6 +245,11 @@ namespace osu.Game.Online.Leaderboards
             newScores = newScores.Detach().OrderByCriteria(CurrentCriteria.Sorting);
 
             var newScoresArray = newScores.ToArray();
+            if (ritsuProfiles != null)
+            {
+                foreach (var score in newScoresArray)
+                    ritsuProfiles.ApplyProfileNameToDetachedScore(score);
+            }
             var personalBest = ritsuProfiles == null ? null : newScoresArray.Where(s => ritsuProfiles.BelongsToActiveProfile(s.ID)).OrderByDescending(s => s.TotalScore).FirstOrDefault();
             scores.Value = LeaderboardScores.Success(newScoresArray, scoresRequested: newScoresArray.Length, totalScores: newScoresArray.Length, personalBest);
         }
