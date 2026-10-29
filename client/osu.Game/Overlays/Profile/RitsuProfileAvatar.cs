@@ -39,24 +39,21 @@ namespace osu.Game.Overlays.Profile
         {
             Masking = true;
             CornerRadius = 20;
-            InternalChildren = new Drawable[]
+            AddInternal(portrait = new Sprite
             {
-                portrait = new Sprite
-                {
-                    RelativeSizeAxes = Axes.Both,
-                    FillMode = FillMode.Fit,
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                },
-                new SpriteIcon
-                {
-                    Anchor = Anchor.BottomRight,
-                    Origin = Anchor.BottomRight,
-                    Size = new Vector2(19),
-                    Icon = FontAwesome.Solid.Camera,
-                    Margin = new MarginPadding(3),
-                },
-            };
+                RelativeSizeAxes = Axes.Both,
+                FillMode = FillMode.Fit,
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+            });
+            AddInternal(new SpriteIcon
+            {
+                Anchor = Anchor.BottomRight,
+                Origin = Anchor.BottomRight,
+                Size = new Vector2(19),
+                Icon = FontAwesome.Solid.Camera,
+                Margin = new MarginPadding(3),
+            });
         }
 
         [BackgroundDependencyLoader]

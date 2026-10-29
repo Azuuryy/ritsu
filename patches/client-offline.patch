@@ -14433,10 +14433,10 @@ index 6e7e825620..3c06fa29b3 100644
  </Project>
 diff --git a/osu.Game/Overlays/Profile/RitsuProfileAvatar.cs b/osu.Game/Overlays/Profile/RitsuProfileAvatar.cs
 new file mode 100644
-index 0000000000..014ba442d516
+index 0000000000..b9ff0b0dd4ba23f9be4303628843911336fd3579
 --- /dev/null
 +++ b/osu.Game/Overlays/Profile/RitsuProfileAvatar.cs
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,123 @@
 +// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 +
 +using System;
@@ -14478,24 +14478,21 @@ index 0000000000..014ba442d516
 +        {
 +            Masking = true;
 +            CornerRadius = 20;
-+            InternalChildren = new Drawable[]
++            AddInternal(portrait = new Sprite
 +            {
-+                portrait = new Sprite
-+                {
-+                    RelativeSizeAxes = Axes.Both,
-+                    FillMode = FillMode.Fit,
-+                    Anchor = Anchor.Centre,
-+                    Origin = Anchor.Centre,
-+                },
-+                new SpriteIcon
-+                {
-+                    Anchor = Anchor.BottomRight,
-+                    Origin = Anchor.BottomRight,
-+                    Size = new Vector2(19),
-+                    Icon = FontAwesome.Solid.Camera,
-+                    Margin = new MarginPadding(3),
-+                },
-+            };
++                RelativeSizeAxes = Axes.Both,
++                FillMode = FillMode.Fit,
++                Anchor = Anchor.Centre,
++                Origin = Anchor.Centre,
++            });
++            AddInternal(new SpriteIcon
++            {
++                Anchor = Anchor.BottomRight,
++                Origin = Anchor.BottomRight,
++                Size = new Vector2(19),
++                Icon = FontAwesome.Solid.Camera,
++                Margin = new MarginPadding(3),
++            });
 +        }
 +
 +        [BackgroundDependencyLoader]

@@ -20,6 +20,7 @@ Local replay video rendering is planned for 0.2.5.
 
 ### Fixed
 
+- Fixed a startup crash caused by profile avatar initialization.
 - New local installations use `Guest` for the initial profile name.
 - New local scores use the active profile's name. Scores already associated with a Ritsu profile display its current name without changing shared score data.
 
