@@ -3,16 +3,20 @@ $ErrorActionPreference = 'Stop'
 if (-not $SkipBootstrap) { & (Join-Path $PSScriptRoot 'Bootstrap.ps1') }
 $ritsuCache = Join-Path $PSScriptRoot '.cache'
 $ritsuArtifacts = Join-Path $PSScriptRoot 'artifacts'
-$ritsuBundleName = 'Ritsu-0.1.0-alpha-win-x64'
+$ritsuVersion = (Get-Content -Raw -Encoding UTF8 (Join-Path $PSScriptRoot 'VERSION')).Trim()
+$ritsuBundleName = "Ritsu-$ritsuVersion-win-x64"
 $ritsuPublish = Join-Path $ritsuCache ($ritsuBundleName + '-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force $ritsuCache,$ritsuArtifacts,$ritsuPublish | Out-Null
 $ritsuProject = Join-Path $PSScriptRoot 'client/osu.Desktop/osu.Desktop.csproj'
-& dotnet publish $ritsuProject -c Release -r win-x64 --self-contained true -o $ritsuPublish "-p:NuGetPackages=$(Join-Path $ritsuCache 'nuget')" -p:Version=0.1.0 -p:InformationalVersion=0.1.0-alpha -p:PublishSingleFile=false -v:minimal
+# osu! uses AssemblyVersion.Major > 0 to identify a deployed build. Keep the
+# product version at 0.x while setting that internal deployment marker.
+& dotnet publish $ritsuProject -c Release -r win-x64 --self-contained true -o $ritsuPublish "-p:NuGetPackages=$(Join-Path $ritsuCache 'nuget')" "-p:Version=$ritsuVersion" "-p:InformationalVersion=$ritsuVersion" "-p:FileVersion=$ritsuVersion" -p:AssemblyVersion=1.0.0.0 -p:PublishSingleFile=false -v:minimal
 if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
-foreach ($ritsuDocument in @('GUIDE.md','ROADMAP.md','VALIDATION.md','dependencies.json')) {
+foreach ($ritsuDocument in @('GUIDE.md','ROADMAP.md','VALIDATION.md','CHANGELOG.md','VERSION','dependencies.json')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $ritsuDocument) -Destination $ritsuPublish
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'client/LICENCE') -Destination (Join-Path $ritsuPublish 'LICENCE-client.txt')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'client/LICENCE-Modosu.txt') -Destination $ritsuPublish
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'toriirefresh-framework/LICENCE') -Destination (Join-Path $ritsuPublish 'LICENCE-framework.txt')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'toriirefresh-resources/LICENCE.md') -Destination (Join-Path $ritsuPublish 'LICENCE-resources.md')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $ritsuPublish 'RITSU-README.md')

@@ -165,8 +165,10 @@ namespace osu.Game.Screens.Select
                     Width = 309,
                     AccentColour = new Color4(31 / 255f, 184 / 255f, 255 / 255f, 1f),
                     HoverColour = new Color4(255 / 255f, 102 / 255f, 171 / 255f, 1f),
-                    Items = Enum.GetValues<BeatmapLeaderboardScope>(),
-                    ItemText = scope => $@"{scope} Ranking",
+                    Items = osu.Game.Offline.RitsuOffline.Enabled
+                        ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
+                        : Enum.GetValues<BeatmapLeaderboardScope>(),
+                    ItemText = scope => scope == BeatmapLeaderboardScope.Local ? "Current profile" : scope == BeatmapLeaderboardScope.LocalAll ? "All profiles" : $@"{scope} Ranking",
                     Current = { BindTarget = Scope },
                 },
             };
@@ -247,7 +249,7 @@ namespace osu.Game.Screens.Select
         // volver al scope preferido del usuario.
         private void applyScopeForBeatmap()
         {
-            var target = hasOnlineLeaderboard() ? preferredScope : BeatmapLeaderboardScope.Local;
+            var target = hasOnlineLeaderboard() || preferredScope == BeatmapLeaderboardScope.LocalAll ? preferredScope : BeatmapLeaderboardScope.Local;
 
             if (Scope.Value == target)
                 return;

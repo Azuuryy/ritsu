@@ -19,6 +19,8 @@ namespace osu.Game.Localisation
         /// </summary>
         public static LocalisableString Local => new TranslatableString(getKey(@"local"), @"Local");
 
+        public static LocalisableString LocalAll => "All local scores";
+
         /// <summary>
         /// "Global"
         /// </summary>

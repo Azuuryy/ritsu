@@ -1,6 +1,14 @@
 # Validation du socle hors ligne
 
-Validation effectuée le 26 octobre 2026. Les résultats et captures restent dans `.cache/verification-a8060692388f42d5bfe881ef0798c8ec`. Les rapports distinguent la compilation de référence, les contrôles ciblés, le parcours avec rendu et le redémarrage. L'utilisateur a confirmé le bon fonctionnement du démarrage.
+## Retour utilisateur sur le build précédent
+
+L'utilisateur a indiqué que les quatre modes, la séparation des scores par profil et le compteur d'étoiles fonctionnaient. Ce retour précède le déplacement des profils dans la barre supérieure et du compteur dans l'éditeur de skin : ces modifications restent à vérifier manuellement. La compatibilité des nouveaux mods, scores et replays avec les autres clients reste également à vérifier.
+
+Le 29 octobre 2026, l'utilisateur a signalé sur le build 0.2.1 une interface de profil incorrecte et un échec de chargement des statistiques. Les journaux identifient une requête Realm non prise en charge ; son correctif et la nouvelle interface restent à vérifier en jeu.
+
+## Validation historique du socle
+
+Validation effectuée le 26 octobre 2026 sur le socle alors isolé ; elle ne couvre pas le rétablissement ultérieur de la liaison au dossier lazer ni de la détection osu!stable. Les résultats et captures restent dans `.cache/verification-a8060692388f42d5bfe881ef0798c8ec`. Les rapports distinguent la compilation de référence, les contrôles ciblés, le parcours avec rendu et le redémarrage. L'utilisateur a confirmé le bon fonctionnement du démarrage.
 
 ## Vérifications
 
@@ -26,7 +34,7 @@ Le client bloque les requêtes du framework avant transport, n'instancie pas de 
 ## Limites connues
 
 - L'identité Torii reste visible et les exécutables conservent leurs noms.
-- Les nouveaux outils Modosu, le tournoi et le nouvel éditeur visuel ne sont pas inclus.
+- Cette validation historique ne couvre pas les outils Modosu ajoutés ensuite. Le tournoi et le nouvel éditeur visuel ne sont pas inclus.
 - La partie automatisée valide la chaîne locale avec NF et des misses ; elle ne constitue pas un benchmark de latence ou un test d'habileté.
 - La base épinglée émet des avertissements de compilation et de dépendances hérités. Ce jalon ne les transforme pas en certification générale de sécurité.
 - Le pilotage interactif a été interrompu par Échap après le lancement de référence. Les vérifications suivantes utilisent des scénarios automatisés et des captures du moteur, sans contrôle des fenêtres.

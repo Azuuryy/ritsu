@@ -16,6 +16,7 @@ namespace osu.Game.Rulesets.Osu.Tests
             var mods = new OsuRuleset().GetModsFor(ModType.Fun).ToArray();
 
             Assert.That(mods.Any(mod => mod is OsuModHitSounder), Is.True);
+            Assert.That(mods.Any(mod => mod is OsuModMetronome), Is.True);
             Assert.That(mods.Any(mod => mod is ModPitchAdjust), Is.True);
         }
     }

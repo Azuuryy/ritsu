@@ -287,6 +287,7 @@ namespace osu.Game
             }
 
             Resources.AddStore(new DllResourceStore(OsuResources.ResourceAssembly));
+            Resources.AddStore(new DllResourceStore(typeof(OsuGameBase).Assembly));
 
             dependencies.Cache(realm = new RealmAccess(Storage, CLIENT_DATABASE_FILENAME, Host.UpdateThread));
 
@@ -334,6 +335,14 @@ namespace osu.Game
             CurrentLanguage.BindValueChanged(val => frameworkLocale.Value = val.NewValue.ToCultureCode());
 
             dependencies.CacheAs(API ??= new Offline.OfflineAPIProvider(LocalConfig));
+
+            var ritsuProfiles = new Offline.RitsuProfileManager(Storage, realm);
+            dependencies.Cache(ritsuProfiles);
+            if (API is Offline.OfflineAPIProvider offlineProfilesApi)
+            {
+                offlineProfilesApi.SetLocalProfile(ritsuProfiles.ActiveProfileName);
+                ritsuProfiles.ActiveProfileChanged += offlineProfilesApi.SetLocalProfile;
+            }
 
             var defaultBeatmap = new DummyWorkingBeatmap(Audio, Textures);
 

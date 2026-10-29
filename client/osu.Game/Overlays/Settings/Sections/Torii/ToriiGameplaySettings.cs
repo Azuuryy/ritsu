@@ -65,6 +65,12 @@ namespace osu.Game.Overlays.Settings.Sections.Torii
                 {
                     Keywords = new[] { @"skip", @"break", @"breaks", @"single", @"confirmation", @"double", @"press", @"misclick", @"torii" },
                 },
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = "Skip directly to the end of breaks",
+                    Current = config.GetBindable<bool>(OsuSetting.RitsuSkipBreakToEnd),
+                    HintText = "Use Modosu's break skip target instead of leaving the Torii lead-in.",
+                }),
             };
         }
     }

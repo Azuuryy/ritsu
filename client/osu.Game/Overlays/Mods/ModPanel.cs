@@ -6,8 +6,11 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Effects;
+using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.Textures;
 using osu.Framework.Localisation;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
@@ -31,9 +34,35 @@ namespace osu.Game.Overlays.Mods
         // rojo de la gate torii (mismo vermillion que usan los auras Founder).
         private static readonly Color4 torii_red = new Color4(255, 80, 60, 255);
         private static readonly Color4 torii_badge_active = new Color4(70, 20, 35, 255);
+        private static readonly Color4 modosu_gold = new Color4(217, 175, 79, 255);
+        private static readonly Color4 modosu_badge_active = new Color4(72, 50, 20, 255);
+        private static readonly Color4 ritsu_blue = new Color4(158, 203, 248, 255);
+        private static readonly Color4 ritsu_lavender = new Color4(209, 198, 245, 255);
+        private static readonly Color4 ritsu_badge_active = new Color4(35, 48, 85, 255);
 
-        private SpriteIcon toriiExclusiveIcon = null!;
-        private OsuSpriteText toriiExclusiveText = null!;
+        /// <summary>
+        /// Style of the "exclusive" badge associated with this panel's mod, if any.
+        /// Single source of truth for badge, border and edge glow of all exclusive mods.
+        /// </summary>
+        private ExclusiveStyle? exclusiveStyle;
+
+        private sealed record ExclusiveStyle(
+            LocalisableString Text,
+            Drawable? Icon,
+            bool TintIcon,
+            Color4 IdleColour,
+            Color4 ActiveColour,
+            Color4 BorderStart,
+            Color4 BorderEnd,
+            Color4 EdgeColour);
+
+        protected override ColourInfo BorderColourFor(Colour4 background, Colour4 foreground)
+        {
+            if (exclusiveStyle != null)
+                return ColourInfo.GradientVertical(exclusiveStyle.BorderStart, exclusiveStyle.BorderEnd);
+
+            return base.BorderColourFor(background, foreground);
+        }
 
         public ModPanel(ModState modState)
         {
@@ -58,9 +87,54 @@ namespace osu.Game.Overlays.Mods
         }
 
         [BackgroundDependencyLoader]
-        private void load(OsuColour colours)
+        private void load(OsuColour colours, TextureStore textures)
         {
             AccentColour = colours.ForModType(Mod.Type);
+
+            exclusiveStyle = Mod switch
+            {
+                IToriiExclusiveMod => new ExclusiveStyle(
+                    "from torii",
+                    new SpriteIcon { Icon = FontAwesome.Solid.ToriiGate, Size = new Vector2(12) },
+                    TintIcon: true,
+                    torii_red, torii_badge_active,
+                    torii_red, torii_red, torii_red),
+
+                IModosuMod => new ExclusiveStyle(
+                    "from modosu",
+                    new Container
+                    {
+                        Size = new Vector2(9),
+                        Children = new Drawable[]
+                        {
+                            new Circle
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = Color4.White,
+                            },
+                            new OsuSpriteText
+                            {
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                Colour = Color4.Black,
+                                Text = "M",
+                                Font = OsuFont.Default.With(size: 7, weight: FontWeight.Bold)
+                            }
+                        }
+                    },
+                    TintIcon: false,
+                    modosu_gold, modosu_badge_active,
+                    modosu_gold, modosu_gold, modosu_gold),
+
+                IRitsuExclusiveMod => new ExclusiveStyle(
+                    "from ritsu",
+                    new Sprite { Texture = textures.Get("Ritsu/logo"), Size = new Vector2(16) },
+                    TintIcon: false,
+                    ritsu_blue, ritsu_badge_active,
+                    ritsu_blue, ritsu_lavender, ritsu_blue),
+
+                _ => null,
+            };
         }
 
         protected override void LoadComplete()
@@ -70,63 +144,69 @@ namespace osu.Game.Overlays.Mods
             modState.ValidForSelection.BindValueChanged(_ => updateFilterState());
             modState.MatchingTextFilter.BindValueChanged(_ => updateFilterState(), true);
 
-            // el marco mas grueso va con el badge, no con un mod en particular.
-            if (Mod is IToriiExclusiveMod)
-                Content.BorderThickness = 3;
-
             modState.Preselected.BindValueChanged(b => updateEdgeEffect(b.NewValue), true);
 
-            // badge "torii exclusive" con la gate roja para los mods propios de torii.
-            if (Mod is IToriiExclusiveMod)
-            {
-                MainContentContainer.Add(new Container
-                {
-                    Anchor = Anchor.TopRight,
-                    Origin = Anchor.TopRight,
-                    AutoSizeAxes = Axes.Both,
-                    Margin = new MarginPadding { Right = 6, Top = 5 },
-                    Shear = -OsuGame.SHEAR,
-                    Child = new FillFlowContainer
-                    {
-                        AutoSizeAxes = Axes.Both,
-                        Direction = FillDirection.Horizontal,
-                        Spacing = new Vector2(3, 0),
-                        Children = new Drawable[]
-                        {
-                            toriiExclusiveIcon = new SpriteIcon
-                            {
-                                Icon = FontAwesome.Solid.ToriiGate,
-                                Size = new Vector2(9),
-                                Colour = torii_red,
-                                // mismo anchor X que el texto, sino el flow crashea.
-                                Anchor = Anchor.CentreLeft,
-                                Origin = Anchor.CentreLeft,
-                            },
-                            toriiExclusiveText = new OsuSpriteText
-                            {
-                                Text = "torii exclusive",
-                                Font = OsuFont.Default.With(size: 9, weight: FontWeight.SemiBold),
-                                Colour = torii_red,
-                                Anchor = Anchor.CentreLeft,
-                                Origin = Anchor.CentreLeft,
-                            },
-                        },
-                    },
-                });
-
-                Active.BindValueChanged(_ => updateToriiBadgeColour(), true);
-            }
+            if (exclusiveStyle != null)
+                createExclusiveBadge(exclusiveStyle);
         }
 
-        private void updateToriiBadgeColour()
+        private void createExclusiveBadge(ExclusiveStyle style)
         {
-            if (toriiExclusiveIcon == null || toriiExclusiveText == null)
-                return;
+            // el marco mas grueso va con el badge, no con un mod en particular.
+            Content.BorderThickness = 2;
+            // Borders are rendered by the mask shader on its children. The text background
+            // has its own mask, so repaint the border on a transparent box in front of it.
+            Content.Add(new Box { RelativeSizeAxes = Axes.Both, Colour = Colour4.Transparent, Depth = float.MinValue });
 
-            Color4 colour = Active.Value ? torii_badge_active : torii_red;
+            if (style.Icon != null)
+            {
+                // mismo anchor X que el texto, sino el flow crashea.
+                style.Icon.Anchor = Anchor.CentreLeft;
+                style.Icon.Origin = Anchor.CentreLeft;
 
-            toriiExclusiveIcon.FadeColour(colour, TRANSITION_DURATION, Easing.OutQuint);
-            toriiExclusiveText.FadeColour(colour, TRANSITION_DURATION, Easing.OutQuint);
+                if (style.TintIcon)
+                    style.Icon.Colour = style.IdleColour;
+            }
+
+            var text = new OsuSpriteText
+            {
+                Text = style.Text,
+                Font = OsuFont.Default.With(size: 9, weight: FontWeight.SemiBold),
+                Colour = style.IdleColour,
+                Anchor = Anchor.CentreLeft,
+                Origin = Anchor.CentreLeft,
+            };
+
+            var flow = new FillFlowContainer
+            {
+                AutoSizeAxes = Axes.Both,
+                Direction = FillDirection.Horizontal,
+                Spacing = new Vector2(3, 0),
+            };
+
+            if (style.Icon != null)
+                flow.Add(style.Icon);
+            flow.Add(text);
+
+            MainContentContainer.Add(new Container
+            {
+                Anchor = Anchor.TopRight,
+                Origin = Anchor.TopRight,
+                AutoSizeAxes = Axes.Both,
+                Margin = new MarginPadding { Right = 6, Top = 5 },
+                Shear = -OsuGame.SHEAR,
+                Child = flow,
+            });
+
+            Active.BindValueChanged(_ =>
+            {
+                Color4 colour = Active.Value ? style.ActiveColour : style.IdleColour;
+
+                if (style.Icon != null && style.TintIcon)
+                    style.Icon.FadeColour(colour, TRANSITION_DURATION, Easing.OutQuint);
+
+                text.FadeColour(colour, TRANSITION_DURATION, Easing.OutQuint);
+            }, true);
         }
 
         private void updateEdgeEffect(bool preselected)
@@ -144,14 +224,14 @@ namespace osu.Game.Overlays.Mods
                 return;
             }
 
-            if (Mod is IToriiExclusiveMod)
+            if (exclusiveStyle != null)
             {
                 Content.EdgeEffect = new EdgeEffectParameters
                 {
                     Type = EdgeEffectType.Glow,
-                    Colour = torii_red,
+                    Colour = exclusiveStyle.EdgeColour,
                     Hollow = true,
-                    Radius = 3,
+                    Radius = 1,
                 };
 
                 return;

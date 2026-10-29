@@ -47,6 +47,22 @@ namespace osu.Game.Online.Leaderboards
         [Resolved]
         private RulesetStore rulesets { get; set; } = null!;
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.Offline.RitsuProfileManager? ritsuProfiles { get; set; }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+            if (ritsuProfiles != null)
+                ritsuProfiles.Changed += onProfilesChanged;
+        }
+
+        private void onProfilesChanged() => Schedule(() =>
+        {
+            if (CurrentCriteria?.Scope == BeatmapLeaderboardScope.Local)
+                FetchWithCriteria(CurrentCriteria, true);
+        });
+
         /// <summary>
         /// Fetch leaderboard content with the new criteria specified in the background.
         /// On completion, <see cref="Scores"/> will be updated with the results from this call (unless a more recent call with a different criteria has completed).
@@ -76,6 +92,7 @@ namespace osu.Game.Online.Leaderboards
             switch (newCriteria.Scope)
             {
                 case BeatmapLeaderboardScope.Local:
+                case BeatmapLeaderboardScope.LocalAll:
                 {
                     localScoreSubscription = realm.RegisterForNotifications(r =>
                         r.All<ScoreInfo>().Filter($"{nameof(ScoreInfo.BeatmapInfo)}.{nameof(BeatmapInfo.ID)} == $0"
@@ -205,6 +222,9 @@ namespace osu.Game.Online.Leaderboards
 
             var newScores = sender.AsEnumerable();
 
+            if (CurrentCriteria.Scope == BeatmapLeaderboardScope.Local && ritsuProfiles != null)
+                newScores = newScores.Where(s => ritsuProfiles.BelongsToActiveProfile(s.ID));
+
             if (CurrentCriteria.ExactMods != null)
             {
                 if (!CurrentCriteria.ExactMods.Any())
@@ -225,7 +245,8 @@ namespace osu.Game.Online.Leaderboards
             newScores = newScores.Detach().OrderByCriteria(CurrentCriteria.Sorting);
 
             var newScoresArray = newScores.ToArray();
-            scores.Value = LeaderboardScores.Success(newScoresArray, scoresRequested: newScoresArray.Length, totalScores: newScoresArray.Length, null);
+            var personalBest = ritsuProfiles == null ? null : newScoresArray.Where(s => ritsuProfiles.BelongsToActiveProfile(s.ID)).OrderByDescending(s => s.TotalScore).FirstOrDefault();
+            scores.Value = LeaderboardScores.Success(newScoresArray, scoresRequested: newScoresArray.Length, totalScores: newScoresArray.Length, personalBest);
         }
 
         protected override void Dispose(bool isDisposing)
@@ -235,6 +256,8 @@ namespace osu.Game.Online.Leaderboards
             localScoreSubscription?.Dispose();
             beatmapUpdateSubscription?.Dispose();
             inFlightOnlineRequest?.Cancel();
+            if (ritsuProfiles != null)
+                ritsuProfiles.Changed -= onProfilesChanged;
         }
     }
 

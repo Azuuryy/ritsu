@@ -53,6 +53,7 @@ namespace osu.Game.Overlays.Mods
         protected virtual Colour4 BackgroundColour => Active.Value ? AccentColour.Darken(0.3f) : ColourProvider.Background3;
         protected virtual Colour4 ForegroundColour => Active.Value ? AccentColour : ColourProvider.Background2;
         protected virtual Colour4 TextColour => Active.Value ? ColourProvider.Background6 : Colour4.White;
+        protected virtual ColourInfo BorderColourFor(Colour4 background, Colour4 foreground) => ColourInfo.GradientVertical(background, foreground);
 
         protected const double TRANSITION_DURATION = 150;
 
@@ -269,7 +270,7 @@ namespace osu.Game.Overlays.Mods
                 transitionDuration *= 4;
             }
 
-            Content.TransformTo(nameof(BorderColour), ColourInfo.GradientVertical(backgroundColour, foregroundColour), transitionDuration, Easing.OutQuint);
+            Content.TransformTo(nameof(BorderColour), BorderColourFor(backgroundColour, foregroundColour), transitionDuration, Easing.OutQuint);
             Background.FadeColour(backgroundColour, transitionDuration, Easing.OutQuint);
             SwitchContainer.ResizeWidthTo(targetWidth, transitionDuration, Easing.OutQuint);
             MainContentContainer.TransformTo(nameof(Padding), new MarginPadding

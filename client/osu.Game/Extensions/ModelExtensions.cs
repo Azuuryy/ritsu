@@ -188,6 +188,7 @@ namespace osu.Game.Extensions
             switch (scope)
             {
                 case BeatmapLeaderboardScope.Local:
+                case BeatmapLeaderboardScope.LocalAll:
                     return false;
 
                 case BeatmapLeaderboardScope.Country:

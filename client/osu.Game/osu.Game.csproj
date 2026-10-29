@@ -65,5 +65,6 @@
        .toriicosmetic en esa carpeta: ni csproj ni C# ni registro. -->
   <ItemGroup>
     <EmbeddedResource Include="Cosmetics\Definitions\Shipped\*.toriicosmetic" />
+    <EmbeddedResource Include="Textures\Ritsu\logo.png" />
   </ItemGroup>
 </Project>

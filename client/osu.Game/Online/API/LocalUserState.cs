@@ -55,6 +55,11 @@ namespace osu.Game.Online.API
 
         private static APIUser createGuestUser() => new GuestUser();
 
+        internal void SetOfflineProfile(string username)
+        {
+            localUser.Value = new APIUser { Id = APIUser.SYSTEM_USER_ID, Username = username };
+        }
+
         /// <summary>
         /// Show a placeholder user if saved credentials are available.
         /// This is useful for storing local scores and showing a placeholder username after starting the game,

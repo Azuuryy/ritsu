@@ -255,7 +255,7 @@ namespace osu.Game.Screens.Select
             {
                 var fetchBeatmapInfo = beatmap.Value.BeatmapInfo;
                 var fetchRuleset = ruleset.Value ?? fetchBeatmapInfo.Ruleset;
-                var fetchSorting = fetchScope == BeatmapLeaderboardScope.Local ? Sorting.Value : LeaderboardSortMode.Score;
+                var fetchSorting = fetchScope is BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll ? Sorting.Value : LeaderboardSortMode.Score;
 
                 // For now, we forcefully refresh to keep things simple.
                 // In the future, removing this requirement may be deemed useful, but will need ample testing of edge case scenarios
@@ -272,7 +272,7 @@ namespace osu.Game.Screens.Select
                     fetchedScores.BindValueChanged(_ => Schedule(updateScores), true);
                     initialFetchComplete = true;
                 }
-            }, initialFetchComplete && fetchScope != BeatmapLeaderboardScope.Local ? 300 : 0);
+            }, initialFetchComplete && fetchScope is not (BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll) ? 300 : 0);
         }
 
         private void updateScores()
@@ -311,7 +311,7 @@ namespace osu.Game.Screens.Select
             {
                 BeatmapLeaderboardScore.HighlightType? highlightType = null;
 
-                if (s.OnlineID == userScore?.OnlineID)
+                if (userScore != null && (s.ID == userScore.ID || (s.OnlineID > 0 && s.OnlineID == userScore.OnlineID)))
                     highlightType = BeatmapLeaderboardScore.HighlightType.Own;
                 else if (api.LocalUserState.Friends.Any(r => r.TargetID == s.UserID) && Scope.Value != BeatmapLeaderboardScope.Friend)
                     highlightType = BeatmapLeaderboardScore.HighlightType.Friend;

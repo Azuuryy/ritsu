@@ -150,7 +150,10 @@ namespace osu.Game.Screens.Select
         {
             base.LoadComplete();
             detachedBeatmaps.BindCollectionChanged(beatmapSetsChanged, true);
+            if (ritsuProfiles != null) ritsuProfiles.Changed += onRitsuProfileChanged;
         }
+
+        private void onRitsuProfileChanged() => Schedule(() => { if (Criteria != null) Filter(Criteria); });
 
         #region Beatmap source hookup
 
@@ -988,6 +991,7 @@ namespace osu.Game.Screens.Select
 
             if (difficultyCache != null)
                 difficultyCache.TrackedDifficultyUpdated -= trackedDifficultyUpdated;
+            if (ritsuProfiles != null) ritsuProfiles.Changed -= onRitsuProfileChanged;
         }
 
         #endregion
@@ -999,6 +1003,9 @@ namespace osu.Game.Screens.Select
 
         [Resolved]
         private IAPIProvider api { get; set; } = null!;
+
+        [Resolved(canBeNull: true)]
+        private osu.Game.Offline.RitsuProfileManager? ritsuProfiles { get; set; }
 
         /// <remarks>
         /// FOOTGUN WARNING: this being sorted on the realm side before detaching is IMPORTANT.
@@ -1021,6 +1028,8 @@ namespace osu.Game.Screens.Select
 
             foreach (var score in allLocalScores)
             {
+                if (ritsuProfiles != null && !ritsuProfiles.BelongsToActiveProfile(score.ID))
+                    continue;
                 Debug.Assert(score.BeatmapInfo != null);
 
                 if (topRankMapping.ContainsKey(score.BeatmapInfo.ID))

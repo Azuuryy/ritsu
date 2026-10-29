@@ -97,7 +97,7 @@ namespace osu.Game.Screens.Select
                                         Origin = Anchor.TopRight,
                                         RelativeSizeAxes = Axes.X,
                                         Width = 0.4f,
-                                        Current = { Value = BeatmapLeaderboardScope.Global },
+                                        Current = { Value = osu.Game.Offline.RitsuOffline.Enabled ? BeatmapLeaderboardScope.Local : BeatmapLeaderboardScope.Global },
                                     },
                                 },
                             },
@@ -114,7 +114,9 @@ namespace osu.Game.Screens.Select
             {
                 base.LoadComplete();
 
-                scopeDropdown.Current.Value = tryMapDetailTabToLeaderboardScope(configDetailTab.Value) ?? scopeDropdown.Current.Value;
+                scopeDropdown.Current.Value = osu.Game.Offline.RitsuOffline.Enabled
+                    ? BeatmapLeaderboardScope.Local
+                    : tryMapDetailTabToLeaderboardScope(configDetailTab.Value) ?? scopeDropdown.Current.Value;
                 scopeDropdown.Current.BindValueChanged(_ => updateConfigDetailTab());
 
                 tabControl.Current.Value = configDetailTab.Value == BeatmapDetailTab.Details ? Selection.Details : Selection.Ranking;
@@ -128,7 +130,7 @@ namespace osu.Game.Screens.Select
                 {
                     sortDropdown.Current.Disabled = false;
 
-                    if (scope.NewValue == BeatmapLeaderboardScope.Local)
+                    if (scope.NewValue is BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll)
                     {
                         sortDropdown.Current.BindTo(configLeaderboardSortMode);
                     }
@@ -192,6 +194,7 @@ namespace osu.Game.Screens.Select
                 switch (scope)
                 {
                     case BeatmapLeaderboardScope.Local:
+                    case BeatmapLeaderboardScope.LocalAll:
                         return BeatmapDetailTab.Local;
 
                     case BeatmapLeaderboardScope.Country:
@@ -227,10 +230,17 @@ namespace osu.Game.Screens.Select
                 public ScopeDropdown()
                     : base(BeatmapLeaderboardWedgeStrings.Scope)
                 {
-                    Items = Enum.GetValues<BeatmapLeaderboardScope>();
+                    Items = osu.Game.Offline.RitsuOffline.Enabled
+                        ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
+                        : Enum.GetValues<BeatmapLeaderboardScope>();
                 }
 
-                protected override LocalisableString GenerateItemText(BeatmapLeaderboardScope item) => item.GetLocalisableDescription();
+                protected override LocalisableString GenerateItemText(BeatmapLeaderboardScope item) => item switch
+                {
+                    BeatmapLeaderboardScope.Local => "Current profile",
+                    BeatmapLeaderboardScope.LocalAll => "All profiles",
+                    _ => item.GetLocalisableDescription(),
+                };
             }
         }
     }

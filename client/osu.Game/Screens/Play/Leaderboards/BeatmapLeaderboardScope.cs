@@ -22,5 +22,8 @@ namespace osu.Game.Screens.Play.Leaderboards
 
         [LocalisableDescription(typeof(BeatmapLeaderboardWedgeStrings), nameof(BeatmapLeaderboardWedgeStrings.Team))]
         Team,
+
+        [LocalisableDescription(typeof(BeatmapLeaderboardWedgeStrings), nameof(BeatmapLeaderboardWedgeStrings.LocalAll))]
+        LocalAll,
     }
 }

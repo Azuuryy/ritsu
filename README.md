@@ -4,9 +4,9 @@ Premier jalon Windows x64 : un client Torii autonome pour le jeu local. Les noms
 
 ## Jouer
 
-Ce dépôt ne distribue pas encore de version prête à jouer. Sous Windows x64, lance `Pipeline.ps1` pour compiler le client et créer `artifacts/Ritsu-0.1.0-alpha-win-x64.zip`, puis extrais ce ZIP et ouvre **Launch Ritsu.cmd**. Les données sont séparées dans `%APPDATA%\Ritsu`. Aucun compte, service, accès réseau, privilège administrateur ou règle de pare-feu n'est nécessaire. Ne pas placer le paquet dans l'installation Torii ou lazer existante.
+Sous Windows x64, lance `Pipeline.ps1` pour compiler le client et créer l'archive `Ritsu-<version>-win-x64.zip` dans `artifacts/`, puis extrais-la et ouvre **Launch Ritsu.cmd**. La version courante est indiquée dans [`VERSION`](VERSION) et son historique dans [`CHANGELOG.md`](CHANGELOG.md). Choisis le dossier osu!lazer existant pour partager ses données ou conserve le stockage local par défaut dans `%APPDATA%\Ritsu`. Aucun compte, service ou accès réseau n'est nécessaire pour jouer. Ne place pas le paquet dans l'installation Torii ou lazer existante.
 
-Importer les fichiers `.osz`, `.osk` et `.osr` par glisser-déposer ou via **Settings → Maintenance → Import files**. Les maps doivent être présentes localement pour lire leurs replays. Aucun téléchargement ni rapprochement automatique avec une ancienne installation n'est proposé.
+Importer les fichiers `.osz`, `.osk` et `.osr` par glisser-déposer ou via **Settings → Maintenance → Import files**. Les maps doivent être présentes localement pour lire leurs replays. Le dossier osu!lazer peut être détecté ou choisi manuellement et utilisé directement, sans copie. Aucun téléchargement de maps n'est proposé.
 
 Voir [GUIDE.md](GUIDE.md), [ROADMAP.md](ROADMAP.md) et [VALIDATION.md](VALIDATION.md).
 
@@ -43,7 +43,7 @@ La source cliente conserve l'historique Torii, avec les modifications de ce jalo
 
 - **Torii**, par ShikkesoraSIM et ses contributeurs : base de ce client, de son flow et de ses interfaces. [Dépôt](https://github.com/ShikkesoraSIM/torii-osu).
 - **osu! / osu!framework**, par ppy et leurs contributeurs : moteur, gameplay et outils d'origine.
-- **Modosu**, le projet maintenu par l'utilisateur : source prévue des futures fonctions d'entraînement. [Dépôt](https://github.com/Azuuryy/mosu-offline).
+- **Modosu**, le projet maintenu par l'utilisateur : source des fonctions d'entraînement. [Dépôt](https://github.com/Azuuryy/Modosu).
 - **MOsu**, par p-720 et ses contributeurs : origine du travail Modosu. [Dépôt](https://github.com/p-720/mosu).
 
-Les contributions de ces projets ne sont pas réattribuées à Ritsu. Les notices du client, du framework et des ressources sont conservées. Ce jalon n'intègre pas encore le code Modosu/MOsu.
+Les contributions de ces projets ne sont pas réattribuées à Ritsu. Les notices du client, du framework et des ressources sont conservées. Les mods métronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2 et Miss Challenge sont adaptés de Modosu/MOsu ; leur licence GPL-3.0 est conservée dans `client/LICENCE-Modosu.txt` et dans le paquet. Les nouvelles fonctions attendent leur validation en jeu.

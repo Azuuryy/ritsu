@@ -44,10 +44,15 @@ namespace osu.Game.Rulesets.Osu.UI
         {
             if (replayPlayer != null)
             {
+                replayPlayer.AddSettings(new SongProgressSettings());
                 ReplayAnalysisOverlay analysisOverlay;
                 PlayfieldAdjustmentContainer.Add(analysisOverlay = new ReplayAnalysisOverlay(replayPlayer.Score.Replay));
                 Overlays.Add(analysisOverlay.CreateProxy().With(p => p.Depth = float.NegativeInfinity));
                 replayPlayer.AddSettings(new ReplayAnalysisSettings(Config));
+                if (Mods.OfType<OsuModRandomV2>().FirstOrDefault() is OsuModRandomV2 randomV2)
+                    replayPlayer.AddSettings(new RandomV2Settings(randomV2, Beatmap, Mods, () => ReplayScore?.Replay, replayPlayer.Mods));
+                if (Mods.OfType<OsuModSpacingAdjust>().FirstOrDefault() is OsuModSpacingAdjust spacingAdjust)
+                    replayPlayer.AddSettings(new SpacingAdjustSettings(spacingAdjust, Beatmap, Mods, () => ReplayScore?.Replay, replayPlayer.Mods));
 
                 cursorHideEnabled = Config.GetBindable<bool>(OsuRulesetSetting.ReplayCursorHideEnabled);
 

@@ -137,6 +137,14 @@ namespace osu.Game.Screens.Play
         [Resolved]
         private IAPIProvider api { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.Offline.RitsuProfileManager ritsuProfiles { get; set; }
+
+        [Resolved]
+        private BeatmapDifficultyCache difficultyCache { get; set; }
+
+        private Guid? localProfileId;
+
         [Resolved]
         private MusicController musicController { get; set; }
 
@@ -1427,25 +1435,51 @@ namespace osu.Game.Screens.Play
         /// </summary>
         /// <param name="beatmap"></param>
         /// <returns>The <see cref="Scoring.Score"/>.</returns>
-        protected virtual Score CreateScore(IBeatmap beatmap) => new Score
+        protected virtual Score CreateScore(IBeatmap beatmap)
         {
-            ScoreInfo = new ScoreInfo
+            localProfileId = ritsuProfiles?.ActiveProfileId;
+            return new Score
             {
-                User = api.LocalUser.Value,
-                ClientVersion = game.Version,
-            },
-        };
+                ScoreInfo = new ScoreInfo
+                {
+                    User = api.LocalUser.Value,
+                    ClientVersion = game.Version,
+                },
+            };
+        }
 
         /// <summary>
         /// Imports the player's <see cref="Scoring.Score"/> to the local database.
         /// </summary>
         /// <param name="score">The <see cref="Scoring.Score"/> to import.</param>
         /// <returns>The imported score.</returns>
-        protected virtual Task ImportScore(Score score)
+        protected virtual async Task ImportScore(Score score)
         {
             // Replays are already populated and present in the game's database, so should not be re-imported.
             if (DrawableRuleset.ReplayScore != null)
-                return Task.CompletedTask;
+                return;
+
+            int calculatorVersion = 0;
+            if (ritsuProfiles != null && localProfileId.HasValue && score.ScoreInfo.BeatmapInfo != null)
+            {
+                try
+                {
+                    var scoreRuleset = score.ScoreInfo.Ruleset.CreateInstance();
+                    calculatorVersion = scoreRuleset.CreateDifficultyCalculator(Beatmap.Value).Version;
+                    var difficulty = await difficultyCache.GetDifficultyAsync(score.ScoreInfo.BeatmapInfo, score.ScoreInfo.Ruleset, score.ScoreInfo.Mods).ConfigureAwait(false);
+                    var calculator = scoreRuleset.CreatePerformanceCalculator();
+                    if (difficulty?.DifficultyAttributes != null && calculator != null)
+                    {
+                        double pp = calculator.Calculate(score.ScoreInfo, difficulty.Value.DifficultyAttributes).Total;
+                        if (double.IsFinite(pp))
+                            score.ScoreInfo.PP = pp;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex, "Could not calculate local profile performance.");
+                }
+            }
 
             ByteArrayArchiveReader replayReader = null;
 
@@ -1460,11 +1494,12 @@ namespace osu.Game.Screens.Play
 
             // the import process will re-attach managed beatmap/rulesets to this score. we don't want this for now, so create a temporary copy to import.
             var importableScore = score.ScoreInfo.DeepClone();
+            Guid newScoreId = importableScore.ID;
 
             var imported = scoreManager.Import(importableScore, replayReader);
             Debug.Assert(imported != null);
 
-            imported.PerformRead(s =>
+            imported?.PerformRead(s =>
             {
                 // because of the clone above, it's required that we copy back the post-import hash/ID to use for availability matching.
                 score.ScoreInfo.Hash = s.Hash;
@@ -1472,7 +1507,9 @@ namespace osu.Game.Screens.Play
                 score.ScoreInfo.Files.AddRange(s.Files.Detach());
             });
 
-            return Task.CompletedTask;
+            // A reused database score may predate Ritsu; never associate it automatically.
+            if (imported != null && score.ScoreInfo.ID == newScoreId && localProfileId.HasValue)
+                ritsuProfiles?.AssociateNewScore(score.ScoreInfo.ID, localProfileId.Value, score.ScoreInfo.Ruleset.ShortName, calculatorVersion, score.ScoreInfo.ModsJson);
         }
 
         /// <summary>

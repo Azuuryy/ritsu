@@ -45,9 +45,6 @@ namespace osu.Desktop
 
         public override StableStorage? GetStorageForStableInstall()
         {
-            if (osu.Game.Offline.RitsuOffline.Enabled)
-                return null;
-
             try
             {
                 if (Host is DesktopGameHost desktopHost)

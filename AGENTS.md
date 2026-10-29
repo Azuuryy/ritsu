@@ -1,0 +1,10 @@
+# Instructions du projet Ritsu
+
+- Suivre [ROADMAP.md](ROADMAP.md) : le jalon actuel vise un client Torii jouable localement, sans services en ligne. Les étapes suivantes restent à préparer et ne sont pas réputées implémentées.
+- Conserver les fonctions locales de Torii, notamment la détection et la liaison au dossier osu!lazer ainsi que les imports locaux. La liaison utilise directement les données partagées ; ne pas imposer une copie ni un stockage isolé. Un stockage local reste une option.
+- Intégrer les mods Modosu dans la liste commune du ruleset existant, sans créer un ruleset séparé pour les isoler. Les scores et replays utilisent le fonctionnement partagé actuel ; la compatibilité avec les autres clients sera vérifiée par l'utilisateur après intégration, et ne doit pas être présentée comme validée avant son test.
+- Prévoir la coexistence de plusieurs profils locaux avec estimation configurable de PP et, plus tard, d'un compte et de classements sur serveur privé. Les profils Ritsu partent de zéro : ne pas importer ni associer automatiquement les anciens scores Modosu. Utiliser un identifiant interne stable pour les nouveaux profils.
+- Les opérations sur un dossier lié peuvent modifier les données de l'installation d'origine. Préserver le choix explicite de l'utilisateur, expliquer le partage et éviter les migrations ou suppressions automatiques.
+- Maintenir désactivés les services réseau du jalon hors ligne : authentification, téléchargements, mises à jour, télémétrie, intégrations de serveur et communications externes. Une opération sur des fichiers locaux n'est pas un service en ligne.
+- Maintenir les révisions de dépendances et les correctifs cohérents : toute modification du client fourni doit être répercutée dans `patches/client-offline.patch`, puis vérifiée par `Bootstrap.ps1` et les contrôles adaptés.
+- Documenter les comportements et limites effectivement vérifiés ; distinguer les validations historiques des nouveaux changements. Conserver les crédits et licences des projets d'origine.

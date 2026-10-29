@@ -292,6 +292,7 @@ namespace osu.Game.Overlays.Toolbar
                                             new ToolbarMusicButton(),
                                             new ToolbarClock(),
                                             new ToolbarNotificationButton(),
+                                            new ToolbarLocalProfileButton(),
                                         }
                                     },
                                 }

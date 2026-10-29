@@ -44,6 +44,9 @@ namespace osu.Game.Screens.Select
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.Offline.RitsuProfileManager? ritsuProfiles { get; set; }
+
         private readonly IBindable<APIUser> localUser = new Bindable<APIUser>();
 
         private IDisposable? scoreSubscription;
@@ -77,7 +80,10 @@ namespace osu.Game.Screens.Select
 
             ruleset.BindValueChanged(_ => updateSubscription());
             localUser.BindValueChanged(_ => updateSubscription(), true);
+            if (ritsuProfiles != null) ritsuProfiles.Changed += onProfileChanged;
         }
+
+        private void onProfileChanged() => Schedule(updateSubscription);
 
         private void updateSubscription()
         {
@@ -100,6 +106,7 @@ namespace osu.Game.Screens.Select
             ScoreInfo? topScore = sender
                                   // doing these post realm filter is most efficient.
                                   .Where(s => s.UserID == localUser.Value.Id || s.UserID <= 1)
+                                  .Where(s => ritsuProfiles == null || ritsuProfiles.BelongsToActiveProfile(s.ID))
                                   .Where(s => ruleset.Value.Equals(s.Ruleset))
                                   .MaxBy(info => (info.TotalScore, -info.Date.UtcDateTime.Ticks));
 
@@ -116,6 +123,7 @@ namespace osu.Game.Screens.Select
         {
             base.Dispose(isDisposing);
             scoreSubscription?.Dispose();
+            if (ritsuProfiles != null) ritsuProfiles.Changed -= onProfileChanged;
         }
     }
 }

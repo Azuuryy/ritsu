@@ -189,6 +189,7 @@ namespace osu.Game
         private NewsOverlay news;
 
         private UserProfileOverlay userProfile;
+        private RitsuLocalProfileOverlay localProfiles;
 
         private LoginOverlay loginOverlay;
 
@@ -773,6 +774,8 @@ namespace osu.Game
         /// </summary>
         /// <param name="user">The user to display.</param>
         public void ShowUser(IUser user) => waitForReady(() => userProfile, _ => userProfile.ShowUser(user));
+
+        public void ToggleLocalProfile() => waitForReady(() => localProfiles, overlay => overlay.ToggleVisibility());
 
         /// <summary>
         /// Show a beatmap's set as an overlay, displaying the given beatmap.
@@ -1684,6 +1687,7 @@ namespace osu.Game
 
             loadComponentSingleFile(new AccountCreationOverlay(), topMostOverlayContent.Add, true);
             loadComponentSingleFile<IDialogOverlay>(dialogOverlay = new DialogOverlay(), topMostOverlayContent.Add, true);
+            loadComponentSingleFile(localProfiles = new RitsuLocalProfileOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(new MedalOverlay(), topMostOverlayContent.Add);
 
             // Torii: restriction notice — watches api.State/LastLoginError and shows
@@ -1713,7 +1717,7 @@ namespace osu.Game
             }
 
             // eventually informational overlays should be displayed in a stack, but for now let's only allow one to stay open at a time.
-            var informationalOverlays = new OverlayContainer[] { beatmapSetOverlay, userProfile };
+            var informationalOverlays = new OverlayContainer[] { beatmapSetOverlay, userProfile, localProfiles };
 
             foreach (var overlay in informationalOverlays)
             {
@@ -2090,7 +2094,9 @@ namespace osu.Game
                     return true;
 
                 case GlobalAction.ToggleProfile:
-                    if (userProfile.State.Value == Visibility.Visible)
+                    if (Offline.RitsuOffline.Enabled)
+                        ToggleLocalProfile();
+                    else if (userProfile.State.Value == Visibility.Visible)
                         userProfile.Hide();
                     else
                         ShowUser(API.LocalUser.Value);

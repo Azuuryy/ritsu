@@ -42,8 +42,7 @@ namespace osu.Game.Overlays.Settings.Sections
                 Add(new ToriiServerSettings());
             if (!Offline.RitsuOffline.Enabled)
                 Add(new ToriiBriefingSettings());
-            if (!Offline.RitsuOffline.Enabled)
-                Add(new ToriiStorageSettings());
+            Add(new ToriiStorageSettings());
 
             // subsecciones torii por-ruleset: cada ruleset puede pedir mirrorear prefs relevantes aca
             // via Ruleset.CreateToriiSettingsSubsection(). los mismos toggles viven tambien en su

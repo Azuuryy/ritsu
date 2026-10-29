@@ -30,7 +30,7 @@ namespace osu.Game.Overlays.FirstRunSetup
         /// <returns>false si el path no es una carpeta de datos de lazer valida. el llamador muestra el error.</returns>
         public static bool ApplyDataPath(string? path, Storage storage, OsuGameBase game, OsuConfigManager config, IDialogOverlay? dialogOverlay)
         {
-            if (Offline.RitsuOffline.Enabled || !ToriiStoragePathHelper.LooksLikeLazerStoragePath(path))
+            if (!ToriiStoragePathHelper.LooksLikeLazerStoragePath(path))
                 return false;
 
             dialogOverlay?.Push(new ConfirmDialog(restart_required_message, () =>

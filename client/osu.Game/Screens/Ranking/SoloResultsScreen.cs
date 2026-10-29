@@ -105,7 +105,7 @@ namespace osu.Game.Screens.Ranking
                 }
                 else
                 {
-                    bool isOnlineLeaderboard = criteria.Scope != BeatmapLeaderboardScope.Local;
+                    bool isOnlineLeaderboard = criteria.Scope is not (BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll);
                     bool presentingLocalUserScore = Score.UserID == api.LocalUser.Value.OnlineID;
                     bool presentedLocalUserScoreIsBetter = presentingLocalUserScore && clonedScore.UserID == api.LocalUser.Value.OnlineID && clonedScore.TotalScore < Score.TotalScore;
 

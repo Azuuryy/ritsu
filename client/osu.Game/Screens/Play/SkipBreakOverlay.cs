@@ -14,6 +14,7 @@ using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Threading;
 using osu.Framework.Utils;
+using osu.Game.Configuration;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -105,6 +106,7 @@ namespace osu.Game.Screens.Play
         // overlay only READS this; Player flips it true when the briefing is
         // dismissed (it owns the config write).
         private readonly Bindable<bool> briefingSeen;
+        private Bindable<bool> skipToEnd;
 
         private readonly Bindable<Period?> currentPeriod = new Bindable<Period?>();
 
@@ -152,8 +154,9 @@ namespace osu.Game.Screens.Play
         }
 
         [BackgroundDependencyLoader]
-        private void load(OsuColour colours)
+        private void load(OsuColour colours, OsuConfigManager config)
         {
+            skipToEnd = config.GetBindable<bool>(OsuSetting.RitsuSkipBreakToEnd);
             InternalChildren = new Drawable[]
             {
                 buttonContainer = new SkipOverlay.ButtonContainer
@@ -236,9 +239,9 @@ namespace osu.Game.Screens.Play
         /// the first note regardless of mods. Clamped at 1x so slower mods (HT)
         /// never shrink the lead-in below the base value.
         /// </summary>
-        private double skipTargetFor(Period period) => period.End - SKIP_LEAD_IN_MS * Math.Max(1.0, gameplayClock.GetTrueGameplayRate());
+        private double skipTargetFor(Period period) => skipToEnd.Value ? period.End : period.End - SKIP_LEAD_IN_MS * Math.Max(1.0, gameplayClock.GetTrueGameplayRate());
 
-        private bool isWorthSkipping(Period period) => skipTargetFor(period) - gameplayClock.CurrentTime > MINIMUM_SKIP_SAVINGS;
+        private bool isWorthSkipping(Period period) => skipTargetFor(period) - gameplayClock.CurrentTime > (skipToEnd.Value ? 0 : MINIMUM_SKIP_SAVINGS);
 
         protected override void Update()
         {
@@ -265,7 +268,7 @@ namespace osu.Game.Screens.Play
 
             remainingTimeBox.Width = (float)Interpolation.DampContinuously(remainingTimeBox.Width, progress, 40, Math.Abs(Time.Elapsed));
 
-            canSkip.Value = target - now > MINIMUM_SKIP_SAVINGS;
+            canSkip.Value = target - now > (skipToEnd.Value ? 0 : MINIMUM_SKIP_SAVINGS);
             buttonContainer.State.Value = canSkip.Value ? Visibility.Visible : Visibility.Hidden;
 
             // If the window closed (break ending, or seek already past it)

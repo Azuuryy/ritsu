@@ -2,7 +2,7 @@ param([switch]$IncludeGameScenarios)
 $ErrorActionPreference = 'Stop'
 $ritsuCache = Join-Path $PSScriptRoot '.cache'
 $ritsuEvidence = Join-Path $ritsuCache ('verification-' + [guid]::NewGuid().ToString('N'))
-$ritsuFixtures = Join-Path $ritsuCache 'fixtures'
+$ritsuFixtures = Join-Path $PSScriptRoot 'tools/fixtures'
 New-Item -ItemType Directory -Force $ritsuCache | Out-Null
 & dotnet build (Join-Path $PSScriptRoot 'tools/Ritsu.Validation/Ritsu.Validation.csproj') -c Release "-p:NuGetPackages=$(Join-Path $ritsuCache 'nuget')" -v:quiet
 if ($LASTEXITCODE -ne 0) { throw 'Verification build failed.' }

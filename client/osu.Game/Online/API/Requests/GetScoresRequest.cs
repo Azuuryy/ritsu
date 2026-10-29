@@ -32,7 +32,7 @@ namespace osu.Game.Online.API.Requests
             if (beatmapInfo.OnlineID <= 0)
                 throw new InvalidOperationException($"Cannot lookup a beatmap's scores without having a populated {nameof(IBeatmapInfo.OnlineID)}.");
 
-            if (scope == BeatmapLeaderboardScope.Local)
+            if (scope is BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll)
                 throw new InvalidOperationException("Should not attempt to request online scores for a local scoped leaderboard");
 
             this.beatmapInfo = beatmapInfo;

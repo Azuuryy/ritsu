@@ -352,6 +352,8 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.AlphaPpDevModeEnabled, false);
             SetDefault(OsuSetting.ToriiConfirmDangerousButtonsOnLongAttempts, false);
             SetDefault(OsuSetting.ToriiSkipBreaksEnabled, true);
+            SetDefault(OsuSetting.RitsuSkipBreakToEnd, false);
+            SetDefault(OsuSetting.RitsuLiveStars, true);
 
             // Torii: hitsounds a volumen constante, ignorando los cambios de volumen del
             // mapa (algunos mapas los silencian por completo y arruinan el reading).
@@ -779,5 +781,7 @@ namespace osu.Game.Configuration
         ToriiDifficultyRecalcMode,
         ToriiAppliedDifficultyVersions,
         ToriiSeenRealmDifficultyVersions,
+        RitsuSkipBreakToEnd,
+        RitsuLiveStars,
     }
 }
