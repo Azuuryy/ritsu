@@ -43,7 +43,7 @@ The client source retains Torii's history, with this milestone's changes on `cod
 
 - [**Torii**](https://github.com/ShikkesoraSIM/torii-osu), by ShikkesoraSIM and its contributors: the foundation for this client, its flow, and its interfaces.
 - [**osu!**](https://github.com/ppy/osu) / [**osu!framework**](https://github.com/ppy/osu-framework), by ppy and their contributors: the engine, gameplay, and original tools.
-- [**Modosu**](https://github.com/Azuuryy/Modosu), maintained by the user: the source of the training features.
+- [**Modosu**](https://github.com/Azuuryy/Modosu), maintained by the user.
 - [**MOsu**](https://github.com/p-720/mosu), by p-720 and its contributors: the origin of the Modosu work.
 
 Contributions from these projects remain credited to their original authors. Client, framework, and resource notices are preserved. The Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2, and Miss Challenge mods are adapted from Modosu/MOsu; their GPL-3.0 license is kept in `client/LICENCE-Modosu.txt` and in the package. New features still need in-game validation.
