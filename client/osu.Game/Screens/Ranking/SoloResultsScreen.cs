@@ -1,14 +1,18 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Graphics;
 using osu.Framework.Logging;
+using osu.Framework.Screens;
 using osu.Game.Extensions;
+using osu.Game.Offline;
 using osu.Game.Online.API;
 using osu.Game.Online.Leaderboards;
 using osu.Game.Scoring;
@@ -27,6 +31,66 @@ namespace osu.Game.Screens.Ranking
 
         [Resolved]
         private LeaderboardManager leaderboardManager { get; set; } = null!;
+
+        [Resolved(canBeNull: true)]
+        private RitsuProfileManager? ritsuProfiles { get; set; }
+
+        public bool ShowLocalScoreRanks { get; init; }
+
+        private bool canShowLocalScoreRanks;
+        private RitsuResultRanksToast? localScoreRanksToast;
+
+        public override void OnEntering(ScreenTransitionEvent e)
+        {
+            base.OnEntering(e);
+
+            if (!ShowLocalScoreRanks || Score?.BeatmapInfo == null || ritsuProfiles == null)
+                return;
+
+            canShowLocalScoreRanks = true;
+            var scoreId = Score.ID;
+            var beatmapId = Score.BeatmapInfo.ID;
+            var ruleset = Score.Ruleset.ShortName;
+            Task.Run(() =>
+            {
+                try
+                {
+                    var ranks = ritsuProfiles.GetResultRanks(scoreId, beatmapId, ruleset);
+                    if (ranks != null)
+                        Schedule(() => Scheduler.AddDelayed(() =>
+                        {
+                            if (canShowLocalScoreRanks && this.IsCurrentScreen())
+                                AddInternal(localScoreRanksToast = new RitsuResultRanksToast(ranks) { Depth = float.MinValue });
+                        }, 1800));
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex, "Could not calculate local score rankings.");
+                }
+            });
+        }
+
+        public override void OnSuspending(ScreenTransitionEvent e)
+        {
+            hideLocalScoreRanks();
+            base.OnSuspending(e);
+        }
+
+        public override bool OnExiting(ScreenExitEvent e)
+        {
+            if (base.OnExiting(e))
+                return true;
+
+            hideLocalScoreRanks();
+            return false;
+        }
+
+        private void hideLocalScoreRanks()
+        {
+            canShowLocalScoreRanks = false;
+            localScoreRanksToast?.FadeOut(0).Expire();
+            localScoreRanksToast = null;
+        }
 
         public SoloResultsScreen(ScoreInfo score)
             : base(score)

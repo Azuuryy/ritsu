@@ -251,6 +251,41 @@ namespace osu.Game.Offline
             Changed?.Invoke();
         }
 
+        public RitsuResultRanks? GetResultRanks(Guid scoreId, Guid beatmapId, string ruleset)
+        {
+            Guid profileId;
+            lock (sync)
+            {
+                if (!data.Scores.TryGetValue(scoreId, out var metadata) || metadata.Ruleset != ruleset)
+                    return null;
+                profileId = metadata.ProfileId;
+            }
+
+            var mapScores = realm.Run(r => r.All<ScoreInfo>().Filter(
+                $"{nameof(ScoreInfo.BeatmapInfo)}.{nameof(BeatmapInfo.ID)} == $0"
+                + $" AND {nameof(ScoreInfo.BeatmapInfo)}.{nameof(BeatmapInfo.Hash)} == {nameof(ScoreInfo.BeatmapHash)}"
+                + $" AND {nameof(ScoreInfo.Ruleset)}.{nameof(osu.Game.Rulesets.RulesetInfo.ShortName)} == $1"
+                + $" AND {nameof(ScoreInfo.DeletePending)} == false", beatmapId, ruleset).Detach()).OrderByTotalScore().ToArray();
+
+            int allIndex = Array.FindIndex(mapScores, s => s.ID == scoreId);
+            if (allIndex < 0)
+                return null;
+
+            HashSet<Guid> profileScoreIds;
+            lock (sync)
+                profileScoreIds = data.Scores.Where(s => s.Value.ProfileId == profileId && s.Value.Ruleset == ruleset).Select(s => s.Key).ToHashSet();
+
+            var profileScores = mapScores.Where(s => profileScoreIds.Contains(s.ID)).ToArray();
+            int profileIndex = Array.FindIndex(profileScores, s => s.ID == scoreId);
+            var eligible = getEligibleScores(profileId, ruleset, out _);
+            var best = bestScores(eligible);
+            int bestIndex = Array.FindIndex(best, s => s.ID == scoreId);
+            double previousPP = totalPP(bestScores(eligible.Where(s => s.ID != scoreId)));
+            double currentPP = totalPP(best);
+            return new RitsuResultRanks(bestIndex >= 0 ? bestIndex + 1 : null, allIndex + 1, profileIndex + 1,
+                previousPP, currentPP);
+        }
+
         public bool BelongsToActiveProfile(Guid scoreId)
         {
             lock (sync)
@@ -301,21 +336,16 @@ namespace osu.Game.Offline
 
         public RitsuProfileStatistics GetStatistics(Guid id, string ruleset)
         {
-            bool include;
-            lock (sync) include = data.Profiles.FirstOrDefault(p => p.Id == id)?.IncludeRelaxAutopilot ?? false;
-            var scores = GetScores(id, ruleset).Where(s => s.TotalScore > 0 && s.Mods.All(m => m is not ModAutoplay)).ToList();
-            var eligible = scores.Where(s => s.PP.HasValue && (include || s.Mods.All(m => m.Acronym != "RX" && m.Acronym != "AP"))).ToList();
-            var best = eligible.GroupBy(s => s.BeatmapHash).Select(g => g.OrderByDescending(s => s.PP).First()).OrderByDescending(s => s.PP).ToArray();
+            var eligible = getEligibleScores(id, ruleset, out var scores);
+            var best = bestScores(eligible);
             double factor = 1;
-            double pp = 0;
+            double pp = totalPP(best);
             double accuracy = 0;
             foreach (var score in best)
             {
-                pp += score.PP!.Value * factor;
                 accuracy += score.Accuracy * factor;
                 factor *= 0.95;
             }
-            pp += (417.0 - 1.0 / 3.0) * (1.0 - Math.Pow(0.995, best.Length));
             if (best.Length > 0)
                 accuracy *= 100.0 / (20 * (1 - Math.Pow(0.95, best.Length)));
             var historicalBest = new Dictionary<string, double>();
@@ -337,6 +367,31 @@ namespace osu.Game.Offline
             }
             int? estimatedGlobalRank = ruleset == "osu" && pp > 0 ? RitsuRankEstimator.EstimateGlobalRank(pp) : null;
             return new RitsuProfileStatistics(scores.Count, pp, accuracy, estimatedGlobalRank, best, scores.OrderByDescending(s => s.Date).ToArray(), history.ToArray());
+        }
+
+        public ScoreInfo[] GetBestScores(Guid id, string ruleset) => bestScores(getEligibleScores(id, ruleset, out _));
+
+        private List<ScoreInfo> getEligibleScores(Guid id, string ruleset, out List<ScoreInfo> scores)
+        {
+            bool include;
+            lock (sync) include = data.Profiles.FirstOrDefault(p => p.Id == id)?.IncludeRelaxAutopilot ?? false;
+            scores = GetScores(id, ruleset).Where(s => s.TotalScore > 0 && s.Mods.All(m => m is not ModAutoplay)).ToList();
+            return scores.Where(s => s.PP.HasValue && (include || s.Mods.All(m => m.Acronym != "RX" && m.Acronym != "AP"))).ToList();
+        }
+
+        private static ScoreInfo[] bestScores(IEnumerable<ScoreInfo> eligible) => eligible.GroupBy(s => s.BeatmapHash)
+            .Select(g => g.OrderByDescending(s => s.PP).First()).OrderByDescending(s => s.PP).ToArray();
+
+        private static double totalPP(IReadOnlyList<ScoreInfo> best)
+        {
+            double factor = 1;
+            double total = 0;
+            foreach (var score in best)
+            {
+                total += score.PP!.Value * factor;
+                factor *= 0.95;
+            }
+            return total + (417.0 - 1.0 / 3.0) * (1.0 - Math.Pow(0.995, best.Count));
         }
 
         private RitsuProfile activeProfile() => data.Profiles.Single(p => p.Id == data.ActiveProfileId);
@@ -387,6 +442,8 @@ namespace osu.Game.Offline
     }
 
     public sealed record RitsuPpPoint(DateTimeOffset Date, double PP);
+    public sealed record RitsuResultRanks(int? BestPlay, int AllMapScores, int ProfileMapScores, double PreviousPP, double CurrentPP);
+
     public sealed record RitsuProfileStatistics(int PlayCount, double PP, double Accuracy, int? EstimatedGlobalRank, IReadOnlyList<ScoreInfo> BestScores, IReadOnlyList<ScoreInfo> RecentScores, IReadOnlyList<RitsuPpPoint> History);
 
     /// <summary>

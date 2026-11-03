@@ -146,6 +146,8 @@ namespace osu.Game.Screens.Play
 
         private Guid? localProfileId;
 
+        protected bool LocalScoreWasAssociated { get; private set; }
+
         [Resolved]
         private MusicController musicController { get; set; }
 
@@ -1510,8 +1512,11 @@ namespace osu.Game.Screens.Play
             });
 
             // A reused database score may predate Ritsu; never associate it automatically.
-            if (imported != null && score.ScoreInfo.ID == newScoreId && localProfileId.HasValue)
-                ritsuProfiles?.AssociateNewScore(score.ScoreInfo.ID, localProfileId.Value, score.ScoreInfo.Ruleset.ShortName, calculatorVersion, score.ScoreInfo.ModsJson);
+            if (imported != null && score.ScoreInfo.ID == newScoreId && localProfileId.HasValue && ritsuProfiles != null)
+            {
+                ritsuProfiles.AssociateNewScore(score.ScoreInfo.ID, localProfileId.Value, score.ScoreInfo.Ruleset.ShortName, calculatorVersion, score.ScoreInfo.ModsJson);
+                LocalScoreWasAssociated = true;
+            }
         }
 
         /// <summary>

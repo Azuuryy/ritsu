@@ -264,11 +264,11 @@ namespace osu.Game.Screens.Ranking.Expanded.Statistics
 
             bool slash = eligibleForPp && pauseCount > 0 && finalPerformance < basePerformance;
 
-            if (!slash)
+            if (!slash || penaltyFly == null || content == null || counterArea == null)
             {
                 // Sin pausas (o sin pp real en juego): comportamiento de siempre.
                 // Para un score no-elegible mostramos el valor guardado/calculado tal cual.
-                performance.Value = eligibleForPp || !score.PP.HasValue ? basePerformance : finalPerformance;
+                performance.Value = slash ? finalPerformance : eligibleForPp || !score.PP.HasValue ? basePerformance : finalPerformance;
 
                 // Aunque no haya animacion, el tooltip educa igual si hubo pausas.
                 if (pauseCount > 0 && eligibleForPp)
