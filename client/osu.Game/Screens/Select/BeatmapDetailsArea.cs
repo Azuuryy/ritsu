@@ -88,6 +88,7 @@ namespace osu.Game.Screens.Select
                     {
                         Scope = { BindTarget = header.Scope },
                         Sorting = { BindTarget = header.Sorting },
+                        ReverseSorting = { BindTarget = header.ReverseSorting },
                         FilterBySelectedMods = { BindTarget = header.FilterBySelectedMods },
                     };
 

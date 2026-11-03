@@ -22,5 +22,8 @@ namespace osu.Game.Online.Leaderboards
 
         [LocalisableDescription(typeof(BeatmapLeaderboardWedgeStrings), nameof(BeatmapLeaderboardWedgeStrings.Date))]
         Date,
+
+        [System.ComponentModel.Description("PP")]
+        PerformancePoints,
     }
 }
