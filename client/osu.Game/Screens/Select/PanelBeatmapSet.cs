@@ -28,6 +28,7 @@ using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Localisation;
 using osu.Game.Online.API;
+using osu.Game.Offline;
 using osu.Game.Overlays;
 using osu.Game.Rulesets;
 using osuTK;
@@ -74,6 +75,9 @@ namespace osu.Game.Screens.Select
 
         [Resolved]
         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
+
+        [Resolved(CanBeNull = true)]
+        private RitsuProfileManager? ritsuProfiles { get; set; }
 
         private GroupedBeatmapSet groupedBeatmapSet
         {
@@ -252,6 +256,14 @@ namespace osu.Game.Screens.Select
                 var beatmapSet = groupedBeatmapSet.BeatmapSet;
 
                 List<MenuItem> items = new List<MenuItem>();
+
+                if (ritsuProfiles != null && beatmapSet.Beatmaps.FirstOrDefault() is BeatmapInfo sourceBeatmap)
+                {
+                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, sourceBeatmap.ID, beatmapSet.ID);
+                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap set's scores from PP" : "Include this beatmap set's scores in PP", MenuItemType.Standard,
+                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, sourceBeatmap.ID, !included, beatmapSet.ID)));
+                    items.Add(new OsuMenuItemSpacer());
+                }
 
                 if (Expanded.Value)
                 {

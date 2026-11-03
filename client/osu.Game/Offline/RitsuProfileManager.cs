@@ -251,6 +251,61 @@ namespace osu.Game.Offline
             Changed?.Invoke();
         }
 
+        public void SetScoreIncludedInPP(Guid scoreId, bool include)
+        {
+            lock (sync)
+            {
+                if (!data.Scores.TryGetValue(scoreId, out var metadata))
+                    return;
+                metadata.IncludeInPP = include;
+                save();
+            }
+            Changed?.Invoke();
+        }
+
+        public bool IsScoreIncludedInPP(Guid scoreId)
+        {
+            lock (sync)
+                return !data.Scores.TryGetValue(scoreId, out var metadata) || metadata.IncludeInPP;
+        }
+
+        public bool AreBeatmapScoresIncludedInPP(Guid profileId, Guid beatmapId, Guid? beatmapSetId = null)
+        {
+            var matchingIds = getMatchingScoreIds(profileId, score => score.BeatmapInfo?.ID == beatmapId
+                || (beatmapSetId.HasValue && score.BeatmapInfo?.BeatmapSet?.ID == beatmapSetId.Value));
+            lock (sync)
+                return matchingIds.All(id => !data.Scores.TryGetValue(id, out var metadata) || metadata.IncludeInPP);
+        }
+
+        public void SetBeatmapScoresIncludedInPP(Guid profileId, Guid beatmapId, bool include, Guid? beatmapSetId = null)
+        {
+            var matchingIds = getMatchingScoreIds(profileId, score => score.BeatmapInfo?.ID == beatmapId
+                || (beatmapSetId.HasValue && score.BeatmapInfo?.BeatmapSet?.ID == beatmapSetId.Value));
+            bool changed = false;
+            lock (sync)
+            {
+                foreach (Guid id in matchingIds)
+                {
+                    if (!data.Scores.TryGetValue(id, out var metadata) || metadata.IncludeInPP == include)
+                        continue;
+                    metadata.IncludeInPP = include;
+                    changed = true;
+                }
+                if (changed) save();
+            }
+            if (changed) Changed?.Invoke();
+        }
+
+        private Guid[] getMatchingScoreIds(Guid profileId, Func<ScoreInfo, bool> predicate)
+        {
+            HashSet<Guid> ids;
+            lock (sync)
+                ids = data.Scores.Where(s => s.Value.ProfileId == profileId).Select(s => s.Key).ToHashSet();
+            return realm.Run(r => ids.Select(id => r.Find<ScoreInfo>(id))
+                .Where(score => score != null && !score.DeletePending && predicate(score!))
+                .Select(score => score!.ID).ToArray());
+        }
+
         public RitsuResultRanks? GetResultRanks(Guid scoreId, Guid beatmapId, string ruleset)
         {
             Guid profileId;
@@ -376,7 +431,10 @@ namespace osu.Game.Offline
             bool include;
             lock (sync) include = data.Profiles.FirstOrDefault(p => p.Id == id)?.IncludeRelaxAutopilot ?? false;
             scores = GetScores(id, ruleset).Where(s => s.TotalScore > 0 && s.Mods.All(m => m is not ModAutoplay)).ToList();
-            return scores.Where(s => s.PP.HasValue && (include || s.Mods.All(m => m.Acronym != "RX" && m.Acronym != "AP"))).ToList();
+            HashSet<Guid> excluded;
+            lock (sync)
+                excluded = data.Scores.Where(s => s.Value.ProfileId == id && !s.Value.IncludeInPP).Select(s => s.Key).ToHashSet();
+            return scores.Where(s => !excluded.Contains(s.ID) && s.PP.HasValue && (include || s.Mods.All(m => m.Acronym != "RX" && m.Acronym != "AP"))).ToList();
         }
 
         private static ScoreInfo[] bestScores(IEnumerable<ScoreInfo> eligible) => eligible.GroupBy(s => s.BeatmapHash)
@@ -439,6 +497,7 @@ namespace osu.Game.Offline
         public string Ruleset { get; set; } = string.Empty;
         public int CalculatorVersion { get; set; }
         public string ModsJson { get; set; } = string.Empty;
+        public bool IncludeInPP { get; set; } = true;
     }
 
     public sealed record RitsuPpPoint(DateTimeOffset Date, double PP);

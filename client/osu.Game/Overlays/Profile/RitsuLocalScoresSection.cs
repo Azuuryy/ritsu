@@ -7,12 +7,16 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Localisation;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Graphics.UserInterfaceV2;
+using osu.Game.Offline;
 using osu.Game.Online.Leaderboards;
 using osu.Game.Overlays.Profile.Sections;
 using osu.Game.Resources.Localisation.Web;
@@ -109,7 +113,7 @@ namespace osu.Game.Overlays.Profile
     }
 
     /// <summary>A local score row using Modosu's rank, beatmap, accuracy and PP layout.</summary>
-    public partial class RitsuProfileScore : OsuClickableContainer
+    public partial class RitsuProfileScore : OsuClickableContainer, IHasContextMenu
     {
         private const float pp_width = 100;
         private readonly ScoreInfo score;
@@ -120,12 +124,23 @@ namespace osu.Game.Overlays.Profile
         [Resolved(canBeNull: true)]
         private RitsuLocalProfileOverlay? overlay { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private RitsuProfileManager? profiles { get; set; }
+
         public RitsuProfileScore(ScoreInfo score)
         {
             this.score = score;
             RelativeSizeAxes = Axes.X;
             Height = 48;
         }
+
+        public LocalisableString TooltipText => "Right-click to include or exclude this score from profile PP.";
+
+        public MenuItem[] ContextMenuItems => profiles == null ? Array.Empty<MenuItem>() : new[]
+        {
+            new MenuItem(profiles.IsScoreIncludedInPP(score.ID) ? "Exclude this score from PP" : "Include this score in PP", () =>
+                profiles.SetScoreIncludedInPP(score.ID, !profiles.IsScoreIncludedInPP(score.ID))),
+        };
 
         [BackgroundDependencyLoader]
         private void load(OverlayColourProvider colours, OsuColour osuColours)
