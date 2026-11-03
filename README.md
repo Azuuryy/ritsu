@@ -28,7 +28,8 @@ Ritsu is a standalone osu!lazer client for local play, built on Torii. It keeps 
 
 - Sort beatmaps by perfect-play PP or farmability, group them by perfect-play or profile-earned PP, and filter by PP range.
 - Perfect-play PP values use a persistent cache and can be disabled to reuse cached values only.
-- Local leaderboards sortable by PP, with reversed sorting on the middle mouse button.
+- Local leaderboards sortable by PP
+- You can reversed the listing of any Sort, Group or Collections using the middle mouse button.
 - Search history and favourites in the song select search box.
 - Modded star rating shown on score rows when difficulty-changing mods are used.
 
