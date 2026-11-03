@@ -257,11 +257,11 @@ namespace osu.Game.Screens.Select
 
                 List<MenuItem> items = new List<MenuItem>();
 
-                if (ritsuProfiles != null && beatmapSet.Beatmaps.FirstOrDefault() is BeatmapInfo sourceBeatmap)
+                if (ritsuProfiles != null && beatmapSet.Beatmaps.FirstOrDefault() is BeatmapInfo ppSourceBeatmap)
                 {
-                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, sourceBeatmap.ID, beatmapSet.ID);
+                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, ppSourceBeatmap.ID, beatmapSet.ID);
                     items.Add(new OsuMenuItem(included ? "Exclude this beatmap set's scores from PP" : "Include this beatmap set's scores in PP", MenuItemType.Standard,
-                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, sourceBeatmap.ID, !included, beatmapSet.ID)));
+                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, ppSourceBeatmap.ID, !included, beatmapSet.ID)));
                     items.Add(new OsuMenuItemSpacer());
                 }
 

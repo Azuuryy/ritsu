@@ -1,4 +1,5 @@
 
+
 diff --git a/.github/workflows/_diffcalc_processor.yml b/.github/workflows/_diffcalc_processor.yml
 deleted file mode 100644
 index 3ccdee0782..0000000000
@@ -233,6 +234,7 @@ index 3ccdee0782..0000000000
 -          cd "${{ env.GENERATOR_DIR }}"
 -          docker compose down --volumes
 -          rm -rf "${{ env.GENERATOR_DIR }}"
+
 
 diff --git a/.github/workflows/_diffcalc_processor.yml.disabled b/.github/workflows/_diffcalc_processor.yml.disabled
 new file mode 100644
@@ -469,6 +471,7 @@ index 0000000000..3ccdee0782
 +          docker compose down --volumes
 +          rm -rf "${{ env.GENERATOR_DIR }}"
 
+
 diff --git a/.github/workflows/auto-tag.yml b/.github/workflows/auto-tag.yml
 deleted file mode 100644
 index 078c42210c..0000000000
@@ -612,6 +615,7 @@ index 078c42210c..0000000000
 -            -d "$BODY"
 -
 -
+
 
 diff --git a/.github/workflows/auto-tag.yml.disabled b/.github/workflows/auto-tag.yml.disabled
 new file mode 100644
@@ -757,6 +761,7 @@ index 0000000000..078c42210c
 +
 +
 
+
 diff --git a/.github/workflows/build-dev.yml b/.github/workflows/build-dev.yml
 deleted file mode 100644
 index 50faf8f1ac..0000000000
@@ -850,6 +855,7 @@ index 50faf8f1ac..0000000000
 -        echo "This is a fast CI verification run and does not generate installers."
 -        echo "Push to main/master or create a tag to trigger full release builds."
 
+
 diff --git a/.github/workflows/build-dev.yml.disabled b/.github/workflows/build-dev.yml.disabled
 new file mode 100644
 index 0000000000..50faf8f1ac
@@ -942,6 +948,7 @@ index 0000000000..50faf8f1ac
 +        echo "Development build check completed."
 +        echo "This is a fast CI verification run and does not generate installers."
 +        echo "Push to main/master or create a tag to trigger full release builds."
+
 
 diff --git a/.github/workflows/build-gu.yml b/.github/workflows/build-gu.yml
 deleted file mode 100644
@@ -2375,6 +2382,7 @@ index 0a16d1dce9..0000000000
 -          exit 1
 -        fi
 
+
 diff --git a/.github/workflows/build-gu.yml.disabled b/.github/workflows/build-gu.yml.disabled
 new file mode 100644
 index 0000000000..0a16d1dce9
@@ -3807,6 +3815,7 @@ index 0000000000..0a16d1dce9
 +          exit 1
 +        fi
 
+
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
 deleted file mode 100644
 index 7a9393b079..0000000000
@@ -4091,6 +4100,7 @@ index 7a9393b079..0000000000
 -
 -      - name: Build
 -        run: dotnet build -c Debug osu.iOS.slnf
+
 
 diff --git a/.github/workflows/ci.yml.disabled b/.github/workflows/ci.yml.disabled
 new file mode 100644
@@ -4377,6 +4387,7 @@ index 0000000000..7a9393b079
 +      - name: Build
 +        run: dotnet build -c Debug osu.iOS.slnf
 
+
 diff --git a/.github/workflows/diffcalc.yml b/.github/workflows/diffcalc.yml
 deleted file mode 100644
 index 8461208a2e..0000000000
@@ -4579,6 +4590,7 @@ index 8461208a2e..0000000000
 -          comment_tag: ${{ env.EXECUTION_ID }}
 -          mode: delete
 -          message: '.' # Appears to be required by this action for non-error status code.
+
 
 diff --git a/.github/workflows/diffcalc.yml.disabled b/.github/workflows/diffcalc.yml.disabled
 new file mode 100644
@@ -4783,6 +4795,7 @@ index 0000000000..8461208a2e
 +          mode: delete
 +          message: '.' # Appears to be required by this action for non-error status code.
 
+
 diff --git a/.github/workflows/sentry-release.yml b/.github/workflows/sentry-release.yml
 deleted file mode 100644
 index 915127d157..0000000000
@@ -4824,6 +4837,7 @@ index 915127d157..0000000000
 -          environment: production
 -          version: osu@${{ github.ref_name }}
 
+
 diff --git a/.github/workflows/sentry-release.yml.disabled b/.github/workflows/sentry-release.yml.disabled
 new file mode 100644
 index 0000000000..915127d157
@@ -4864,6 +4878,7 @@ index 0000000000..915127d157
 +        with:
 +          environment: production
 +          version: osu@${{ github.ref_name }}
+
 
 diff --git a/.github/workflows/update-web-mod-definitions.yml b/.github/workflows/update-web-mod-definitions.yml
 deleted file mode 100644
@@ -4934,6 +4949,7 @@ index c596fe6fb8..0000000000
 -        path: osu-web
 -        token: ${{ secrets.OSU_WEB_PULL_REQUEST_PAT }}
 
+
 diff --git a/.github/workflows/update-web-mod-definitions.yml.disabled b/.github/workflows/update-web-mod-definitions.yml.disabled
 new file mode 100644
 index 0000000000..c596fe6fb8
@@ -5003,6 +5019,7 @@ index 0000000000..c596fe6fb8
 +        path: osu-web
 +        token: ${{ secrets.OSU_WEB_PULL_REQUEST_PAT }}
 
+
 diff --git a/LICENCE b/LICENCE
 deleted file mode 100644
 index 9ffcc70c132b8f05cbbc199ca2af257600b40ee3..0000000000000000000000000000000000000000
@@ -5028,6 +5045,7 @@ index 9ffcc70c132b8f05cbbc199ca2af257600b40ee3..00000000000000000000000000000000
 -LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 -OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -THE SOFTWARE.
+
 
 diff --git a/README.Torii.md b/README.Torii.md
 new file mode 100644
@@ -5337,6 +5355,7 @@ index 0000000000..aef0e23ce8
 +<p align="center">
 +  <sub>Made with respect for the original project. Please support <a href="https://osu.ppy.sh">osu!</a>.</sub>
 +</p>
+
 
 diff --git a/README.md b/README.md
 index aef0e23ce8..b565467491 100644
@@ -5651,6 +5670,7 @@ index aef0e23ce8..b565467491 100644
 -</p>
 +Credits: ShikkesoraSIM and Torii contributors; ppy and osu!/osu!framework contributors. The metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2 and Miss Challenge mods are adapted from Modosu and its predecessor MOsu (p-720), under GPL-3.0; see LICENCE-Modosu.txt. Existing notices and licenses remain in place.
 
+
 diff --git a/osu.Desktop/OsuGameDesktop.cs b/osu.Desktop/OsuGameDesktop.cs
 index 1b4072cdb9..d5d17786c8 100644
 --- a/osu.Desktop/OsuGameDesktop.cs
@@ -5692,6 +5712,7 @@ index 1b4072cdb9..d5d17786c8 100644
  
              switch (RuntimeInfo.OS)
              {
+
 
 diff --git a/osu.Desktop/Program.cs b/osu.Desktop/Program.cs
 index 337b2beac4..18741dd769 100644
@@ -5769,6 +5790,7 @@ index 337b2beac4..18741dd769 100644
                      }
                  }
 
+
 diff --git a/osu.Game.Rulesets.Osu.Tests/ModosuMetronomeTest.cs b/osu.Game.Rulesets.Osu.Tests/ModosuMetronomeTest.cs
 new file mode 100644
 index 0000000000..5420ffd643
@@ -5827,6 +5849,7 @@ index 0000000000..5420ffd643
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game.Rulesets.Osu.Tests/ModosuSpacingTest.cs b/osu.Game.Rulesets.Osu.Tests/ModosuSpacingTest.cs
 new file mode 100644
@@ -5926,6 +5949,7 @@ index 0000000000..a53f1d9604
 +    }
 +}
 
+
 diff --git a/osu.Game.Rulesets.Osu.Tests/ToriiModRegistrationTest.cs b/osu.Game.Rulesets.Osu.Tests/ToriiModRegistrationTest.cs
 index d6b5dfdbad..e76acb8ef2 100644
 --- a/osu.Game.Rulesets.Osu.Tests/ToriiModRegistrationTest.cs
@@ -5938,6 +5962,7 @@ index d6b5dfdbad..e76acb8ef2 100644
              Assert.That(mods.Any(mod => mod is ModPitchAdjust), Is.True);
          }
      }
+
 
 diff --git a/osu.Game.Rulesets.Osu/Mods/ExpoTooltips.cs b/osu.Game.Rulesets.Osu/Mods/ExpoTooltips.cs
 new file mode 100644
@@ -6216,6 +6241,7 @@ index 0000000000..3ad1ad6c6d
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModCircleGeneration.cs b/osu.Game.Rulesets.Osu/Mods/OsuModCircleGeneration.cs
 new file mode 100644
@@ -6570,6 +6596,7 @@ index 0000000000..d4cad241be
 +    }
 +}
 
+
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModMetronome.cs b/osu.Game.Rulesets.Osu/Mods/OsuModMetronome.cs
 new file mode 100644
 index 0000000000..bdbf63bd8b
@@ -6697,6 +6724,7 @@ index 0000000000..bdbf63bd8b
 +    }
 +}
 
+
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModMissChallenge.cs b/osu.Game.Rulesets.Osu/Mods/OsuModMissChallenge.cs
 new file mode 100644
 index 0000000000..3979f0b383
@@ -6802,6 +6830,7 @@ index 0000000000..3979f0b383
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModNoSliding.cs b/osu.Game.Rulesets.Osu/Mods/OsuModNoSliding.cs
 new file mode 100644
@@ -7011,6 +7040,7 @@ index 0000000000..c17d5cd2e9
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModRandomV2.cs b/osu.Game.Rulesets.Osu/Mods/OsuModRandomV2.cs
 new file mode 100644
@@ -7639,6 +7669,7 @@ index 0000000000..077ed781c1
 +
 +}
 
+
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModSpacingAdjust.cs b/osu.Game.Rulesets.Osu/Mods/OsuModSpacingAdjust.cs
 new file mode 100644
 index 0000000000..50e39e05bc
@@ -7736,6 +7767,7 @@ index 0000000000..50e39e05bc
 +    }
 +}
 
+
 diff --git a/osu.Game.Rulesets.Osu/OsuRuleset.cs b/osu.Game.Rulesets.Osu/OsuRuleset.cs
 index 0988bb3342..a84d208672 100644
 --- a/osu.Game.Rulesets.Osu/OsuRuleset.cs
@@ -7769,6 +7801,7 @@ index 0988bb3342..a84d208672 100644
                          new ModPitchAdjust(),
                          new OsuModTransform(),
 
+
 diff --git a/osu.Game.Rulesets.Osu/UI/DrawableOsuRuleset.cs b/osu.Game.Rulesets.Osu/UI/DrawableOsuRuleset.cs
 index 12d5363469..80041caa15 100644
 --- a/osu.Game.Rulesets.Osu/UI/DrawableOsuRuleset.cs
@@ -7789,6 +7822,7 @@ index 12d5363469..80041caa15 100644
  
                  cursorHideEnabled = Config.GetBindable<bool>(OsuRulesetSetting.ReplayCursorHideEnabled);
  
+
 
 diff --git a/osu.Game.Rulesets.Osu/UI/ExpoStreamsTooltip.cs b/osu.Game.Rulesets.Osu/UI/ExpoStreamsTooltip.cs
 new file mode 100644
@@ -7818,6 +7852,7 @@ index 0000000000..1ee595c8ad
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game.Rulesets.Osu/UI/RandomV2Settings.cs b/osu.Game.Rulesets.Osu/UI/RandomV2Settings.cs
 new file mode 100644
@@ -7984,6 +8019,7 @@ index 0000000000..f51729b868
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game.Rulesets.Osu/UI/SongProgressSettings.cs b/osu.Game.Rulesets.Osu/UI/SongProgressSettings.cs
 new file mode 100644
@@ -8255,6 +8291,7 @@ index 0000000000..f8213447f1
 +    }
 +}
 
+
 diff --git a/osu.Game.Rulesets.Osu/UI/SpacingAdjustSettings.cs b/osu.Game.Rulesets.Osu/UI/SpacingAdjustSettings.cs
 new file mode 100644
 index 0000000000..8eeb4c6b59
@@ -8413,6 +8450,7 @@ index 0000000000..8eeb4c6b59
 +    }
 +}
 
+
 diff --git a/osu.Game.Rulesets.Osu/Utils/ModosuHitObjectGenerationUtils.OriginalStateStore.cs b/osu.Game.Rulesets.Osu/Utils/ModosuHitObjectGenerationUtils.OriginalStateStore.cs
 new file mode 100644
 index 0000000000..bb0fe08e8c
@@ -8478,6 +8516,7 @@ index 0000000000..bb0fe08e8c
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game.Rulesets.Osu/Utils/ModosuHitObjectGenerationUtils.Reposition.cs b/osu.Game.Rulesets.Osu/Utils/ModosuHitObjectGenerationUtils.Reposition.cs
 new file mode 100644
@@ -9010,6 +9049,7 @@ index 0000000000..d3890b3a97
 +    }
 +}
 
+
 diff --git a/osu.Game.Rulesets.Osu/Utils/ModosuHitObjectGenerationUtils.cs b/osu.Game.Rulesets.Osu/Utils/ModosuHitObjectGenerationUtils.cs
 new file mode 100644
 index 0000000000..df862a0a9b
@@ -9323,6 +9363,7 @@ index 0000000000..df862a0a9b
 +    }
 +}
 
+
 diff --git a/osu.Game/Beatmaps/BeatmapUpdater.cs b/osu.Game/Beatmaps/BeatmapUpdater.cs
 index 559ba64124..6e1bdc2c7c 100644
 --- a/osu.Game/Beatmaps/BeatmapUpdater.cs
@@ -9336,6 +9377,7 @@ index 559ba64124..6e1bdc2c7c 100644
                      metadataLookup.Update(beatmapSet, lookupScope == MetadataLookupScope.OnlineFirst);
  
                  foreach (BeatmapInfo beatmap in beatmapSet.Beatmaps)
+
 
 diff --git a/osu.Game/Beatmaps/LocalCachedBeatmapMetadataSource.cs b/osu.Game/Beatmaps/LocalCachedBeatmapMetadataSource.cs
 index 18bdc442e1..ed4a39ca70 100644
@@ -9351,6 +9393,7 @@ index 18bdc442e1..ed4a39ca70 100644
          }
  
 
+
 diff --git a/osu.Game/Database/RealmArchiveModelImporter.cs b/osu.Game/Database/RealmArchiveModelImporter.cs
 index a5dd237be3..18ecbbc87d 100644
 --- a/osu.Game/Database/RealmArchiveModelImporter.cs
@@ -9365,6 +9408,7 @@ index a5dd237be3..18ecbbc87d 100644
              }
              catch (Exception e)
 
+
 diff --git a/osu.Game/Extensions/ModelExtensions.cs b/osu.Game/Extensions/ModelExtensions.cs
 index beeb53ee05..bb06aa286b 100644
 --- a/osu.Game/Extensions/ModelExtensions.cs
@@ -9377,6 +9421,7 @@ index beeb53ee05..bb06aa286b 100644
                      return false;
  
                  case BeatmapLeaderboardScope.Country:
+
 
 diff --git a/osu.Game/Graphics/OnlineAssetCachingStore.cs b/osu.Game/Graphics/OnlineAssetCachingStore.cs
 index 2daa7899c7..13f885c386 100644
@@ -9392,6 +9437,7 @@ index 2daa7899c7..13f885c386 100644
  
              return largeTextureStore.Get(url);
 
+
 diff --git a/osu.Game/Localisation/BeatmapLeaderboardWedgeStrings.cs b/osu.Game/Localisation/BeatmapLeaderboardWedgeStrings.cs
 index 873c3bd53f..1f6a5c3ad8 100644
 --- a/osu.Game/Localisation/BeatmapLeaderboardWedgeStrings.cs
@@ -9405,6 +9451,7 @@ index 873c3bd53f..1f6a5c3ad8 100644
          /// <summary>
          /// "Global"
          /// </summary>
+
 
 diff --git a/osu.Game/Mapperatorinator/MapperatorinatorSetup.cs b/osu.Game/Mapperatorinator/MapperatorinatorSetup.cs
 index 8f5b38ad3b..72b89bfc9f 100644
@@ -9429,6 +9476,7 @@ index 8f5b38ad3b..72b89bfc9f 100644
              string partial = destination + $".{Guid.NewGuid():N}.download";
              try
              {
+
 
 diff --git a/osu.Game/Offline/OfflineAPIProvider.cs b/osu.Game/Offline/OfflineAPIProvider.cs
 new file mode 100644
@@ -9539,6 +9587,7 @@ new file mode 100644
 +    }
 +}
 
+
 diff --git a/osu.Game/Offline/RitsuOffline.cs b/osu.Game/Offline/RitsuOffline.cs
 new file mode 100644
 index 0000000000..c8b4957adb
@@ -9567,6 +9616,7 @@ index 0000000000..c8b4957adb
 +    }
 +}
 
+
 diff --git a/osu.Game/Online/API/LocalUserState.cs b/osu.Game/Online/API/LocalUserState.cs
 --- a/osu.Game/Online/API/LocalUserState.cs
 +++ b/osu.Game/Online/API/LocalUserState.cs
@@ -9582,6 +9632,7 @@ diff --git a/osu.Game/Online/API/LocalUserState.cs b/osu.Game/Online/API/LocalUs
          /// Show a placeholder user if saved credentials are available.
          /// This is useful for storing local scores and showing a placeholder username after starting the game,
 
+
 diff --git a/osu.Game/Online/API/Requests/GetScoresRequest.cs b/osu.Game/Online/API/Requests/GetScoresRequest.cs
 index eb0c82e790..5ef83dc899 100644
 --- a/osu.Game/Online/API/Requests/GetScoresRequest.cs
@@ -9595,6 +9646,7 @@ index eb0c82e790..5ef83dc899 100644
                  throw new InvalidOperationException("Should not attempt to request online scores for a local scoped leaderboard");
  
              this.beatmapInfo = beatmapInfo;
+
 
 diff --git a/osu.Game/Online/API/Requests/Responses/APIUser.cs b/osu.Game/Online/API/Requests/Responses/APIUser.cs
 --- a/osu.Game/Online/API/Requests/Responses/APIUser.cs
@@ -9633,6 +9685,7 @@ diff --git a/osu.Game/Online/API/Requests/Responses/APIUser.cs b/osu.Game/Online
  #pragma warning disable 649
          private class Country
 
+
 diff --git a/osu.Game/Online/Chat/ExternalLinkOpener.cs b/osu.Game/Online/Chat/ExternalLinkOpener.cs
 index 708e9edefa..b0e499f189 100644
 --- a/osu.Game/Online/Chat/ExternalLinkOpener.cs
@@ -9656,6 +9709,7 @@ index 708e9edefa..b0e499f189 100644
              bool isTrustedDomain;
  
              if (url.StartsWith('/'))
+
 
 diff --git a/osu.Game/Online/Leaderboards/LeaderboardManager.cs b/osu.Game/Online/Leaderboards/LeaderboardManager.cs
 --- a/osu.Game/Online/Leaderboards/LeaderboardManager.cs
@@ -9742,6 +9796,7 @@ diff --git a/osu.Game/Online/Leaderboards/LeaderboardManager.cs b/osu.Game/Onlin
  
      public record LeaderboardScores
 
+
 diff --git a/osu.Game/Online/TrustedDomainOnlineStore.cs b/osu.Game/Online/TrustedDomainOnlineStore.cs
 index f4326de89b..0b12a49e19 100644
 --- a/osu.Game/Online/TrustedDomainOnlineStore.cs
@@ -9756,6 +9811,7 @@ index f4326de89b..0b12a49e19 100644
              // Trust the Torii server's file host (avatars, team flags, etc.) alongside ppy.sh.
              // torii.local es el host del stack de dev; solo resuelve a 127.0.0.1 via el hosts, asi
              // que confiarlo es inofensivo en prod (no resuelve en una maquina normal).
+
 
 diff --git a/osu.Game/OsuGameBase.cs b/osu.Game/OsuGameBase.cs
 --- a/osu.Game/OsuGameBase.cs
@@ -9889,6 +9945,7 @@ diff --git a/osu.Game/OsuGameBase.cs b/osu.Game/OsuGameBase.cs
              base.Content.Add(SpectatorClient);
              base.Content.Add(MultiplayerClient);
 
+
 diff --git a/osu.Game/Overlays/BeatmapListing/BeatmapListingFilterControl.cs b/osu.Game/Overlays/BeatmapListing/BeatmapListingFilterControl.cs
 index 6bc4411ce0..986604bd0b 100644
 --- a/osu.Game/Overlays/BeatmapListing/BeatmapListingFilterControl.cs
@@ -9913,6 +9970,7 @@ index 6bc4411ce0..986604bd0b 100644
              SearchStarted?.Invoke();
  
              resetSearch();
+
 
 diff --git a/osu.Game/Overlays/BeatmapListingOverlay.cs b/osu.Game/Overlays/BeatmapListingOverlay.cs
 index c21fc66827..a8b9bb6573 100644
@@ -10003,6 +10061,7 @@ index c21fc66827..a8b9bb6573 100644
  
          private CancellationTokenSource cancellationToken;
 
+
 diff --git a/osu.Game/Overlays/ChatOverlay.cs b/osu.Game/Overlays/ChatOverlay.cs
 index 17f6b0189f..78bb0ad3f1 100644
 --- a/osu.Game/Overlays/ChatOverlay.cs
@@ -10021,6 +10080,7 @@ index 17f6b0189f..78bb0ad3f1 100644
          public LocalisableString Title => ChatStrings.HeaderTitle;
          public LocalisableString Description => ChatStrings.HeaderDescription;
 
+
 diff --git a/osu.Game/Overlays/LoginOverlay.cs b/osu.Game/Overlays/LoginOverlay.cs
 index 75b0806447..bbeb8244ac 100644
 --- a/osu.Game/Overlays/LoginOverlay.cs
@@ -10038,6 +10098,7 @@ index 75b0806447..bbeb8244ac 100644
          [BackgroundDependencyLoader]
          private void load(OsuConfigManager config)
          {
+
 
 diff --git a/osu.Game/Overlays/Mods/ModPanel.cs b/osu.Game/Overlays/Mods/ModPanel.cs
 index 295663f9fb..4925b13b34 100644
@@ -10287,6 +10348,7 @@ index 295663f9fb..4925b13b34 100644
  
                  return;
 
+
 diff --git a/osu.Game/Overlays/Mods/ModSelectPanel.cs b/osu.Game/Overlays/Mods/ModSelectPanel.cs
 index 5cf858fc1d..3a3c929f28 100644
 --- a/osu.Game/Overlays/Mods/ModSelectPanel.cs
@@ -10309,6 +10371,7 @@ index 5cf858fc1d..3a3c929f28 100644
              SwitchContainer.ResizeWidthTo(targetWidth, transitionDuration, Easing.OutQuint);
              MainContentContainer.TransformTo(nameof(Padding), new MarginPadding
 
+
 diff --git a/osu.Game/Overlays/OnlineOverlay.cs b/osu.Game/Overlays/OnlineOverlay.cs
 index cc5a1b9d2d..901af9f6f0 100644
 --- a/osu.Game/Overlays/OnlineOverlay.cs
@@ -10328,6 +10391,7 @@ index cc5a1b9d2d..901af9f6f0 100644
          protected OnlineOverlay(OverlayColourScheme colourScheme, bool requiresSignIn = true)
              : base(colourScheme)
          {
+
 
 diff --git a/osu.Game/Overlays/Profile/RitsuLocalProfileHeader.cs b/osu.Game/Overlays/Profile/RitsuLocalProfileHeader.cs
 new file mode 100644
@@ -10702,6 +10766,7 @@ new file mode 100644
 +    }
 +}
 
+
 diff --git a/osu.Game/Overlays/Profile/RitsuProfileCardRow.cs b/osu.Game/Overlays/Profile/RitsuProfileCardRow.cs
 new file mode 100644
 index 0000000000..37ca3c1625
@@ -10962,6 +11027,7 @@ index 0000000000..37ca3c1625
 +    }
 +}
 
+
 diff --git a/osu.Game/Overlays/Settings/Sections/General/InstallationSettings.cs b/osu.Game/Overlays/Settings/Sections/General/InstallationSettings.cs
 index a7f95cfb57..e2d13677a7 100644
 --- a/osu.Game/Overlays/Settings/Sections/General/InstallationSettings.cs
@@ -10976,6 +11042,7 @@ index a7f95cfb57..e2d13677a7 100644
              Add(new DangerousSettingsButtonV2
              {
                  Text = GeneralSettingsStrings.ChangeFolderLocation,
+
 
 diff --git a/osu.Game/Overlays/Settings/Sections/General/QuickActionSettings.cs b/osu.Game/Overlays/Settings/Sections/General/QuickActionSettings.cs
 index f6fe576dc2..16d3217115 100644
@@ -10998,6 +11065,7 @@ index f6fe576dc2..16d3217115 100644
  
              Add(new SettingsButtonV2
              {
+
 
 diff --git a/osu.Game/Overlays/Settings/Sections/Maintenance/ModPresetSettings.cs b/osu.Game/Overlays/Settings/Sections/Maintenance/ModPresetSettings.cs
 index 17101c6526..638e0142d5 100644
@@ -11152,6 +11220,7 @@ index 17101c6526..638e0142d5 100644
              realm.Write(r =>
              {
 
+
 diff --git a/osu.Game/Overlays/Settings/Sections/Torii/ToriiGameplaySettings.cs b/osu.Game/Overlays/Settings/Sections/Torii/ToriiGameplaySettings.cs
 index 2fd4708445..7d0bf219c6 100644
 --- a/osu.Game/Overlays/Settings/Sections/Torii/ToriiGameplaySettings.cs
@@ -11169,6 +11238,7 @@ index 2fd4708445..7d0bf219c6 100644
              };
          }
      }
+
 
 diff --git a/osu.Game/Overlays/Settings/Sections/ToriiSection.cs b/osu.Game/Overlays/Settings/Sections/ToriiSection.cs
 index 85bb78f832..541b7071e4 100644
@@ -11191,6 +11261,7 @@ index 85bb78f832..541b7071e4 100644
  
              // subsecciones torii por-ruleset: cada ruleset puede pedir mirrorear prefs relevantes aca
 
+
 diff --git a/osu.Game/Overlays/SettingsOverlay.cs b/osu.Game/Overlays/SettingsOverlay.cs
 index 178445d5d8..07a1d4fd2c 100644
 --- a/osu.Game/Overlays/SettingsOverlay.cs
@@ -11205,6 +11276,7 @@ index 178445d5d8..07a1d4fd2c 100644
  
              foreach (var s in subPanels)
                  ContentContainer.Add(s);
+
 
 diff --git a/osu.Game/Overlays/Toolbar/Toolbar.cs b/osu.Game/Overlays/Toolbar/Toolbar.cs
 index 2b5757b7bb..d9b536be00 100644
@@ -11249,6 +11321,7 @@ index 2b5757b7bb..d9b536be00 100644
              this.MoveToY(-DrawSize.Y, transition_time, Easing.OutQuint);
              this.FadeOut(transition_time, Easing.InQuint);
 
+
 diff --git a/osu.Game/Overlays/Toolbar/ToolbarBeatmapListingButton.cs b/osu.Game/Overlays/Toolbar/ToolbarBeatmapListingButton.cs
 index 247be553e1..7c685284a8 100644
 --- a/osu.Game/Overlays/Toolbar/ToolbarBeatmapListingButton.cs
@@ -11284,6 +11357,7 @@ index 247be553e1..7c685284a8 100644
          }
      }
  }
+
 
 diff --git a/osu.Game/Overlays/Toolbar/ToolbarLocalProfileButton.cs b/osu.Game/Overlays/Toolbar/ToolbarLocalProfileButton.cs
 new file mode 100644
@@ -11369,6 +11443,7 @@ new file mode 100644
 +    }
 +}
 
+
 diff --git a/osu.Game/Rulesets/Mods/IRitsuModOrigins.cs b/osu.Game/Rulesets/Mods/IRitsuModOrigins.cs
 new file mode 100644
 index 0000000000..e9029ac73b
@@ -11384,6 +11459,7 @@ index 0000000000..e9029ac73b
 +    /// <summary>Marks a future Ritsu-exclusive mod for presentation in mod selection.</summary>
 +    public interface IRitsuExclusiveMod { }
 +}
+
 
 diff --git a/osu.Game/Screens/Menu/ButtonSystem.cs b/osu.Game/Screens/Menu/ButtonSystem.cs
 index 67f8aecad3..86ef1ff4ab 100644
@@ -11424,6 +11500,7 @@ index 67f8aecad3..86ef1ff4ab 100644
  
              buttonsTopLevel.Add(new MainMenuButton(ButtonSystemStrings.Play, @"button-play-select", OsuIcon.Logo, new Color4(102, 68, 204, 255), (_, _) => State = ButtonSystemState.Play, Key.P, Key.M,
 
+
 diff --git a/osu.Game/Screens/Menu/MainMenu.cs b/osu.Game/Screens/Menu/MainMenu.cs
 index 086a3075c9..9baaa1ee60 100644
 --- a/osu.Game/Screens/Menu/MainMenu.cs
@@ -11444,6 +11521,7 @@ index 086a3075c9..9baaa1ee60 100644
              if (!api.IsLoggedIn || api.State.Value == APIState.RequiresSecondFactorAuth)
              {
 
+
 diff --git a/osu.Game/Screens/Menu/SupporterDisplay.cs b/osu.Game/Screens/Menu/SupporterDisplay.cs
 index a3bc7ebd3c..4b1ee8c855 100644
 --- a/osu.Game/Screens/Menu/SupporterDisplay.cs
@@ -11457,6 +11535,7 @@ index a3bc7ebd3c..4b1ee8c855 100644
          private LinkFlowContainer supportFlow = null!;
  
          private Drawable heart = null!;
+
 
 diff --git a/osu.Game/Screens/Play/HUD/RitsuLiveStarCounter.cs b/osu.Game/Screens/Play/HUD/RitsuLiveStarCounter.cs
 new file mode 100644
@@ -11579,6 +11658,7 @@ index 0000000000..d3f9efa801
 +    }
 +}
 
+
 diff --git a/osu.Game/Screens/Play/Leaderboards/BeatmapLeaderboardScope.cs b/osu.Game/Screens/Play/Leaderboards/BeatmapLeaderboardScope.cs
 index 555a2a72c5..d3b9b269f1 100644
 --- a/osu.Game/Screens/Play/Leaderboards/BeatmapLeaderboardScope.cs
@@ -11592,6 +11672,7 @@ index 555a2a72c5..d3b9b269f1 100644
 +        LocalAll,
      }
  }
+
 
 diff --git a/osu.Game/Screens/Play/Player.cs b/osu.Game/Screens/Play/Player.cs
 --- a/osu.Game/Screens/Play/Player.cs
@@ -11713,6 +11794,7 @@ diff --git a/osu.Game/Screens/Play/Player.cs b/osu.Game/Screens/Play/Player.cs
  
          /// <summary>
 
+
 diff --git a/osu.Game/Screens/Play/SkipBreakOverlay.cs b/osu.Game/Screens/Play/SkipBreakOverlay.cs
 index f1aaf67dab..9c591537a0 100644
 --- a/osu.Game/Screens/Play/SkipBreakOverlay.cs
@@ -11766,6 +11848,7 @@ index f1aaf67dab..9c591537a0 100644
  
              // If the window closed (break ending, or seek already past it)
 
+
 diff --git a/osu.Game/Screens/Ranking/RenderVideoButton.cs b/osu.Game/Screens/Ranking/RenderVideoButton.cs
 index a2e77204d2..518a980df3 100644
 --- a/osu.Game/Screens/Ranking/RenderVideoButton.cs
@@ -11779,6 +11862,7 @@ index a2e77204d2..518a980df3 100644
              this.FadeTo(renderable ? 1 : 0, 150, Easing.OutQuint);
          }
      }
+
 
 diff --git a/osu.Game/Screens/Ranking/SoloResultsScreen.cs b/osu.Game/Screens/Ranking/SoloResultsScreen.cs
 index 8f26900..b6c2114 100644
@@ -11880,6 +11964,7 @@ index 8f26900..b6c2114 100644
                      bool presentedLocalUserScoreIsBetter = presentingLocalUserScore && clonedScore.UserID == api.LocalUser.Value.OnlineID && clonedScore.TotalScore < Score.TotalScore;
  
 
+
 diff --git a/osu.Game/Screens/Ranking/V2ResultsFooter.cs b/osu.Game/Screens/Ranking/V2ResultsFooter.cs
 index 808e6e5417..717d2a7c47 100644
 --- a/osu.Game/Screens/Ranking/V2ResultsFooter.cs
@@ -11901,6 +11986,7 @@ index 808e6e5417..717d2a7c47 100644
                  };
              }
  
+
 
 diff --git a/osu.Game/Screens/Select/BeatmapCarousel.cs b/osu.Game/Screens/Select/BeatmapCarousel.cs
 --- a/osu.Game/Screens/Select/BeatmapCarousel.cs
@@ -12067,6 +12153,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapCarousel.cs b/osu.Game/Screens/Selec
          /// <remarks>
          /// Note that calling <c>.ToHashSet()</c> below has two purposes:
 
+
 diff --git a/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs b/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs
 --- a/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs
 +++ b/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs
@@ -12139,6 +12226,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs b/osu.Game/Scr
          }
      }
 
+
 diff --git a/osu.Game/Screens/Select/BeatmapLeaderboardWedge.cs b/osu.Game/Screens/Select/BeatmapLeaderboardWedge.cs
 --- a/osu.Game/Screens/Select/BeatmapLeaderboardWedge.cs
 +++ b/osu.Game/Screens/Select/BeatmapLeaderboardWedge.cs
@@ -12170,6 +12258,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapLeaderboardWedge.cs b/osu.Game/Scree
                  else if (api.LocalUserState.Friends.Any(r => r.TargetID == s.UserID) && Scope.Value != BeatmapLeaderboardScope.Friend)
                      highlightType = BeatmapLeaderboardScore.HighlightType.Friend;
 
+
 diff --git a/osu.Game/Screens/Select/LegacyLeaderboard.cs b/osu.Game/Screens/Select/LegacyLeaderboard.cs
 index becb29f199..afd4a82de2 100644
 --- a/osu.Game/Screens/Select/LegacyLeaderboard.cs
@@ -12196,6 +12285,7 @@ index becb29f199..afd4a82de2 100644
  
              if (Scope.Value == target)
                  return;
+
 
 diff --git a/osu.Game/Screens/Select/PanelLocalRankDisplay.cs b/osu.Game/Screens/Select/PanelLocalRankDisplay.cs
 index 1d93ff3ab6..6ccd8c71af 100644
@@ -12239,6 +12329,7 @@ index 1d93ff3ab6..6ccd8c71af 100644
          }
      }
  }
+
 
 diff --git a/osu.Game/Textures/Ritsu/logo.png b/osu.Game/Textures/Ritsu/logo.png
 new file mode 100644
@@ -12970,6 +13061,7 @@ literal 0
 HcmV?d00001
 
 
+
 diff --git a/osu.Game/Utils/SentryLogger.cs b/osu.Game/Utils/SentryLogger.cs
 index 8614bd89e1..49ac91cf3f 100644
 --- a/osu.Game/Utils/SentryLogger.cs
@@ -12983,6 +13075,7 @@ index 8614bd89e1..49ac91cf3f 100644
                  return;
  
              if (DebugUtils.IsNUnitRunning)
+
 
 diff --git a/osu.Game/Overlays/Profile/RitsuProfileAvatar.cs b/osu.Game/Overlays/Profile/RitsuProfileAvatar.cs
 new file mode 100644
@@ -13108,6 +13201,7 @@ index 0000000000..81a29e5cb698287adc2af2e933d9da70ef4e5c5e
 +    }
 +}
 
+
 diff --git a/osu.Game/Screens/Play/SubmittingPlayer.cs b/osu.Game/Screens/Play/SubmittingPlayer.cs
 index a24d274..d62ad59 100644
 --- a/osu.Game/Screens/Play/SubmittingPlayer.cs
@@ -13120,6 +13214,7 @@ index a24d274..d62ad59 100644
          };
      }
  }
+
 
 diff --git a/osu.Game.Tests/Database/RitsuResultRanksTest.cs b/osu.Game.Tests/Database/RitsuResultRanksTest.cs
 new file mode 100644
@@ -13244,6 +13339,7 @@ new file mode 100644
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game/Screens/Ranking/RitsuResultRanksToast.cs b/osu.Game/Screens/Ranking/RitsuResultRanksToast.cs
 new file mode 100644
@@ -13474,6 +13570,7 @@ new file mode 100644
 +    }
 +}
 
+
 diff --git a/osu.Game/Screens/Ranking/Expanded/Statistics/PerformanceStatistic.cs b/osu.Game/Screens/Ranking/Expanded/Statistics/PerformanceStatistic.cs
 index f800125..d302d66 100644
 --- a/osu.Game/Screens/Ranking/Expanded/Statistics/PerformanceStatistic.cs
@@ -13492,6 +13589,7 @@ index f800125..d302d66 100644
  
                  // Aunque no haya animacion, el tooltip educa igual si hubo pausas.
                  if (pauseCount > 0 && eligibleForPp)
+
 
 diff --git a/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs b/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs
 --- a/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs
@@ -13559,6 +13657,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs b/osu.Game/Scree
          {
              switch (highlightType)
 
+
 diff --git a/osu.Game/Graphics/UserInterfaceV2/ShearedDropdown.cs b/osu.Game/Graphics/UserInterfaceV2/ShearedDropdown.cs
 --- a/osu.Game/Graphics/UserInterfaceV2/ShearedDropdown.cs
 +++ b/osu.Game/Graphics/UserInterfaceV2/ShearedDropdown.cs
@@ -13594,6 +13693,7 @@ diff --git a/osu.Game/Graphics/UserInterfaceV2/ShearedDropdown.cs b/osu.Game/Gra
  
          protected partial class ShearedDropdownMenu : OsuDropdown<T>.OsuDropdownMenu
          {
+
 
 diff --git a/osu.Game/Screens/Select/FilterCriteria.cs b/osu.Game/Screens/Select/FilterCriteria.cs
 --- a/osu.Game/Screens/Select/FilterCriteria.cs
@@ -13633,6 +13733,7 @@ diff --git a/osu.Game/Screens/Select/FilterCriteria.cs b/osu.Game/Screens/Select
                  case SortMode.LastPlayed:
                  case SortMode.BPM:
                  case SortMode.Length:
+
 
 diff --git a/osu.Game/Screens/Select/FilterControl.cs b/osu.Game/Screens/Select/FilterControl.cs
 --- a/osu.Game/Screens/Select/FilterControl.cs
@@ -13927,6 +14028,7 @@ diff --git a/osu.Game/Screens/Select/FilterControl.cs b/osu.Game/Screens/Select/
  
          private partial class GroupModeDropdown : ShearedDropdown<GroupModeDropdownItem>
 
+
 diff --git a/osu.Game/Screens/Select/BeatmapCarouselFilterSorting.cs b/osu.Game/Screens/Select/BeatmapCarouselFilterSorting.cs
 --- a/osu.Game/Screens/Select/BeatmapCarouselFilterSorting.cs
 +++ b/osu.Game/Screens/Select/BeatmapCarouselFilterSorting.cs
@@ -14005,6 +14107,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapCarouselFilterSorting.cs b/osu.Game/
          private static int compare(BeatmapInfo a, BeatmapInfo b, SortMode sort, bool aggregate, Func<BeatmapInfo, double> getEffectiveStarRating)
          {
 
+
 diff --git a/osu.Game/Screens/Select/BeatmapDetailsArea.cs b/osu.Game/Screens/Select/BeatmapDetailsArea.cs
 --- a/osu.Game/Screens/Select/BeatmapDetailsArea.cs
 +++ b/osu.Game/Screens/Select/BeatmapDetailsArea.cs
@@ -14016,6 +14119,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapDetailsArea.cs b/osu.Game/Screens/Se
                          FilterBySelectedMods = { BindTarget = header.FilterBySelectedMods },
                      };
  
+
 
 diff --git a/osu.Game/Screens/Select/Filter/SortMode.cs b/osu.Game/Screens/Select/Filter/SortMode.cs
 --- a/osu.Game/Screens/Select/Filter/SortMode.cs
@@ -14033,6 +14137,7 @@ diff --git a/osu.Game/Screens/Select/Filter/SortMode.cs b/osu.Game/Screens/Selec
      }
  }
 
+
 diff --git a/osu.Game/Screens/Select/Filter/GroupMode.cs b/osu.Game/Screens/Select/Filter/GroupMode.cs
 --- a/osu.Game/Screens/Select/Filter/GroupMode.cs
 +++ b/osu.Game/Screens/Select/Filter/GroupMode.cs
@@ -14049,6 +14154,7 @@ diff --git a/osu.Game/Screens/Select/Filter/GroupMode.cs b/osu.Game/Screens/Sele
      }
  }
 
+
 diff --git a/osu.Game/Online/Leaderboards/LeaderboardSortMode.cs b/osu.Game/Online/Leaderboards/LeaderboardSortMode.cs
 --- a/osu.Game/Online/Leaderboards/LeaderboardSortMode.cs
 +++ b/osu.Game/Online/Leaderboards/LeaderboardSortMode.cs
@@ -14061,6 +14167,7 @@ diff --git a/osu.Game/Online/Leaderboards/LeaderboardSortMode.cs b/osu.Game/Onli
 +        PerformancePoints,
      }
  }
+
 
 diff --git a/osu.Game/Scoring/ScoreInfoExtensions.cs b/osu.Game/Scoring/ScoreInfoExtensions.cs
 --- a/osu.Game/Scoring/ScoreInfoExtensions.cs
@@ -14075,6 +14182,7 @@ diff --git a/osu.Game/Scoring/ScoreInfoExtensions.cs b/osu.Game/Scoring/ScoreInf
  
                  case LeaderboardSortMode.Date:
                      return scores.OrderByDescending(s => s.Date);
+
 
 diff --git a/osu.Game/Screens/Select/BeatmapCarouselFilterGrouping.cs b/osu.Game/Screens/Select/BeatmapCarouselFilterGrouping.cs
 --- a/osu.Game/Screens/Select/BeatmapCarouselFilterGrouping.cs
@@ -14155,6 +14263,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapCarouselFilterGrouping.cs b/osu.Game
          }
  
          private List<GroupMapping> getGroupsBy(Func<BeatmapInfo, IEnumerable<GroupDefinition>> defineGroups, List<CarouselItem> items)
+
 
 diff --git a/osu.Game/Beatmaps/BeatmapDifficultyCache.cs b/osu.Game/Beatmaps/BeatmapDifficultyCache.cs
 --- a/osu.Game/Beatmaps/BeatmapDifficultyCache.cs
@@ -14322,6 +14431,7 @@ diff --git a/osu.Game/Beatmaps/BeatmapDifficultyCache.cs b/osu.Game/Beatmaps/Bea
          private ScheduledDelegate? debouncedModSettingsChange;
  
 
+
 diff --git a/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterGroupingTest.cs b/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterGroupingTest.cs
 --- a/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterGroupingTest.cs
 +++ b/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterGroupingTest.cs
@@ -14382,6 +14492,7 @@ diff --git a/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterGroupingTest.
  
          private async Task<List<CarouselItem>> runGrouping(GroupMode group, List<BeatmapSetInfo> beatmapSets, IReadOnlyList<Mod>? mods = null)
 
+
 diff --git a/osu.Game/Screens/Select/FilterControl.DifficultyRangeSlider.cs b/osu.Game/Screens/Select/FilterControl.DifficultyRangeSlider.cs
 --- a/osu.Game/Screens/Select/FilterControl.DifficultyRangeSlider.cs
 +++ b/osu.Game/Screens/Select/FilterControl.DifficultyRangeSlider.cs
@@ -14414,6 +14525,7 @@ diff --git a/osu.Game/Screens/Select/FilterControl.DifficultyRangeSlider.cs b/os
              private Container borderBox = null!;
              private IDisposable? borderColourBinding;
 
+
 diff --git a/osu.Game/Screens/Select/BeatmapCarouselFilterMatching.cs b/osu.Game/Screens/Select/BeatmapCarouselFilterMatching.cs
 --- a/osu.Game/Screens/Select/BeatmapCarouselFilterMatching.cs
 +++ b/osu.Game/Screens/Select/BeatmapCarouselFilterMatching.cs
@@ -14445,6 +14557,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapCarouselFilterMatching.cs b/osu.Game
  
                  countMatching++;
                  yield return item;
+
 
 diff --git a/osu.Game/Screens/Select/CollectionDropdown.cs b/osu.Game/Screens/Select/CollectionDropdown.cs
 --- a/osu.Game/Screens/Select/CollectionDropdown.cs
@@ -14490,6 +14603,7 @@ diff --git a/osu.Game/Screens/Select/CollectionDropdown.cs b/osu.Game/Screens/Se
  
          private void collectionsChanged(IRealmCollection<BeatmapCollection> collections, ChangeSet? changes)
 
+
 diff --git a/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterSortingTest.cs b/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterSortingTest.cs
 --- a/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterSortingTest.cs
 +++ b/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterSortingTest.cs
@@ -14510,6 +14624,7 @@ diff --git a/osu.Game.Tests/Visual/SongSelect/BeatmapCarouselFilterSortingTest.c
          public async Task TestSorting()
          {
              List<BeatmapSetInfo> beatmapSets = new List<BeatmapSetInfo>();
+
 
 diff --git a/osu.Game/Screens/Select/FilterControl.PerformanceRangeSlider.cs b/osu.Game/Screens/Select/FilterControl.PerformanceRangeSlider.cs
 new file mode 100644
@@ -14654,6 +14769,7 @@ new file mode 100644
 +    }
 +}
 
+
 diff --git a/osu.Game/Screens/Select/BeatmapTitleWedge.cs b/osu.Game/Screens/Select/BeatmapTitleWedge.cs
 --- a/osu.Game/Screens/Select/BeatmapTitleWedge.cs
 +++ b/osu.Game/Screens/Select/BeatmapTitleWedge.cs
@@ -14665,6 +14781,7 @@ diff --git a/osu.Game/Screens/Select/BeatmapTitleWedge.cs b/osu.Game/Screens/Sel
          [Resolved]
          private ISongSelect? songSelect { get; set; }
  
+
 
 diff --git a/osu.Game/Screens/Select/SongSelect.cs b/osu.Game/Screens/Select/SongSelect.cs
 --- a/osu.Game/Screens/Select/SongSelect.cs
@@ -14714,6 +14831,7 @@ diff --git a/osu.Game/Screens/Select/SongSelect.cs b/osu.Game/Screens/Select/Son
  
              // If there's already a selection update in progress, let's not interrupt it.
              // Interrupting could cause the debounce interval to be reduced.
+
 
 diff --git a/osu.Game/Screens/Select/PerfectPerformanceSession.cs b/osu.Game/Screens/Select/PerfectPerformanceSession.cs
 new file mode 100644
@@ -14920,6 +15038,7 @@ new file mode 100644
 +    }
 +}
 
+
 diff --git a/osu.Game.Tests/Visual/SongSelect/PerfectPerformanceSessionTest.cs b/osu.Game.Tests/Visual/SongSelect/PerfectPerformanceSessionTest.cs
 new file mode 100644
 --- /dev/null
@@ -15054,6 +15173,7 @@ new file mode 100644
 +    }
 +}
 
+
 diff --git a/osu.Game.Tests/Visual/SongSelect/PerfectPerformanceCacheTest.cs b/osu.Game.Tests/Visual/SongSelect/PerfectPerformanceCacheTest.cs
 new file mode 100644
 --- /dev/null
@@ -15112,6 +15232,7 @@ new file mode 100644
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game/Overlays/Profile/RitsuProfileFlag.cs b/osu.Game/Overlays/Profile/RitsuProfileFlag.cs
 new file mode 100644
@@ -15270,6 +15391,7 @@ new file mode 100644
 +    }
 +}
 
+
 diff --git a/osu.Game/Users/Drawables/DrawableAvatar.cs b/osu.Game/Users/Drawables/DrawableAvatar.cs
 --- a/osu.Game/Users/Drawables/DrawableAvatar.cs
 +++ b/osu.Game/Users/Drawables/DrawableAvatar.cs
@@ -15292,6 +15414,7 @@ diff --git a/osu.Game/Users/Drawables/DrawableAvatar.cs b/osu.Game/Users/Drawabl
                  Texture = textures.Get(avatarUrl);
  
              Texture ??= textures.Get(@"Online/avatar-guest");
+
 
 diff --git a/osu.Game/Users/Drawables/UpdateableFlag.cs b/osu.Game/Users/Drawables/UpdateableFlag.cs
 --- a/osu.Game/Users/Drawables/UpdateableFlag.cs
@@ -15357,6 +15480,7 @@ diff --git a/osu.Game/Users/Drawables/UpdateableFlag.cs b/osu.Game/Users/Drawabl
      }
  }
 
+
 diff --git a/osu.Game/Online/Leaderboards/LeaderboardScore.cs b/osu.Game/Online/Leaderboards/LeaderboardScore.cs
 --- a/osu.Game/Online/Leaderboards/LeaderboardScore.cs
 +++ b/osu.Game/Online/Leaderboards/LeaderboardScore.cs
@@ -15368,6 +15492,7 @@ diff --git a/osu.Game/Online/Leaderboards/LeaderboardScore.cs b/osu.Game/Online/
                                                              Anchor = Anchor.CentreLeft,
                                                              Origin = Anchor.CentreLeft,
                                                              Size = new Vector2(28, 20),
+
 
 diff --git a/osu.Game/Users/UserPanel.cs b/osu.Game/Users/UserPanel.cs
 --- a/osu.Game/Users/UserPanel.cs
@@ -15381,6 +15506,7 @@ diff --git a/osu.Game/Users/UserPanel.cs b/osu.Game/Users/UserPanel.cs
              Action = Action,
          };
 
+
 diff --git a/osu.Game/Overlays/BeatmapSet/Scores/ScoreTable.cs b/osu.Game/Overlays/BeatmapSet/Scores/ScoreTable.cs
 --- a/osu.Game/Overlays/BeatmapSet/Scores/ScoreTable.cs
 +++ b/osu.Game/Overlays/BeatmapSet/Scores/ScoreTable.cs
@@ -15392,6 +15518,7 @@ diff --git a/osu.Game/Overlays/BeatmapSet/Scores/ScoreTable.cs b/osu.Game/Overla
                      Size = new Vector2(19, 14),
                  },
                  new FillFlowContainer
+
 
 diff --git a/osu.Game/Screens/RankingV2/Argon/ArgonPlayerInfoPanel.cs b/osu.Game/Screens/RankingV2/Argon/ArgonPlayerInfoPanel.cs
 --- a/osu.Game/Screens/RankingV2/Argon/ArgonPlayerInfoPanel.cs
@@ -15405,6 +15532,7 @@ diff --git a/osu.Game/Screens/RankingV2/Argon/ArgonPlayerInfoPanel.cs b/osu.Game
              result = assetsPresent ? apiUser : null;
              return assetsPresent;
          }
+
 
 diff --git a/osu.Game/Overlays/Settings/SettingsFooter.cs b/osu.Game/Overlays/Settings/SettingsFooter.cs
 old mode 100644
@@ -15473,6 +15601,7 @@ index a32dec4ca8..a24966e8be
                      Origin = Anchor.Centre,
                      Padding = new MarginPadding(5),
 
+
 diff --git a/osu.Game.Tests/Visual/Online/TestSceneChangelogOverlay.cs b/osu.Game.Tests/Visual/Online/TestSceneChangelogOverlay.cs
 old mode 100644
 new mode 100755
@@ -15502,6 +15631,7 @@ index 8c6a6d21c4..a6a822a8dc
          [Test]
          public void ShowWithNoFetch()
          {
+
 
 diff --git a/osu.Game/Configuration/OsuConfigManager.cs b/osu.Game/Configuration/OsuConfigManager.cs
 old mode 100644
@@ -15568,6 +15698,7 @@ index c06c47a219..229c38a69d
 +        RitsuLastVersion,
      }
  }
+
 
 diff --git a/osu.Game/OsuGame.cs b/osu.Game/OsuGame.cs
 old mode 100644
@@ -15680,6 +15811,7 @@ index b3e44cc872..d9fc6acc0e
                      else
                          ShowUser(API.LocalUser.Value);
 
+
 diff --git a/osu.Game/Overlays/ChangelogOverlay.cs b/osu.Game/Overlays/ChangelogOverlay.cs
 old mode 100644
 new mode 100755
@@ -15738,6 +15870,7 @@ index fa7920caf8..92d07683f7
                  // fetch and refresh to show listing, if no other request was made via Show methods
                  performAfterFetch(() => Current.TriggerChange());
          }
+
 
 diff --git a/osu.Game/Overlays/RitsuLocalProfileOverlay.cs b/osu.Game/Overlays/RitsuLocalProfileOverlay.cs
 new file mode 100755
@@ -16024,6 +16157,7 @@ index 0000000000..e40aa81279
 +    }
 +}
 
+
 diff --git a/osu.Game/Updater/UpdateManager.cs b/osu.Game/Updater/UpdateManager.cs
 old mode 100644
 new mode 100755
@@ -16073,6 +16207,7 @@ index 9aa6c812cb..68b62a29c5
              };
          }
 
+
 diff --git a/osu.Game/osu.Game.csproj b/osu.Game/osu.Game.csproj
 old mode 100644
 new mode 100755
@@ -16088,6 +16223,7 @@ index 6e7e825620..45c128b691
 +    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Ritsu.CHANGELOG.md" />
    </ItemGroup>
  </Project>
+
 
 diff --git a/osu.Game/Overlays/RitsuReleaseNotes.cs b/osu.Game/Overlays/RitsuReleaseNotes.cs
 new file mode 100755
@@ -16114,6 +16250,7 @@ index 0000000000..c55065710e
 +    }
 +}
 
+
 diff --git a/osu.Game/Overlays/Changelog/RitsuLocalChangelogContent.cs b/osu.Game/Overlays/Changelog/RitsuLocalChangelogContent.cs
 new file mode 100755
 index 0000000000..a61ae72412
@@ -16138,6 +16275,7 @@ index 0000000000..a61ae72412
 +        }
 +    }
 +}
+
 
 diff --git a/osu.Game.Tests/Skins/SkinDeserialisationTest.cs b/osu.Game.Tests/Skins/SkinDeserialisationTest.cs
 index 6adbf85..8be6c88 100644
@@ -16192,6 +16330,7 @@ index 6adbf85..8be6c88 100644
              public TestSkin(SkinInfo skin, IStorageResourceProvider? resources, IResourceStore<byte[]>? fallbackStore = null, string configurationFilename = "skin.ini")
 
 
+
 diff --git a/osu.Game/Screens/Select/PanelBeatmap.cs b/osu.Game/Screens/Select/PanelBeatmap.cs
 index 15582c2..6591f7e 100644
 --- a/osu.Game/Screens/Select/PanelBeatmap.cs
@@ -16228,79 +16367,7 @@ index 15582c2..6591f7e 100644
                  if (songSelect != null)
                      items.AddRange(songSelect.GetForwardActions(beatmap));
  
-diff --git a/osu.Game/Screens/Select/PanelBeatmapSet.cs b/osu.Game/Screens/Select/PanelBeatmapSet.cs
-index 8df1aab..e9bed2d 100644
---- a/osu.Game/Screens/Select/PanelBeatmapSet.cs
-+++ b/osu.Game/Screens/Select/PanelBeatmapSet.cs
-@@ -28,6 +28,7 @@ using osu.Game.Graphics.Sprites;
- using osu.Game.Graphics.UserInterface;
- using osu.Game.Localisation;
- using osu.Game.Online.API;
-+using osu.Game.Offline;
- using osu.Game.Overlays;
- using osu.Game.Rulesets;
- using osuTK;
-@@ -75,6 +76,9 @@ namespace osu.Game.Screens.Select
-         [Resolved]
-         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
- 
-+        [Resolved(CanBeNull = true)]
-+        private RitsuProfileManager? ritsuProfiles { get; set; }
-+
-         private GroupedBeatmapSet groupedBeatmapSet
-         {
-             get
-@@ -253,6 +257,14 @@ namespace osu.Game.Screens.Select
- 
-                 List<MenuItem> items = new List<MenuItem>();
- 
-+                if (ritsuProfiles != null && beatmapSet.Beatmaps.FirstOrDefault() is BeatmapInfo sourceBeatmap)
-+                {
-+                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, sourceBeatmap.ID, beatmapSet.ID);
-+                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap set's scores from PP" : "Include this beatmap set's scores in PP", MenuItemType.Standard,
-+                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, sourceBeatmap.ID, !included, beatmapSet.ID)));
-+                    items.Add(new OsuMenuItemSpacer());
-+                }
-+
-                 if (Expanded.Value)
-                 {
-                     if (songSelect is SoloSongSelect soloSongSelect)
-diff --git a/osu.Game/Screens/Select/PanelBeatmapStandalone.cs b/osu.Game/Screens/Select/PanelBeatmapStandalone.cs
-index f12dcb3..23d7347 100644
---- a/osu.Game/Screens/Select/PanelBeatmapStandalone.cs
-+++ b/osu.Game/Screens/Select/PanelBeatmapStandalone.cs
-@@ -20,6 +20,7 @@ using osu.Game.Graphics.Carousel;
- using osu.Game.Graphics.Containers;
- using osu.Game.Graphics.Sprites;
- using osu.Game.Overlays;
-+using osu.Game.Offline;
- using osu.Game.Performance;
- using osu.Game.Resources.Localisation.Web;
- using osu.Game.Rulesets;
-@@ -35,6 +36,9 @@ namespace osu.Game.Screens.Select
-         [Resolved]
-         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
- 
-+        [Resolved(CanBeNull = true)]
-+        private RitsuProfileManager? ritsuProfiles { get; set; }
-+
-         [Resolved]
-         private IBindable<IReadOnlyList<Mod>> mods { get; set; } = null!;
- 
-@@ -335,6 +339,13 @@ namespace osu.Game.Screens.Select
- 
-                 List<MenuItem> items = new List<MenuItem>();
- 
-+                if (ritsuProfiles != null)
-+                {
-+                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, beatmap.ID);
-+                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap's scores from PP" : "Include this beatmap's scores in PP", MenuItemType.Standard,
-+                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, beatmap.ID, !included)));
-+                }
-+
-                 if (songSelect != null)
-                     items.AddRange(songSelect.GetForwardActions(beatmap));
- 
+
 diff --git a/osu.Game/Skinning/SerialisedDrawableInfo.cs b/osu.Game/Skinning/SerialisedDrawableInfo.cs
 index 83e28ef..fb55205 100644
 --- a/osu.Game/Skinning/SerialisedDrawableInfo.cs
@@ -16321,6 +16388,7 @@ index 83e28ef..fb55205 100644
          public Type Type { get; set; } = null!;
  
          public Vector2 Position { get; set; }
+
 diff --git a/osu.Game/IO/Serialization/Converters/SkinComponentTypeConverter.cs b/osu.Game/IO/Serialization/Converters/SkinComponentTypeConverter.cs
 new file mode 100644
 index 0000000000..53b96dd1aa
@@ -16355,3 +16423,78 @@ index 0000000000..53b96dd1aa
 +        }
 +    }
 +}
+diff --git a/osu.Game/Screens/Select/PanelBeatmapSet.cs b/osu.Game/Screens/Select/PanelBeatmapSet.cs
+index 8df1aab..cd6d4d8 100644
+--- a/osu.Game/Screens/Select/PanelBeatmapSet.cs
++++ b/osu.Game/Screens/Select/PanelBeatmapSet.cs
+@@ -28,6 +28,7 @@ using osu.Game.Graphics.Sprites;
+ using osu.Game.Graphics.UserInterface;
+ using osu.Game.Localisation;
+ using osu.Game.Online.API;
++using osu.Game.Offline;
+ using osu.Game.Overlays;
+ using osu.Game.Rulesets;
+ using osuTK;
+@@ -75,6 +76,9 @@ namespace osu.Game.Screens.Select
+         [Resolved]
+         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
+ 
++        [Resolved(CanBeNull = true)]
++        private RitsuProfileManager? ritsuProfiles { get; set; }
++
+         private GroupedBeatmapSet groupedBeatmapSet
+         {
+             get
+@@ -253,6 +257,14 @@ namespace osu.Game.Screens.Select
+ 
+                 List<MenuItem> items = new List<MenuItem>();
+ 
++                if (ritsuProfiles != null && beatmapSet.Beatmaps.FirstOrDefault() is BeatmapInfo ppSourceBeatmap)
++                {
++                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, ppSourceBeatmap.ID, beatmapSet.ID);
++                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap set's scores from PP" : "Include this beatmap set's scores in PP", MenuItemType.Standard,
++                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, ppSourceBeatmap.ID, !included, beatmapSet.ID)));
++                    items.Add(new OsuMenuItemSpacer());
++                }
++
+                 if (Expanded.Value)
+                 {
+                     if (songSelect is SoloSongSelect soloSongSelect)
+diff --git a/osu.Game/Screens/Select/PanelBeatmapStandalone.cs b/osu.Game/Screens/Select/PanelBeatmapStandalone.cs
+index f12dcb3..620bb87 100644
+--- a/osu.Game/Screens/Select/PanelBeatmapStandalone.cs
++++ b/osu.Game/Screens/Select/PanelBeatmapStandalone.cs
+@@ -19,7 +19,9 @@ using osu.Game.Graphics;
+ using osu.Game.Graphics.Carousel;
+ using osu.Game.Graphics.Containers;
+ using osu.Game.Graphics.Sprites;
++using osu.Game.Graphics.UserInterface;
+ using osu.Game.Overlays;
++using osu.Game.Offline;
+ using osu.Game.Performance;
+ using osu.Game.Resources.Localisation.Web;
+ using osu.Game.Rulesets;
+@@ -35,6 +37,9 @@ namespace osu.Game.Screens.Select
+         [Resolved]
+         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
+ 
++        [Resolved(CanBeNull = true)]
++        private RitsuProfileManager? ritsuProfiles { get; set; }
++
+         [Resolved]
+         private IBindable<IReadOnlyList<Mod>> mods { get; set; } = null!;
+ 
+@@ -335,6 +340,13 @@ namespace osu.Game.Screens.Select
+ 
+                 List<MenuItem> items = new List<MenuItem>();
+ 
++                if (ritsuProfiles != null)
++                {
++                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, beatmap.ID);
++                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap's scores from PP" : "Include this beatmap's scores in PP", MenuItemType.Standard,
++                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, beatmap.ID, !included)));
++                }
++
+                 if (songSelect != null)
+                     items.AddRange(songSelect.GetForwardActions(beatmap));
+ 

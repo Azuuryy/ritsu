@@ -19,6 +19,7 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
+using osu.Game.Graphics.UserInterface;
 using osu.Game.Overlays;
 using osu.Game.Offline;
 using osu.Game.Performance;
