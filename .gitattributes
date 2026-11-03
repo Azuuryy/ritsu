@@ -1,0 +1,4 @@
+# Keep the offline patches LF on checkout. `git apply` cannot parse a binary
+# patch section that contains CRLF line endings, which breaks Bootstrap.ps1
+# when core.autocrlf is enabled.
+*.patch text eol=lf
