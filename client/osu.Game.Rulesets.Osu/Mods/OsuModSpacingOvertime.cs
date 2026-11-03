@@ -25,7 +25,7 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public override LocalisableString Description => "Spacing grows/shrinks over time.";
 
-        public override string Acronym => "SO";
+        public override string Acronym => "SOT";
 
         public override ModType Type => ModType.Conversion;
 
