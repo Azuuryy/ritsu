@@ -1,10 +1,11 @@
 # Ritsu roadmap
 
-## 0 — Torii offline foundation
+
+## 0 — Torii offline foundation ✅ Done
 
 Current deliverable: a portable Windows x64 client with an isolated instance, optional linking to an osu!lazer folder or local storage, local file imports, local play and editors, and no connected services. Linking uses the shared data directly; osu!stable detection and imports remain local. Torii's names and appearance are retained. Torii remains the primary upstream; every update must identify the three dependency revisions and pass the checks again.
 
-## 1 — Integrate Modosu
+## 1 — Integrate Modosu ✅ Done
 
 Integrate the current project's mods, profiles, presets, and statistics into the client. Ritsu profiles start from scratch: existing Modosu scores are neither imported nor migrated. Keep local PP estimates identified by calculator version and mods used. Preserve credits to Modosu and MOsu. Collection imports/exports and map suggestions are outside this step's scope.
 
@@ -12,13 +13,14 @@ Use one shared mod list in the existing ruleset and preserve shared score and re
 
 Keep a separate copy of the local Modosu → tosu integration in `references/modosu-tosu/`; do not integrate it into the client yet. Plan a full adaptation to Ritsu later, covering client and mod identity, PP and difficulty calculations, selection, gameplay, results, counter compatibility, and local data exchange. Define scenarios and test the protocol before enabling it.
 
-## 1.1 — Local play interface improvements
+## 1.1 — Local play interface improvements ✅ Done
 
 Planned after the current offline foundation and profile work. These features remain local and must continue to use the shared beatmap, score, and replay data:
 
 - Redesign the collections interface and support user-created subgroups within each collection.
 - Expand beatmap sorting with useful categories such as estimated PP, and let users reverse the active sort order with a right-click.
 - Add a compact star-rating badge to scores set with mods, showing the beatmap difficulty calculated with those mods (for example, `★ 6.10`) so it can be distinguished from the no-mod difficulty. Place it beside the difficulty or mapper identity in the score row, following the supplied visual reference; existing mod-effect badges remain separate.
+
 
 ## 2 — Measured performance
 
