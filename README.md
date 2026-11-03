@@ -39,6 +39,20 @@ This command builds and runs offline checks without opening the game. Optional g
 
 The client source retains Torii's history, with this milestone's changes on `codex/ritsu-offline`. Legacy workflows are kept with the `.disabled` extension and do not run on GitHub.
 
+## Release announcements on Discord
+
+`.github/workflows/github-releases-to-discord.yml.disabled` prepares an announcement of every published GitHub release in a Discord channel. It is inactive for the offline milestone, which disables external communications, and the `.disabled` suffix keeps GitHub Actions from loading it. While the file is disabled, no message can be sent.
+
+To enable it:
+
+1. In the Discord server settings, create a webhook for the announcement channel and copy its URL.
+2. In the GitHub repository, open **Settings → Secrets and variables → Actions**, create a secret named `DISCORD_WEBHOOK_URL`, and paste the URL there. Do not put the webhook URL in the workflow file.
+3. Rename the workflow file to `github-releases-to-discord.yml`.
+
+Publishing a release then posts its title, notes, and link. For a manual run, use **Run workflow** and fill in the release title, notes, and URL; a real release event always supplies these fields instead. The action is pinned to `SethCohen/github-releases-to-discord` v1.20.0 (`24d166886aee4646d448c8a389ff9e1ebcab3682`); review and bump the pin deliberately. Adjust `username`, `color`, `footer_title`, and `reduce_headings` in the workflow to change the embed.
+
+This announcement is maintainer tooling, separate from the in-client update checks, which remain disabled. The workflow itself has not run on GitHub, and it does not until the steps above are completed.
+
 ## Origin and credits
 
 - [**Torii**](https://github.com/ShikkesoraSIM/torii-osu), by ShikkesoraSIM and its contributors: the foundation for this client, its flow, and its interfaces.

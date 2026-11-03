@@ -1,5 +1,6 @@
 .cache/
 artifacts/
+.env
 tools/fixtures/
 **/bin/
 **/obj/

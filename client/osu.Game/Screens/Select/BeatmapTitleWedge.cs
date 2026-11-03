@@ -64,7 +64,6 @@ namespace osu.Game.Screens.Select
         private FavouriteButton favouriteButton = null!;
         private Statistic lengthStatistic = null!;
         private Statistic bpmStatistic = null!;
-
         [Resolved]
         private ISongSelect? songSelect { get; set; }
 

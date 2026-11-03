@@ -1,5 +1,5 @@
 diff --git a/osu.Framework/IO/Network/WebRequest.cs b/osu.Framework/IO/Network/WebRequest.cs
-index 4f530c3..866e2c4 100644
+index 4f530c3e1..866e2c4c8 100644
 --- a/osu.Framework/IO/Network/WebRequest.cs
 +++ b/osu.Framework/IO/Network/WebRequest.cs
 @@ -23,6 +23,14 @@ namespace osu.Framework.IO.Network
@@ -28,7 +28,7 @@ index 4f530c3..866e2c4 100644
  
                      HttpRequestMessage request;
 diff --git a/osu.Framework/IO/Stores/OnlineStore.cs b/osu.Framework/IO/Stores/OnlineStore.cs
-index 9dbc227..20d0db9 100644
+index 9dbc227e6..20d0db9d0 100644
 --- a/osu.Framework/IO/Stores/OnlineStore.cs
 +++ b/osu.Framework/IO/Stores/OnlineStore.cs
 @@ -17,6 +17,9 @@ public class OnlineStore : IResourceStore<byte[]>
@@ -52,7 +52,7 @@ index 9dbc227..20d0db9 100644
                  return null;
  
 diff --git a/osu.Framework/Platform/DesktopGameHost.cs b/osu.Framework/Platform/DesktopGameHost.cs
-index b816040..0c3238f 100644
+index b816040e1..0c3238f1e 100644
 --- a/osu.Framework/Platform/DesktopGameHost.cs
 +++ b/osu.Framework/Platform/DesktopGameHost.cs
 @@ -77,6 +77,9 @@ public override bool OpenFileExternally(string filename)
