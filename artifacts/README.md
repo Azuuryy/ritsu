@@ -34,3 +34,64 @@ Every archive is accompanied by a `.sha256` sidecar in `sha256sum` format.
 - Only the Windows x64 package is launched and validated on the build machine.
 - Linux and macOS packages are cross-published from Windows. They are preview builds for volunteer compatibility feedback, not confirmed supported builds, and they are unsigned; macOS shows a Gatekeeper warning.
 - Building replaces archives with the same version. Remove old `Ritsu-<old version>-*` files when they are no longer needed.
+
+## Publish a release
+
+The commands below assume the version in `VERSION` is already bumped and committed. `main` is protected: merge through a pull request, or use your admin bypass.
+
+```powershell
+$version = (Get-Content VERSION -Raw).Trim()
+$branch = 'new-pp-ui-flow'
+```
+
+### 1. Merge the branch
+
+```powershell
+git push -u origin $branch
+gh pr create --base main --head $branch --title "Ritsu $version" --fill
+gh pr merge --merge --delete-branch
+```
+
+Add `--admin` to `gh pr merge` when required reviews or checks block the merge and your account may bypass them.
+
+### 2. Tag the merged commit
+
+```powershell
+git switch main
+git pull
+git tag -a "v$version" -m "Ritsu $version"
+git push origin "refs/tags/v$version"
+```
+
+Only when moving an already published tag, use `git tag -f -a ...` and `git push --force origin refs/tags/v$version`.
+
+### 3. Upload the artifacts
+
+```powershell
+New-Item -ItemType Directory -Force .cache | Out-Null
+$notes = [regex]::Match((Get-Content CHANGELOG.md -Raw), "(?ms)^## \[$([regex]::Escape($version))\].*?(?=^## \[)").Value.Trim()
+if (-not $notes) { throw "No CHANGELOG section for $version." }
+$notesPath = Join-Path $PWD ".cache\release-notes-$version.md"
+[IO.File]::WriteAllText($notesPath, $notes)
+
+$assets = @(Get-ChildItem "artifacts\Ritsu-$version-*" -File | ForEach-Object { $_.FullName })
+gh release create "v$version" @assets --title "Ritsu $version" --notes-file $notesPath
+```
+
+`$assets` includes the four archives and their `.sha256` sidecars. Add `--draft` to review the release before publishing it.
+
+## Announce on Discord
+
+The announcement workflow is `.github/workflows/github-releases-to-discord.yml`. It needs the `DISCORD_WEBHOOK_URL` repository secret (Settings → Secrets and variables → Actions); the webhook URL is never stored in the workflow.
+
+Publishing a release announces it automatically. To announce an existing release, pass its tag:
+
+```powershell
+gh workflow run github-releases-to-discord.yml -f tag="v$version"
+gh run list --workflow=github-releases-to-discord.yml --limit 3
+```
+
+Do not pass the release notes through a workflow input: multi-line text is flattened and the embed loses its headings and bullets. The workflow fetches the notes from the release API itself.
+
+Re-publishing a draft release does not reliably trigger the automatic announcement. Delete a broken Discord message and run the manual command above instead.
+
