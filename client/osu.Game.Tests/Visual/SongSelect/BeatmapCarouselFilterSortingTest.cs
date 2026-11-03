@@ -25,6 +25,16 @@ namespace osu.Game.Tests.Visual.SongSelect
     public partial class BeatmapCarouselFilterSortingTest
     {
         [Test]
+        public void TestFarmabilityCalculation()
+        {
+            Assert.That(BeatmapCarouselFilterSorting.CalculateFarmability(300, 120, 5), Is.EqualTo(100).Within(0.0001));
+            Assert.That(BeatmapCarouselFilterSorting.CalculateFarmability(300, 240, 5), Is.EqualTo(50).Within(0.0001));
+            Assert.That(BeatmapCarouselFilterSorting.CalculateFarmability(300, 0, 5), Is.Null);
+            Assert.That(BeatmapCarouselFilterSorting.CalculateFarmability(300, 120, 0), Is.Null);
+            Assert.That(BeatmapCarouselFilterSorting.CalculateFarmability(null, 120, 5), Is.Null);
+        }
+
+        [Test]
         public async Task TestSorting()
         {
             List<BeatmapSetInfo> beatmapSets = new List<BeatmapSetInfo>();

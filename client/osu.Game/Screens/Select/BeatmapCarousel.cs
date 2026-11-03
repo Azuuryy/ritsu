@@ -31,6 +31,7 @@ using osu.Game.Graphics.UserInterface;
 using osu.Game.Online.API;
 using osu.Game.Rulesets;
 using osu.Game.Scoring;
+using osu.Game.Screens.Select.Filter;
 using osu.Game.Utils;
 using Realms;
 
@@ -120,6 +121,7 @@ namespace osu.Game.Screens.Select
                     GetCriteria = () => Criteria!,
                     GetCollections = GetAllCollections,
                     GetLocalUserTopRanks = GetBeatmapInfoGuidToTopRankMapping,
+                    GetProfileBestPerformance = GetProfileBestPerformance,
                     GetFavouriteBeatmapSets = GetFavouriteBeatmapSets,
                 }
             };
@@ -508,6 +510,7 @@ namespace osu.Game.Screens.Select
         protected override void HandleFilterCompleted()
         {
             base.HandleFilterCompleted();
+            PerformanceProgressChanged?.Invoke();
 
             attemptSelectSingleFilteredResult();
 
@@ -843,12 +846,72 @@ namespace osu.Game.Screens.Select
         public FilterCriteria? Criteria { get; private set; }
 
         private ScheduledDelegate? loadingDebounce;
+        private PerfectPerformanceSession? performanceSession;
+        private ScheduledDelegate? performanceRefresh;
+        private bool performanceSuspended;
+        public event Action? PerformanceProgressChanged;
+
+        public string? PerformanceProgressText
+        {
+            get
+            {
+                if (performanceSession == null) return null;
+                var progress = performanceSession.Progress;
+                return progress.total > progress.completed ? $"Calcul PP : {progress.completed}/{progress.total}" : null;
+            }
+        }
+
+        public void SuspendPerformanceCalculations()
+        {
+            performanceSuspended = performanceSession != null;
+            performanceSession?.Dispose();
+            performanceSession = null;
+            performanceRefresh?.Cancel();
+            performanceRefresh = null;
+            if (Criteria != null) Criteria.PerformanceSession = null;
+            PerformanceProgressChanged?.Invoke();
+        }
+
+        public void ResumePerformanceCalculations()
+        {
+            if (performanceSuspended && Criteria != null && performanceSession == null)
+                Filter(Criteria);
+            performanceSuspended = false;
+        }
+
+        private void performanceChanged(PerfectPerformanceSession session) => Schedule(() =>
+        {
+            if (session != performanceSession || IsDisposed) return;
+            PerformanceProgressChanged?.Invoke();
+            performanceRefresh ??= Scheduler.AddDelayed(refreshPerformance, 1000);
+        });
+
+        private void refreshPerformance()
+        {
+            performanceRefresh = null;
+            if (performanceSession == null || IsDisposed) return;
+            if (IsFiltering || Scroll.IsUserDragging)
+            {
+                performanceRefresh = Scheduler.AddDelayed(refreshPerformance, 250);
+                return;
+            }
+            FilterAsync();
+            PerformanceProgressChanged?.Invoke();
+        }
 
         public void Filter(FilterCriteria criteria, bool showLoadingImmediately = false)
         {
             bool resetDisplay = grouping.BeatmapSetsGroupedTogether != BeatmapCarouselFilterGrouping.ShouldGroupBeatmapsTogether(criteria);
 
+            performanceSession?.Dispose();
+            performanceRefresh?.Cancel();
+            performanceRefresh = null;
+            performanceSession = null;
+            if (difficultyCache != null && (criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability || criteria.Group == GroupMode.PerformancePoints100 || criteria.UserPerformance.HasFilter))
+                performanceSession = new PerfectPerformanceSession(difficultyCache, criteria.Ruleset, criteria.Mods, performanceChanged, criteria.CalculateMapPerformance);
+            criteria.PerformanceSession = performanceSession;
             Criteria = criteria;
+            PerformanceProgressChanged?.Invoke();
 
             // Exact star ratings are only used for sorting when a mod changes star rating. Otherwise, the stored star rating is used regardless.
             criteriaUsesExactStarRatings = criteria.Mods != null && ModUtils.FlattenMods(criteria.Mods).Any(StarRatingApproximator.ModAffectsDifficulty);
@@ -987,6 +1050,9 @@ namespace osu.Game.Screens.Select
 
         protected override void Dispose(bool isDisposing)
         {
+            performanceSession?.Dispose();
+            performanceSession = null;
+            performanceRefresh?.Cancel();
             base.Dispose(isDisposing);
 
             if (difficultyCache != null)
@@ -1040,6 +1106,17 @@ namespace osu.Game.Screens.Select
 
             return topRankMapping;
         });
+
+        private IReadOnlyDictionary<Guid, double> GetProfileBestPerformance(FilterCriteria criteria)
+        {
+            if (ritsuProfiles == null || criteria.Ruleset == null)
+                return new Dictionary<Guid, double>();
+
+            return ritsuProfiles.GetBestScores(ritsuProfiles.ActiveProfileId, criteria.Ruleset.ShortName)
+                                .Where(score => score.BeatmapInfo != null && score.PP.HasValue && double.IsFinite(score.PP.Value) && score.PP.Value >= 0)
+                                .GroupBy(score => score.BeatmapInfo!.ID)
+                                .ToDictionary(group => group.Key, group => group.Max(score => score.PP!.Value));
+        }
 
         /// <remarks>
         /// Note that calling <c>.ToHashSet()</c> below has two purposes:

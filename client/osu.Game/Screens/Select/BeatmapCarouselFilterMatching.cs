@@ -32,10 +32,10 @@ namespace osu.Game.Screens.Select
         {
             var criteria = getCriteria();
 
-            return matchItems(items, criteria).ToList();
+            return matchItems(items, criteria, cancellationToken).ToList();
         }, cancellationToken).ConfigureAwait(false);
 
-        private IEnumerable<CarouselItem> matchItems(IEnumerable<CarouselItem> items, FilterCriteria criteria)
+        private IEnumerable<CarouselItem> matchItems(IEnumerable<CarouselItem> items, FilterCriteria criteria, CancellationToken cancellationToken)
         {
             int countMatching = 0;
 
@@ -51,6 +51,14 @@ namespace osu.Game.Screens.Select
 
                 if (!checkCriteriaMatch(beatmap, criteria, getEffectiveStarRating))
                     continue;
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (criteria.UserPerformance.HasFilter)
+                {
+                    var pp = criteria.PerformanceSession?.Get(beatmap) ?? new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                    if (pp.State == PerfectPerformanceState.Unavailable || (pp.State == PerfectPerformanceState.Available && !criteria.UserPerformance.IsInRange(pp.Value)))
+                        continue;
+                }
 
                 countMatching++;
                 yield return item;

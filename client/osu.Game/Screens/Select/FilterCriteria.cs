@@ -20,10 +20,16 @@ namespace osu.Game.Screens.Select
     {
         public GroupMode Group;
         public SortMode Sort;
+        internal PerfectPerformanceSession? PerformanceSession;
+        public bool CalculateMapPerformance = true;
+        public bool ReverseSort;
+        public bool ReverseGroup;
+        public int PerformanceGroupInterval = 100;
 
         public BeatmapSetInfo? SelectedBeatmapSet;
 
         public OptionalRange<double> StarDifficulty;
+        public OptionalRange<double> UserPerformance = new OptionalRange<double> { IsLowerInclusive = true, IsUpperInclusive = true };
         public OptionalRange<float> ApproachRate;
         public OptionalRange<float> DrainRate;
         public OptionalRange<float> CircleSize;
@@ -316,7 +322,7 @@ namespace osu.Game.Screens.Select
         /// <returns></returns>
         public bool RequiresSorting(FilterCriteria newCriteria)
         {
-            if (Sort != newCriteria.Sort)
+            if (Sort != newCriteria.Sort || ReverseSort != newCriteria.ReverseSort)
                 return true;
 
             switch (Sort)
@@ -336,6 +342,8 @@ namespace osu.Game.Screens.Select
                 // These sorts generally ignore items hidden by filtered state, so we must force a sort under all circumstances here.
                 //
                 // This makes things very slow when typing a text search, and we probably want to consider a way to optimise things going forward.
+                case SortMode.Farmability:
+                case SortMode.PerformancePoints:
                 case SortMode.LastPlayed:
                 case SortMode.BPM:
                 case SortMode.Length:

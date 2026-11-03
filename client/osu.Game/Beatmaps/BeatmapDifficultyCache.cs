@@ -8,6 +8,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using osu.Framework.Platform;
+using osu.Game.Online.API;
 using osu.Framework.Allocation;
 using osu.Framework.Audio.Track;
 using osu.Framework.Bindables;
@@ -64,6 +67,151 @@ namespace osu.Game.Beatmaps
 
         [Resolved]
         private Bindable<IReadOnlyList<Mod>> currentMods { get; set; } = null!;
+
+        private const string performance_cache_file = "ritsu/perfect-pp-cache-v2.json";
+        private const string legacy_performance_cache_file = "ritsu/perfect-pp-cache-v1.json";
+        private const int performance_algorithm_version = 1;
+        private Dictionary<string, double> legacyPerformanceCache = new Dictionary<string, double>();
+        private readonly object performanceCacheLock = new object();
+        private Dictionary<string, double> performanceCache = new Dictionary<string, double>();
+        private Storage performanceCacheStorage = null!;
+        private int performanceCacheChanges;
+
+        [BackgroundDependencyLoader]
+        private void load(Storage storage)
+        {
+            performanceCacheStorage = storage;
+            performanceCache = loadPerformanceCache(storage, performance_cache_file);
+            legacyPerformanceCache = loadPerformanceCache(storage, legacy_performance_cache_file);
+            Logger.Log($"Ritsu PP cache loaded from {storage.GetFullPath(performance_cache_file)}: {performanceCache.Count} entries, {legacyPerformanceCache.Count} legacy entries, algorithm={performance_algorithm_version}");
+        }
+
+        internal static Dictionary<string, double> loadPerformanceCache(Storage storage, string filename)
+        {
+            try
+            {
+                if (!storage.Exists(filename)) return new Dictionary<string, double>();
+                using var stream = storage.GetStream(filename, FileAccess.Read, FileMode.Open);
+                using var reader = new StreamReader(stream);
+                return JsonConvert.DeserializeObject<Dictionary<string, double>>(reader.ReadToEnd()) ?? new Dictionary<string, double>();
+            }
+            catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+            {
+                Logger.Error(e, $"Failed to load Ritsu PP cache {filename}");
+                return new Dictionary<string, double>();
+            }
+        }
+
+        internal static string CreateStablePerformanceKey(int difficultyVersion, string ruleset, string beatmapHash, string mods)
+            => JsonConvert.SerializeObject(new[] { performance_algorithm_version.ToString(), difficultyVersion.ToString(), ruleset, beatmapHash, mods });
+
+        internal static void WritePerformanceCache(Storage storage, string filename, IReadOnlyDictionary<string, double> entries)
+        {
+            using var stream = storage.CreateFileSafely(filename);
+            using var writer = new StreamWriter(stream);
+            writer.Write(JsonConvert.SerializeObject(entries));
+        }
+
+        internal static IEnumerable<Mod> FilterPerformanceMods(IEnumerable<Mod>? mods)
+            => mods?.Where(mod => ModUtils.FlattenMods(new[] { mod }).Any(StarRatingApproximator.ModAffectsDifficulty)) ?? Enumerable.Empty<Mod>();
+
+        internal PerfectPerformanceLookup CreatePerfectPerformanceLookup(RulesetInfo? ruleset, IReadOnlyList<Mod>? mods)
+            => new PerfectPerformanceLookup(this, ruleset, mods);
+
+        internal sealed class PerfectPerformanceLookup
+        {
+            private readonly BeatmapDifficultyCache owner;
+            private readonly RulesetInfo? ruleset;
+            private readonly Mod[] mods;
+            private readonly string modKey;
+            private readonly string gameVersion = typeof(BeatmapDifficultyCache).Assembly.ManifestModule.ModuleVersionId.ToString();
+            private readonly Dictionary<string, (int difficultyVersion, string legacyVersion)> versions = new Dictionary<string, (int, string)>();
+
+            internal PerfectPerformanceLookup(BeatmapDifficultyCache owner, RulesetInfo? ruleset, IReadOnlyList<Mod>? mods)
+            {
+                this.owner = owner;
+                this.ruleset = ruleset;
+                this.mods = FilterPerformanceMods(mods).OrderBy(m => m.Acronym).Select(m => m.DeepClone()).ToArray();
+                modKey = JsonConvert.SerializeObject(this.mods.Select(m => new { Type = m.GetType().FullName, Settings = new APIMod(m) }));
+            }
+
+            private (string? stable, string? legacy) getKeys(BeatmapInfo beatmap)
+            {
+                if (string.IsNullOrEmpty(beatmap.Hash)) return (null, null);
+                var info = ruleset ?? beatmap.Ruleset;
+                (int difficultyVersion, string legacyVersion) version;
+                lock (versions)
+                {
+                    if (!versions.TryGetValue(info.ShortName, out version))
+                    {
+                        var instance = info.CreateInstance();
+                        version = (instance.CreateDifficultyCalculator(owner.beatmapManager.GetWorkingBeatmap(beatmap)).Version, instance.GetType().Assembly.ManifestModule.ModuleVersionId.ToString());
+                        versions[info.ShortName] = version;
+                    }
+                }
+                string stable = CreateStablePerformanceKey(version.difficultyVersion, info.ShortName, beatmap.Hash, modKey);
+                string legacy = JsonConvert.SerializeObject(new[] { gameVersion, version.legacyVersion, info.ShortName, beatmap.Hash, modKey });
+                return (stable, legacy);
+            }
+
+            internal bool TryGet(BeatmapInfo beatmap, out double value)
+            {
+                var (stable, legacy) = getKeys(beatmap);
+                lock (owner.performanceCacheLock)
+                {
+                    if (stable != null && owner.performanceCache.TryGetValue(stable, out value) && double.IsFinite(value) && value >= 0)
+                        return true;
+                    if (stable != null && legacy != null && owner.legacyPerformanceCache.TryGetValue(legacy, out value) && double.IsFinite(value) && value >= 0)
+                    {
+                        owner.performanceCache[stable] = value;
+                        if (++owner.performanceCacheChanges >= 200) owner.savePerformanceCache();
+                        return true;
+                    }
+                }
+                value = 0;
+                return false;
+            }
+
+            internal double? Calculate(BeatmapInfo beatmap, CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (TryGet(beatmap, out double cached)) return cached;
+                double? pp = owner.GetDifficultyAsync(beatmap, ruleset ?? beatmap.Ruleset, mods, cancellationToken).GetAwaiter().GetResult()?.PerformanceAttributes?.Total;
+                if (!pp.HasValue || !double.IsFinite(pp.Value) || pp.Value < 0) return null;
+                var (stable, _) = getKeys(beatmap);
+                if (stable != null)
+                {
+                    lock (owner.performanceCacheLock)
+                    {
+                        owner.performanceCache[stable] = pp.Value;
+                        if (++owner.performanceCacheChanges >= 200) owner.savePerformanceCache();
+                    }
+                }
+                return pp;
+            }
+        }
+
+        internal void FlushPerfectPerformanceCache()
+        {
+            lock (performanceCacheLock)
+                savePerformanceCache();
+        }
+
+        private void savePerformanceCache()
+        {
+            if (performanceCacheChanges == 0)
+                return;
+            try
+            {
+                WritePerformanceCache(performanceCacheStorage, performance_cache_file, performanceCache);
+                performanceCacheChanges = 0;
+                Logger.Log($"Ritsu PP cache saved: {performanceCache.Count} entries");
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Logger.Error(e, "Failed to save Ritsu perfect PP cache");
+            }
+        }
 
         private ModSettingChangeTracker? modSettingChangeTracker;
         private ScheduledDelegate? debouncedModSettingsChange;

@@ -48,6 +48,7 @@ namespace osu.Game.Screens.Select
         public required Func<List<BeatmapCollection>> GetCollections { get; init; }
         public required Func<FilterCriteria, IReadOnlyDictionary<Guid, ScoreRank>> GetLocalUserTopRanks { get; init; }
         public required Func<HashSet<int>> GetFavouriteBeatmapSets { get; init; }
+        public Func<FilterCriteria, IReadOnlyDictionary<Guid, double>> GetProfileBestPerformance { get; init; } = _ => new Dictionary<Guid, double>();
 
         /// <summary>
         /// Used to group by mod-adjusted star rating. When not set, an approximation is used for difficulty-altering mods.
@@ -68,7 +69,9 @@ namespace osu.Game.Screens.Select
 
                 BeatmapSetsGroupedTogether = ShouldGroupBeatmapsTogether(criteria);
 
-                var groups = getGroups((List<CarouselItem>)items, criteria);
+                var groups = getGroups((List<CarouselItem>)items, criteria, cancellationToken);
+                if (criteria.ReverseGroup)
+                    groups.Reverse();
                 int displayedBeatmapsCount = 0;
 
                 foreach (var (group, itemsInGroup) in groups)
@@ -160,7 +163,7 @@ namespace osu.Game.Screens.Select
         {
             // In certain cases, we intentionally split out difficulties
             // where it's more relevant or convenient to view them as individual items.
-            if (criteria.Sort == SortMode.Difficulty || criteria.Group == GroupMode.Difficulty)
+            if (criteria.Sort == SortMode.Difficulty || criteria.Sort == SortMode.PerformancePoints || criteria.Sort == SortMode.Farmability || criteria.Group == GroupMode.Difficulty || criteria.Group == GroupMode.ProfilePerformancePoints || criteria.Group == GroupMode.PerformancePoints100)
                 return false;
             if (criteria.Sort == SortMode.LastPlayed && criteria.Group == GroupMode.LastPlayed)
                 return false;
@@ -171,7 +174,7 @@ namespace osu.Game.Screens.Select
             return true;
         }
 
-        private List<GroupMapping> getGroups(List<CarouselItem> items, FilterCriteria criteria)
+        private List<GroupMapping> getGroups(List<CarouselItem> items, FilterCriteria criteria, CancellationToken cancellationToken)
         {
             switch (criteria.Group)
             {
@@ -216,6 +219,22 @@ namespace osu.Game.Screens.Select
                     return getGroupsBy(b => defineGroupByStars(getEffectiveStarRating(b)), items);
                 }
 
+                case GroupMode.PerformancePoints100:
+                    return getGroupsBy(b =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var result = criteria.PerformanceSession?.Get(b) ?? new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                        if (result.State == PerfectPerformanceState.Pending)
+                            return new GroupDefinition(int.MaxValue - 1, "PP calculating...").Yield();
+                        return definePerformanceGroup(result.State == PerfectPerformanceState.Available ? result.Value : null, criteria.PerformanceGroupInterval);
+                    }, items);
+
+                case GroupMode.ProfilePerformancePoints:
+                {
+                    var best = GetProfileBestPerformance(criteria);
+                    return getGroupsBy(b => definePerformanceGroup(best.TryGetValue(b.ID, out double pp) ? pp : null, criteria.PerformanceGroupInterval), items);
+                }
+
                 case GroupMode.Length:
                     return getGroupsBy(b => defineGroupByLength(b.Length), items);
 
@@ -256,6 +275,15 @@ namespace osu.Game.Screens.Select
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+        }
+
+        private static IEnumerable<GroupDefinition> definePerformanceGroup(double? pp, int requestedInterval)
+        {
+            if (!pp.HasValue || pp.Value <= 0)
+                return new GroupDefinition(int.MinValue, "No pp").Yield();
+            int interval = requestedInterval > 0 ? requestedInterval : 100;
+            int start = (int)Math.Min((Math.Ceiling(pp.Value / interval) - 1) * interval, int.MaxValue - interval);
+            return new GroupDefinition(start, $"{start} - {start + interval} pp").Yield();
         }
 
         private List<GroupMapping> getGroupsBy(Func<BeatmapInfo, IEnumerable<GroupDefinition>> defineGroups, List<CarouselItem> items)

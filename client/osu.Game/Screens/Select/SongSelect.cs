@@ -654,6 +654,7 @@ namespace osu.Game.Screens.Select
             inputManager = GetContainingInputManager()!;
 
             FilterControl.CriteriaChanged += criteriaChanged;
+            carousel.PerformanceProgressChanged += updatePerformanceStatus;
 
             modSelectOverlay.State.BindValueChanged(v =>
             {
@@ -941,6 +942,7 @@ namespace osu.Game.Screens.Select
 
             this.FadeIn(fade_duration, Easing.OutQuint);
             onArrivingAtScreen();
+            carousel.ResumePerformanceCalculations();
 
             ensureGlobalBeatmapValid();
 
@@ -1070,6 +1072,7 @@ namespace osu.Game.Screens.Select
 
         private void onLeavingScreen()
         {
+            carousel.SuspendPerformanceCalculations();
             // torii: soltar el letterbox legacy asi el resto del juego no queda achicado.
             (game as OsuGame)?.SetLegacyScreenAspectLock(null);
 
@@ -1210,6 +1213,11 @@ namespace osu.Game.Screens.Select
             filterDebounce = Scheduler.AddDelayed(() => carousel.Filter(criteria, !isSelectionValid), isFirstFilter || !isSelectionValid ? 0 : filter_delay);
         }
 
+        private void updatePerformanceStatus()
+        {
+            FilterControl.StatusText = carousel.PerformanceProgressText ?? SongSelectStrings.MatchesCount(carousel.MatchedBeatmapsCount);
+        }
+
         private void newItemsPresented(IEnumerable<CarouselItem> carouselItems)
         {
             if (carousel.Criteria == null)
@@ -1219,7 +1227,7 @@ namespace osu.Game.Screens.Select
 
             updateNoResultsPlaceholder();
 
-            FilterControl.StatusText = SongSelectStrings.MatchesCount(carousel.MatchedBeatmapsCount);
+            updatePerformanceStatus();
 
             // If there's already a selection update in progress, let's not interrupt it.
             // Interrupting could cause the debounce interval to be reduced.
