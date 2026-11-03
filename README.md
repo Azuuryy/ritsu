@@ -39,6 +39,16 @@ This command builds and runs offline checks without opening the game. Optional g
 
 The client source retains Torii's history, with this milestone's changes on `codex/ritsu-offline`. Legacy workflows are kept with the `.disabled` extension and do not run on GitHub.
 
+### Release artifacts
+
+`Package.ps1` publishes the client for Windows, Linux and macOS and writes one archive per platform, with a SHA-256 sidecar, to `artifacts/`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Package.ps1
+```
+
+The Windows package is the only one launched and validated on Windows; the Linux and macOS packages are cross-published previews, and the macOS package is unsigned. See [`artifacts/README.md`](artifacts/README.md) for the outputs, options and limitations.
+
 ## Release announcements on Discord
 
 `.github/workflows/github-releases-to-discord.yml.disabled` prepares an announcement of every published GitHub release in a Discord channel. It is inactive for the offline milestone, which disables external communications, and the `.disabled` suffix keeps GitHub Actions from loading it. While the file is disabled, no message can be sent.
