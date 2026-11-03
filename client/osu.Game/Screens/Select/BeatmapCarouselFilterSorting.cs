@@ -58,10 +58,43 @@ namespace osu.Game.Screens.Select
 
             var list = items as List<CarouselItem> ?? items.ToList();
 
+            Dictionary<BeatmapInfo, double?>? performance = null;
+            if (criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability)
+            {
+                performance = new Dictionary<BeatmapInfo, double?>();
+                foreach (var item in list)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var beatmap = (BeatmapInfo)item.Model;
+                    var result = criteria.PerformanceSession?.Get(beatmap) ?? new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                    double? pp = result.State == PerfectPerformanceState.Available ? result.Value : null;
+                    if (criteria.Sort == SortMode.Farmability)
+                    {
+                        double stars = getEffectiveStarRating(beatmap);
+                        double rate = ModUtils.CalculateRateWithMods(criteria.Mods ?? Array.Empty<osu.Game.Rulesets.Mods.Mod>());
+                        double seconds = beatmap.Length / 1000.0 / rate;
+                        pp = CalculateFarmability(pp, seconds, stars);
+                    }
+                    performance[beatmap] = pp;
+                }
+            }
+
             list.Sort((a, b) =>
             {
                 var ab = (BeatmapInfo)a.Model;
                 var bb = (BeatmapInfo)b.Model;
+
+                if (performance != null)
+                {
+                    double? left = performance[ab];
+                    double? right = performance[bb];
+                    if (!left.HasValue || !right.HasValue)
+                        return left.HasValue ? -1 : right.HasValue ? 1 : ab.ID.CompareTo(bb.ID);
+                    int result = right.Value.CompareTo(left.Value);
+                    if (criteria.ReverseSort)
+                        result = -result;
+                    return result != 0 ? result : ab.ID.CompareTo(bb.ID);
+                }
 
                 if (groupedSets)
                 {
@@ -69,10 +102,12 @@ namespace osu.Game.Screens.Select
                         return compareDifficulty(ab, bb, getEffectiveStarRating);
 
                     // If we're grouping by sets, all fallback sorts need to be aggregates for the set.
-                    return compare(ab, bb, criteria.Sort, aggregate: true, getEffectiveStarRating);
+                    int result = compare(ab, bb, criteria.Sort, aggregate: true, getEffectiveStarRating);
+                    return criteria.ReverseSort ? -Math.Sign(result) : result;
                 }
 
-                return compare(ab, bb, criteria.Sort, aggregate: false, getEffectiveStarRating);
+                int ungroupedResult = compare(ab, bb, criteria.Sort, aggregate: false, getEffectiveStarRating);
+                return criteria.ReverseSort ? -Math.Sign(ungroupedResult) : ungroupedResult;
             });
 
             // No longer modified now that sorting is done, so it can be shared as-is.
@@ -80,6 +115,14 @@ namespace osu.Game.Screens.Select
 
             return list;
         }, cancellationToken).ConfigureAwait(false);
+
+        internal static double? CalculateFarmability(double? pp, double seconds, double stars)
+        {
+            if (!pp.HasValue || !double.IsFinite(pp.Value) || pp.Value < 0 || seconds <= 0 || !double.IsFinite(seconds) || stars <= 0 || !double.IsFinite(stars))
+                return null;
+            double result = 1000 * pp.Value / seconds / (stars * stars);
+            return double.IsFinite(result) ? result : null;
+        }
 
         private static int compare(BeatmapInfo a, BeatmapInfo b, SortMode sort, bool aggregate, Func<BeatmapInfo, double> getEffectiveStarRating)
         {

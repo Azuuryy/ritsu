@@ -74,6 +74,12 @@ namespace osu.Game.Online.API.Requests.Responses
         [JsonProperty(@"avatar_url")]
         public string AvatarUrl;
 
+        [JsonIgnore]
+        public string LocalAvatarFileName;
+
+        [JsonIgnore]
+        public string LocalFlagFileName;
+
         [JsonProperty(@"cover_url")]
         public string CoverUrl
         {
@@ -339,7 +345,10 @@ namespace osu.Game.Online.API.Requests.Responses
             // Local profiles share the system user ID, so their names must also be
             // compared for bindables to propagate profile switches and renames.
             if (Offline.RitsuOffline.Enabled && other != null && Id == SYSTEM_USER_ID && other.Id == SYSTEM_USER_ID)
-                return string.Equals(Username, other.Username, StringComparison.Ordinal);
+                return string.Equals(Username, other.Username, StringComparison.Ordinal)
+                       && CountryCode == other.CountryCode
+                       && string.Equals(LocalAvatarFileName, other.LocalAvatarFileName, StringComparison.Ordinal)
+                       && string.Equals(LocalFlagFileName, other.LocalFlagFileName, StringComparison.Ordinal);
 
             return this.MatchesOnlineID(other);
         }

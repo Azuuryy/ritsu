@@ -368,6 +368,7 @@ namespace osu.Game.Screens.Play
         {
             AllowRetry = true,
             IsLocalPlay = true,
+            ShowLocalScoreRanks = this is SoloPlayer && LocalScoreWasAssociated,
         };
     }
 }

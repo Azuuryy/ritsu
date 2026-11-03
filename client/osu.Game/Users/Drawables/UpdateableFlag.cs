@@ -6,6 +6,8 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.Textures;
 using osu.Framework.Input.Events;
 using osu.Game.Configuration;
 using osu.Game.Graphics.UserInterface;
@@ -13,9 +15,13 @@ using osu.Game.Overlays;
 
 namespace osu.Game.Users.Drawables
 {
-    public partial class UpdateableFlag : ModelBackedDrawable<CountryCode>
+    public partial class UpdateableFlag : ModelBackedDrawable<(CountryCode country, string? localFlag)>
     {
         private CountryCode countryCode;
+        public string? LocalFlagFileName { get; init; }
+
+        [Resolved]
+        private LargeTextureStore textures { get; set; } = null!;
 
         public CountryCode CountryCode
         {
@@ -50,17 +56,22 @@ namespace osu.Game.Users.Drawables
             config.BindWith(OsuSetting.HideCountryFlags, hideFlags);
         }
 
-        protected override Drawable CreateDrawable(CountryCode countryCode)
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+            updateModel();
+        }
+
+        protected override Drawable CreateDrawable((CountryCode country, string? localFlag) model)
         {
             return new Container
             {
                 RelativeSizeAxes = Axes.Both,
                 Children = new Drawable[]
                 {
-                    new DrawableFlag(countryCode)
-                    {
-                        RelativeSizeAxes = Axes.Both
-                    },
+                    !string.IsNullOrEmpty(model.localFlag) && textures.Get(model.localFlag) is Texture texture
+                        ? new Sprite { Texture = texture, RelativeSizeAxes = Axes.Both, FillMode = FillMode.Fit }
+                        : new DrawableFlag(model.country) { RelativeSizeAxes = Axes.Both },
                     new HoverClickSounds()
                 }
             };
@@ -73,6 +84,6 @@ namespace osu.Game.Users.Drawables
             return true;
         }
 
-        private void updateModel() => Model = hideFlags.Value ? CountryCode.Unknown : countryCode;
+        private void updateModel() => Model = hideFlags.Value ? (CountryCode.Unknown, null) : (countryCode, LocalFlagFileName);
     }
 }

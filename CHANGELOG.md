@@ -4,7 +4,24 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
-Local replay video rendering is planned for 0.2.5.
+## [0.3.0] - 2026-11-03
+
+### Added
+
+- Local result rankings show profile best plays, map rankings and PP gains after a score.
+- Sort beatmaps by perfect-play PP or farmability, group them by perfect-play or profile-earned PP, filter by PP, and configure grouping intervals. Perfect-play PP calculations use a persistent cache and can be disabled.
+- Sort local scores by PP and reverse sorting with the middle mouse button.
+- Local profiles support individual avatars and country or custom image flags.
+- View Ritsu release notes offline from the update notification or the settings footer.
+- Scores display the star rating calculated with difficulty-changing mods.
+
+### Changed
+
+- Map PP calculations load progressively and account for selected difficulty-changing mods.
+
+### Removed
+
+- Local replay video recording and the FFmpeg experiment. The original Torii o!rdr integration, replay sharing and score screenshots are retained.
 
 ## [0.2.4] - 2026-10-29
 

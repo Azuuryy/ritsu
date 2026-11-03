@@ -11,6 +11,8 @@ using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Layout;
+using osu.Framework.Input.Events;
+using osuTK.Input;
 using osu.Framework.Localisation;
 using osu.Framework.Utils;
 using osu.Game.Graphics;
@@ -27,6 +29,18 @@ namespace osu.Game.Screens.Select
     {
         public partial class DifficultyRangeSlider : ShearedRangeSlider
         {
+            public Action? RightClickAction { get; set; }
+
+            protected override bool OnMouseDown(MouseDownEvent e)
+            {
+                if (e.Button == MouseButton.Right && RightClickAction != null)
+                {
+                    RightClickAction();
+                    return true;
+                }
+                return base.OnMouseDown(e);
+            }
+
             private Container borderContainer = null!;
             private Container borderBox = null!;
             private IDisposable? borderColourBinding;

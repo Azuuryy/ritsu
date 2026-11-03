@@ -203,6 +203,7 @@ namespace osu.Game.Online.Leaderboards
                                                     {
                                                         new UpdateableFlag(user.CountryCode)
                                                         {
+                                                            LocalFlagFileName = user.LocalFlagFileName,
                                                             Anchor = Anchor.CentreLeft,
                                                             Origin = Anchor.CentreLeft,
                                                             Size = new Vector2(28, 20),

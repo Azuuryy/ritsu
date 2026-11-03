@@ -4,13 +4,15 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
+using osu.Framework.Bindables;
+using osu.Framework.Graphics.UserInterface;
+using osu.Game.Graphics.UserInterfaceV2;
 using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
-using osu.Framework.IO.Stores;
 using osu.Framework.Localisation;
-using osu.Framework.Platform;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Offline;
@@ -20,7 +22,7 @@ using osuTK;
 namespace osu.Game.Overlays.Profile
 {
     /// <summary>A local profile avatar that can be replaced with an image from disk.</summary>
-    public partial class RitsuProfileAvatar : OsuClickableContainer, IHasTooltip
+    public partial class RitsuProfileAvatar : OsuClickableContainer, IHasTooltip, IHasPopover
     {
         [Resolved]
         private RitsuProfileManager profiles { get; set; } = null!;
@@ -29,7 +31,7 @@ namespace osu.Game.Overlays.Profile
         private INotificationOverlay? notifications { get; set; }
 
         private LargeTextureStore textures = null!;
-        private ISystemFileSelector? selector;
+        private readonly Bindable<FileInfo?> selectedFile = new Bindable<FileInfo?>();
         private Guid selectedProfileId;
         private readonly Sprite portrait;
 
@@ -51,20 +53,20 @@ namespace osu.Game.Overlays.Profile
                 Anchor = Anchor.BottomRight,
                 Origin = Anchor.BottomRight,
                 Size = new Vector2(19),
-                Icon = FontAwesome.Solid.Camera,
                 Margin = new MarginPadding(3),
             });
         }
 
         [BackgroundDependencyLoader]
-        private void load(LargeTextureStore textureStore, GameHost host)
+        private void load(LargeTextureStore textureStore)
         {
             textures = textureStore;
-            textures.AddTextureSource(host.CreateTextureLoaderStore(new StorageBackedResourceStore(profiles.AvatarStorage)));
-            selector = host.CreateSystemFileSelector(new[] { ".png", ".jpg", ".jpeg", ".webp" });
-            if (selector != null)
-                selector.Selected += onFileSelected;
-
+            selectedFile.ValueChanged += file =>
+            {
+                if (file.NewValue == null) return;
+                this.HidePopover();
+                onFileSelected(file.NewValue);
+            };
             profiles.Changed += onProfilesChanged;
             refreshAvatar();
         }
@@ -72,15 +74,12 @@ namespace osu.Game.Overlays.Profile
         protected override bool OnClick(osu.Framework.Input.Events.ClickEvent e)
         {
             selectedProfileId = profiles.ActiveProfileId;
-            if (selector == null)
-            {
-                notifications?.Post(new SimpleErrorNotification { Text = "File selection is unavailable on this platform." });
-                return true;
-            }
-
-            selector.Present();
+            selectedFile.Value = null;
+            this.ShowPopover();
             return true;
         }
+
+        public Popover GetPopover() => new FormFileSelector.FileChooserPopover(new[] { ".png", ".jpg", ".jpeg", ".webp" }, selectedFile, null, false);
 
         private void onFileSelected(FileInfo file)
         {
@@ -110,11 +109,6 @@ namespace osu.Game.Overlays.Profile
                 if (profiles != null)
                     profiles.Changed -= onProfilesChanged;
 
-                if (selector != null)
-                {
-                    selector.Selected -= onFileSelected;
-                    selector.Dispose();
-                }
             }
 
             base.Dispose(isDisposing);

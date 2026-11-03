@@ -340,8 +340,9 @@ namespace osu.Game
             dependencies.Cache(ritsuProfiles);
             if (API is Offline.OfflineAPIProvider offlineProfilesApi)
             {
-                offlineProfilesApi.SetLocalProfile(ritsuProfiles.ActiveProfileName);
-                ritsuProfiles.ActiveProfileChanged += offlineProfilesApi.SetLocalProfile;
+                largeStore.AddTextureSource(Host.CreateTextureLoaderStore(new StorageBackedResourceStore(ritsuProfiles.AvatarStorage)));
+                offlineProfilesApi.SetLocalProfile(ritsuProfiles.GetActiveProfile());
+                ritsuProfiles.Changed += () => Schedule(() => offlineProfilesApi.SetLocalProfile(ritsuProfiles.GetActiveProfile()));
             }
 
             var defaultBeatmap = new DummyWorkingBeatmap(Audio, Textures);

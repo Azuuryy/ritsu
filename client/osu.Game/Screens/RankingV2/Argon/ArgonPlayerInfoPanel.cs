@@ -205,7 +205,7 @@ namespace osu.Game.Screens.RankingV2.Argon
         private bool userHasUsableAssets(IUser user, [NotNullWhen(true)] out APIUser? result)
         {
             var apiUser = user as APIUser;
-            bool assetsPresent = !string.IsNullOrEmpty(apiUser?.AvatarUrl) && !string.IsNullOrEmpty(apiUser.CoverUrl);
+            bool assetsPresent = !string.IsNullOrEmpty(apiUser?.LocalAvatarFileName) || (!string.IsNullOrEmpty(apiUser?.AvatarUrl) && !string.IsNullOrEmpty(apiUser.CoverUrl));
             result = assetsPresent ? apiUser : null;
             return assetsPresent;
         }

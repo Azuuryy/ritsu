@@ -58,5 +58,11 @@ namespace osu.Game.Screens.Select.Filter
 
         // purposefully unlocalised - `Ruleset.VariantDescription` is the intended localisation insertion point
         Variant,
+
+        [System.ComponentModel.Description("PP earned")]
+        ProfilePerformancePoints,
+
+        [System.ComponentModel.Description("PP perfect play")]
+        PerformancePoints100,
     }
 }

@@ -54,6 +54,11 @@ namespace osu.Game.Overlays.Settings
                 {
                     Anchor = Anchor.TopCentre,
                     Origin = Anchor.TopCentre,
+                },
+                new BuildDisplay(RitsuReleaseNotes.Version, true)
+                {
+                    Anchor = Anchor.TopCentre,
+                    Origin = Anchor.TopCentre,
                 }
             };
 
@@ -82,6 +87,7 @@ namespace osu.Game.Overlays.Settings
         private partial class BuildDisplay : OsuAnimatedButton, IHasContextMenu
         {
             private readonly string version;
+            private readonly bool localRelease;
 
             [Resolved]
             private OsuColour colours { get; set; } = null!;
@@ -89,9 +95,10 @@ namespace osu.Game.Overlays.Settings
             [Resolved]
             private OsuGame? game { get; set; }
 
-            public BuildDisplay(string version)
+            public BuildDisplay(string version, bool localRelease = false)
             {
                 this.version = version;
+                this.localRelease = localRelease;
 
                 Content.RelativeSizeAxes = Axes.Y;
                 Content.AutoSizeAxes = AutoSizeAxes = Axes.X;
@@ -99,15 +106,24 @@ namespace osu.Game.Overlays.Settings
             }
 
             [BackgroundDependencyLoader]
-            private void load(ChangelogOverlay? changelog)
+            private void load(ChangelogOverlay? changelog, SettingsOverlay? settings)
             {
-                Action = () => changelog?.ShowBuild(version);
+                Action = () =>
+                {
+                    if (localRelease)
+                    {
+                        settings?.Hide();
+                        changelog?.ShowLocalBuild(version, RitsuReleaseNotes.Current);
+                    }
+                    else
+                        changelog?.ShowBuild(version);
+                };
 
                 Add(new OsuSpriteText
                 {
                     Font = OsuFont.GetFont(size: 16),
 
-                    Text = version,
+                    Text = localRelease ? $"Ritsu {version} · What's new" : version,
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
                     Padding = new MarginPadding(5),

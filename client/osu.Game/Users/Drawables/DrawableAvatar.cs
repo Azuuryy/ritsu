@@ -37,6 +37,9 @@ namespace osu.Game.Users.Drawables
         private void load(LargeTextureStore textures, UserLookupCache userLookupCache)
         {
             string avatarUrl = (user as APIUser)?.AvatarUrl;
+            string localAvatar = (user as APIUser)?.LocalAvatarFileName;
+            if (!string.IsNullOrEmpty(localAvatar))
+                Texture = textures.Get(localAvatar);
 
             // torii: a locally-stored score carries a RealmUser with no avatar_url, so
             // resolve the full user by id through the API (UserLookupCache) to get their
@@ -54,7 +57,7 @@ namespace osu.Game.Users.Drawables
             if (string.IsNullOrEmpty(avatarUrl) && user != null && user.OnlineID > 1)
                 avatarUrl = userLookupCache.GetUserAsync(user.OnlineID).GetResultSafely()?.AvatarUrl;
 
-            if (!string.IsNullOrEmpty(avatarUrl))
+            if (Texture == null && !string.IsNullOrEmpty(avatarUrl))
                 Texture = textures.Get(avatarUrl);
 
             Texture ??= textures.Get(@"Online/avatar-guest");

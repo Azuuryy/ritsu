@@ -38,6 +38,8 @@ namespace osu.Game.Screens.Select
 
             public IBindable<LeaderboardSortMode> Sorting => sortDropdown.Current;
 
+            public Bindable<bool> ReverseSorting { get; } = new Bindable<bool>();
+
             private readonly Bindable<LeaderboardSortMode> configLeaderboardSortMode = new Bindable<LeaderboardSortMode>();
 
             public IBindable<bool> FilterBySelectedMods => selectedModsToggle.Active;
@@ -90,6 +92,7 @@ namespace osu.Game.Screens.Select
                                         RelativeSizeAxes = Axes.X,
                                         Width = 0.4f,
                                         Items = Enum.GetValues<LeaderboardSortMode>(),
+                                        MiddleClickAction = () => { if (!sortDropdown.Current.Disabled) { ReverseSorting.Value = !ReverseSorting.Value; sortDropdown.SetReversedSortIndicator(ReverseSorting.Value, BeatmapLeaderboardWedgeStrings.Sort); } },
                                     },
                                     scopeDropdown = new ScopeDropdown
                                     {

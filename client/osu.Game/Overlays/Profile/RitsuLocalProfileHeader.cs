@@ -110,7 +110,20 @@ namespace osu.Game.Overlays.Profile
                                 Spacing = new Vector2(0, 4),
                                 Children = new Drawable[]
                                 {
-                                    username = new TruncatingSpriteText { RelativeSizeAxes = Axes.X, Font = OsuFont.GetFont(size: 24, weight: FontWeight.Regular) },
+                                    new GridContainer
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        Height = 30,
+                                        ColumnDimensions = new[] { new Dimension(GridSizeMode.Absolute, 40), new Dimension() },
+                                        Content = new[]
+                                        {
+                                            new Drawable[]
+                                            {
+                                                new RitsuProfileFlag { Size = new Vector2(30, 22), Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft },
+                                                username = new TruncatingSpriteText { RelativeSizeAxes = Axes.X, Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft, Font = OsuFont.GetFont(size: 24, weight: FontWeight.Regular) },
+                                            },
+                                        },
+                                    },
                                     cards = new RitsuProfileCardRow(),
                                 },
                             },
@@ -207,7 +220,7 @@ namespace osu.Game.Overlays.Profile
                             new Drawable[]
                             {
                                 performance = new ProfileValueDisplay(true) { Title = "Performance points" },
-                                estimatedRank = new ProfileValueDisplay(true) { Title = "Estimated global rank" },
+                                estimatedRank = new ProfileValueDisplay(true) { Title = "Global Ranking" },
                                 localRank = new ProfileValueDisplay(true) { Title = "Local rank" },
                             },
                         },

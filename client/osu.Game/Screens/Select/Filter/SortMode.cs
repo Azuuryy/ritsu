@@ -44,5 +44,11 @@ namespace osu.Game.Screens.Select.Filter
 
         [LocalisableDescription(typeof(SongSelectStrings), nameof(SongSelectStrings.Title))]
         Title,
+
+        [System.ComponentModel.Description("PP (perfect play)")]
+        PerformancePoints,
+
+        [System.ComponentModel.Description("Farmability")]
+        Farmability,
     }
 }

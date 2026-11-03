@@ -12,6 +12,14 @@ Use one shared mod list in the existing ruleset and preserve shared score and re
 
 Keep a separate copy of the local Modosu → tosu integration in `references/modosu-tosu/`; do not integrate it into the client yet. Plan a full adaptation to Ritsu later, covering client and mod identity, PP and difficulty calculations, selection, gameplay, results, counter compatibility, and local data exchange. Define scenarios and test the protocol before enabling it.
 
+## 1.1 — Local play interface improvements
+
+Planned after the current offline foundation and profile work. These features remain local and must continue to use the shared beatmap, score, and replay data:
+
+- Redesign the collections interface and support user-created subgroups within each collection.
+- Expand beatmap sorting with useful categories such as estimated PP, and let users reverse the active sort order with a right-click.
+- Add a compact star-rating badge to scores set with mods, showing the beatmap difficulty calculated with those mods (for example, `★ 6.10`) so it can be distinguished from the no-mod difficulty. Place it beside the difficulty or mapper identity in the score row, following the supplied visual reference; existing mod-effect badges remain separate.
+
 ## 2 — Measured performance
 
 Establish baseline frame times, latency, memory use, and resource consumption on identical maps and skins. Review EMPYREAN's ideas without treating its claims as proven results. Keep only changes measured to have no gameplay or rendering regressions.
@@ -31,6 +39,8 @@ Decide which parts of Torii's visual identity remain and which become Ritsu. Bef
 ## 6 — Optional services
 
 Evaluate updates, sharing creations, osu! OAuth, and a community server independently. Also study map search without player sign-in and decide separately whether downloading maps should be offered. Compare the official API and its OAuth requirements with public mirrors, their features, and availability before integration. OAuth can link an identity and authorized data; it does not validate scores for official leaderboards. Local play must remain usable without these services.
+
+Announcing releases in Discord is prepared in `.github/workflows/github-releases-to-discord.yml.disabled`. It is an external communication, so it stays inactive until that is explicitly in scope; enabling it is described in [README.md](README.md#release-announcements-on-discord).
 
 ### GitHub release updates
 

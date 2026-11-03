@@ -243,6 +243,10 @@ namespace osu.Game.Online.Leaderboards
             }
 
             newScores = newScores.Detach().OrderByCriteria(CurrentCriteria.Sorting);
+            if (CurrentCriteria.ReverseSorting)
+                newScores = newScores.Reverse();
+            if (CurrentCriteria.Sorting == LeaderboardSortMode.PerformancePoints)
+                newScores = newScores.OrderBy(s => !s.PP.HasValue);
 
             var newScoresArray = newScores.ToArray();
             if (ritsuProfiles != null)
@@ -271,7 +275,8 @@ namespace osu.Game.Online.Leaderboards
         RulesetInfo? Ruleset,
         BeatmapLeaderboardScope Scope,
         Mod[]? ExactMods,
-        LeaderboardSortMode Sorting = LeaderboardSortMode.Score
+        LeaderboardSortMode Sorting = LeaderboardSortMode.Score,
+        bool ReverseSorting = false
     );
 
     public record LeaderboardScores

@@ -1,7 +1,9 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using System.Diagnostics;
+using osuTK.Input;
 using osu.Framework.Allocation;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
@@ -50,7 +52,20 @@ namespace osu.Game.Graphics.UserInterfaceV2
         {
         }
 
-        protected override bool OnMouseDown(MouseDownEvent e) => true;
+        public Action? MiddleClickAction { get; set; }
+
+        public void SetReversedSortIndicator(bool reversed, LocalisableString label)
+        {
+            if (Header is ShearedDropdownHeader header)
+                header.LeftSideLabel = reversed ? $"{label} ↕" : label;
+        }
+
+        protected override bool OnMouseDown(MouseDownEvent e)
+        {
+            if (e.Button == MouseButton.Middle && MiddleClickAction != null)
+                MiddleClickAction();
+            return true;
+        }
 
         protected partial class ShearedDropdownMenu : OsuDropdown<T>.OsuDropdownMenu
         {

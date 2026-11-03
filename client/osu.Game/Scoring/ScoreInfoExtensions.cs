@@ -53,6 +53,9 @@ namespace osu.Game.Scoring
                 case LeaderboardSortMode.Misses:
                     return scores.OrderBy(s => s.Statistics.GetValueOrDefault(HitResult.Miss, 0)).ThenByDescending(s => s.TotalScore);
 
+                case LeaderboardSortMode.PerformancePoints:
+                    return scores.OrderByDescending(s => s.PP).ThenByDescending(s => s.TotalScore);
+
                 case LeaderboardSortMode.Date:
                     return scores.OrderByDescending(s => s.Date);
 

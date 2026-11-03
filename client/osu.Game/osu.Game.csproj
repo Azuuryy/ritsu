@@ -66,5 +66,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Cosmetics\Definitions\Shipped\*.toriicosmetic" />
     <EmbeddedResource Include="Textures\Ritsu\logo.png" />
+    <EmbeddedResource Include="..\..\VERSION" LogicalName="Ritsu.VERSION" />
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Ritsu.CHANGELOG.md" />
   </ItemGroup>
 </Project>

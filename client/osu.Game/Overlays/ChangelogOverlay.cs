@@ -27,6 +27,7 @@ namespace osu.Game.Overlays
         public readonly Bindable<APIChangelogBuild> Current = new Bindable<APIChangelogBuild>();
 
         private List<APIChangelogBuild> builds;
+        private bool showingLocal;
 
         protected List<APIUpdateStream> Streams;
 
@@ -56,10 +57,26 @@ namespace osu.Game.Overlays
 
         protected override Color4 BackgroundColour => ColourProvider.Background4;
 
+        protected override bool AllowOfflineDisplay => showingLocal;
+
         public void ShowListing()
         {
+            if (showingLocal)
+            {
+                ShowLocalBuild(RitsuReleaseNotes.Version, RitsuReleaseNotes.Current);
+                return;
+            }
+
             Current.Value = null;
             Show();
+        }
+
+        public void ShowLocalBuild(string version, string notes)
+        {
+            showingLocal = true;
+            Current.Value = null;
+            Show();
+            loadContent(new RitsuLocalChangelogContent(version, notes));
         }
 
         /// <summary>
@@ -70,6 +87,7 @@ namespace osu.Game.Overlays
         /// <see cref="APIChangelogBuild.DisplayVersion"/> are specified, the header will instantly display them.</param>
         public void ShowBuild([NotNull] APIChangelogBuild build)
         {
+            showingLocal = false;
             ArgumentNullException.ThrowIfNull(build);
 
             Current.Value = build;
@@ -127,7 +145,7 @@ namespace osu.Game.Overlays
         {
             base.PopIn();
 
-            if (initialFetchTask == null)
+            if (!showingLocal && initialFetchTask == null)
                 // fetch and refresh to show listing, if no other request was made via Show methods
                 performAfterFetch(() => Current.TriggerChange());
         }

@@ -447,6 +447,55 @@ namespace osu.Game.Tests.Visual.SongSelect
 
         #endregion
 
+        [Test]
+        public async Task TestProfilePerformanceGroupsIndividualDifficulties()
+        {
+            var set = TestResources.CreateTestBeatmapSetInfo(4);
+            var pp = new Dictionary<Guid, double>
+            {
+                [set.Beatmaps[0].ID] = 99.9,
+                [set.Beatmaps[1].ID] = 100,
+                [set.Beatmaps[2].ID] = 299.9,
+            };
+            var grouping = new BeatmapCarouselFilterGrouping
+            {
+                GetCriteria = () => new FilterCriteria { Group = GroupMode.ProfilePerformancePoints },
+                GetCollections = () => new List<BeatmapCollection>(),
+                GetLocalUserTopRanks = _ => new Dictionary<Guid, ScoreRank>(),
+                GetFavouriteBeatmapSets = () => new HashSet<int>(),
+                GetProfileBestPerformance = _ => pp,
+            };
+
+            var results = await grouping.Run(set.Beatmaps.Select(b => new CarouselItem(b)).ToList(), CancellationToken.None);
+            int total = 0;
+            assertGroup(results, 0, "No pp", [set.Beatmaps[3]], ref total);
+            assertGroup(results, 1, "0 - 100 pp", [set.Beatmaps[0], set.Beatmaps[1]], ref total);
+            assertGroup(results, 2, "200 - 300 pp", [set.Beatmaps[2]], ref total);
+            assertTotal(results, total);
+            Assert.That(results.Any(item => item.Model is GroupedBeatmapSet), Is.False);
+        }
+
+        [Test]
+        public async Task TestProfilePerformanceGroupInterval()
+        {
+            var set = TestResources.CreateTestBeatmapSetInfo(3);
+            var pp = new Dictionary<Guid, double> { [set.Beatmaps[0].ID] = 20, [set.Beatmaps[1].ID] = 20.1 };
+            var grouping = new BeatmapCarouselFilterGrouping
+            {
+                GetCriteria = () => new FilterCriteria { Group = GroupMode.ProfilePerformancePoints, PerformanceGroupInterval = 20 },
+                GetCollections = () => new List<BeatmapCollection>(),
+                GetLocalUserTopRanks = _ => new Dictionary<Guid, ScoreRank>(),
+                GetFavouriteBeatmapSets = () => new HashSet<int>(),
+                GetProfileBestPerformance = _ => pp,
+            };
+            var results = await grouping.Run(set.Beatmaps.Select(b => new CarouselItem(b)).ToList(), CancellationToken.None);
+            int total = 0;
+            assertGroup(results, 0, "No pp", [set.Beatmaps[2]], ref total);
+            assertGroup(results, 1, "0 - 20 pp", [set.Beatmaps[0]], ref total);
+            assertGroup(results, 2, "20 - 40 pp", [set.Beatmaps[1]], ref total);
+            assertTotal(results, total);
+        }
+
         private HashSet<int> favouriteBeatmapSets = [];
 
         private async Task<List<CarouselItem>> runGrouping(GroupMode group, List<BeatmapSetInfo> beatmapSets, IReadOnlyList<Mod>? mods = null)

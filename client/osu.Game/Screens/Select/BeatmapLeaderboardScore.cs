@@ -16,6 +16,8 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.Beatmaps;
+using osu.Game.Beatmaps.Drawables;
 using osu.Game.Configuration;
 using osu.Game.Extensions;
 using osu.Game.Graphics;
@@ -93,6 +95,9 @@ namespace osu.Game.Screens.Select
         private const float statistics_regular_min_width = 165;
         private const float statistics_compact_min_width = 90;
         private const float rank_label_width = 40;
+
+        [Resolved]
+        private BeatmapDifficultyCache difficultyCache { get; set; } = null!;
 
         private const int corner_radius = 10;
         private const int transition_duration = 200;
@@ -285,6 +290,7 @@ namespace osu.Game.Screens.Select
                                                         {
                                                             new UpdateableFlag(Score.User.CountryCode)
                                                             {
+                                                                LocalFlagFileName = Score.User.LocalFlagFileName,
                                                                 Anchor = Anchor.CentreLeft,
                                                                 Origin = Anchor.CentreLeft,
                                                                 Size = new Vector2(20, 14),
@@ -316,7 +322,8 @@ namespace osu.Game.Screens.Select
                                                         Text = Score.User.Username,
                                                         Font = OsuFont.Style.Heading2,
                                                         Colour = ToriiColourHelper.GetTopColour(Score.User) ?? Colour4.White,
-                                                    })
+                                                    }),
+                                                    createModdedStarBadge(),
                                                 }
                                             },
                                             new Container
@@ -488,6 +495,24 @@ namespace osu.Game.Screens.Select
             });
 
             innerAvatar.OnLoadComplete += d => d.FadeInFromZero(200);
+        }
+
+        private Drawable createModdedStarBadge()
+        {
+            var beatmap = Score.BeatmapInfo;
+            if (beatmap == null || Score.Mods.Length == 0)
+                return new Container();
+
+            double noModStars = beatmap.StarRating;
+            double moddedStars = difficultyCache.GetEffectiveStarRating(beatmap, Score.Ruleset, Score.Mods);
+
+            if (noModStars < 0 || Math.Abs(moddedStars - noModStars) < 0.01)
+                return new Container();
+
+            return new StarRatingDisplay(new StarDifficulty(moddedStars, 0), StarRatingDisplaySize.Small)
+            {
+                Scale = new Vector2(0.875f),
+            };
         }
 
         private ColourInfo getHighlightColour(HighlightType? highlightType, float lightenAmount = 0)

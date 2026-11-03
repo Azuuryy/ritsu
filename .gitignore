@@ -1,6 +1,9 @@
 .cache/
-artifacts/
+artifacts/*
+!artifacts/README.md
+.env
 tools/fixtures/
+__pycache__/
 **/bin/
 **/obj/
 toriirefresh-framework/

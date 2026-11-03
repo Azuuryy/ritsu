@@ -5,6 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.IO;
+using Newtonsoft.Json;
+using osu.Framework.Platform;
+using osu.Framework.Logging;
+using osu.Framework.Graphics.Cursor;
+using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions;
@@ -46,7 +52,15 @@ namespace osu.Game.Screens.Select
         private SongSelectSearchTextBox searchTextBox = null!;
         private ShearedToggleButton showConvertedBeatmapsButton = null!;
         private DifficultyRangeSlider difficultyRangeSlider = null!;
+        private PerformanceRangeSlider performanceRangeSlider = null!;
+        private Container performanceOptions = null!;
+        private ShearedDropdown<int> performanceIntervalDropdown = null!;
+        private ShearedToggleButton performanceCalculationToggle = null!;
+        private readonly BindableDouble minimumPerformance = new BindableDouble(0) { MinValue = 0, MaxValue = 3000, Precision = 10 };
+        private readonly BindableDouble maximumPerformance = new BindableDouble(3000) { MinValue = 0, MaxValue = 3000, Precision = 10 };
         private ShearedDropdown<SortMode> sortDropdown = null!;
+        private bool reverseSort;
+        private bool reverseGroup;
         private ShearedDropdown<GroupModeDropdownItem> groupDropdown = null!;
         private readonly Bindable<string> configCollectionFilter = new Bindable<string>();
 
@@ -158,6 +172,7 @@ namespace osu.Game.Screens.Select
                                             {
                                                 RelativeSizeAxes = Axes.X,
                                                 MinRange = 0.1f,
+                                                RightClickAction = () => performanceOptions.Alpha = performanceOptions.Alpha == 0 ? 1 : 0,
                                             },
                                             Empty(),
                                             showConvertedBeatmapsButton = new ShearedToggleButton
@@ -170,6 +185,45 @@ namespace osu.Game.Screens.Select
                                             },
                                         },
                                     }
+                                },
+                                performanceOptions = new Container
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    Height = 30,
+                                    Shear = -OsuGame.SHEAR,
+                                    Alpha = 0,
+                                    Child = new GridContainer
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        ColumnDimensions = new[] { new Dimension(), new Dimension(GridSizeMode.Absolute, 5), new Dimension(GridSizeMode.Absolute, 140), new Dimension(GridSizeMode.Absolute, 5), new Dimension(GridSizeMode.Absolute, 95) },
+                                        Content = new[]
+                                        {
+                                            new Drawable[]
+                                            {
+                                                performanceRangeSlider = new PerformanceRangeSlider
+                                                {
+                                                    RelativeSizeAxes = Axes.X,
+                                                    LowerBound = minimumPerformance,
+                                                    UpperBound = maximumPerformance,
+                                                    MinRange = 10,
+                                                },
+                                                Empty(),
+                                                performanceIntervalDropdown = new ShearedDropdown<int>("PP step")
+                                                {
+                                                    RelativeSizeAxes = Axes.X,
+                                                    Items = new[] { 10, 20, 50, 100, 200, 500, 1000 },
+                                                    Current = { Value = 100 },
+                                                },
+                                                Empty(),
+                                                performanceCalculationToggle = new PerformanceCalculationButton
+                                                {
+                                                    RelativeSizeAxes = Axes.X,
+                                                    Height = 30,
+                                                    Text = "PP calc",
+                                                },
+                                            },
+                                        },
+                                    },
                                 },
                                 new GridContainer
                                 {
@@ -194,11 +248,13 @@ namespace osu.Game.Screens.Select
                                             {
                                                 RelativeSizeAxes = Axes.X,
                                                 Items = Enum.GetValues<SortMode>(),
+                                                MiddleClickAction = () => { reverseSort = !reverseSort; sortDropdown.SetReversedSortIndicator(reverseSort, SongSelectStrings.Sort); updateCriteria(); },
                                             },
                                             Empty(),
                                             groupDropdown = new GroupModeDropdown(SongSelectStrings.Group)
                                             {
                                                 RelativeSizeAxes = Axes.X,
+                                                MiddleClickAction = () => { reverseGroup = !reverseGroup; groupDropdown.SetReversedSortIndicator(reverseGroup, SongSelectStrings.Group); updateCriteria(); },
                                             },
                                             Empty(),
                                             new CollectionDropdown
@@ -230,6 +286,8 @@ namespace osu.Game.Screens.Select
             difficultyRangeSlider.UpperBound = config.GetBindable<double>(OsuSetting.DisplayStarsMaximum);
             config.BindWith(OsuSetting.ShowConvertedBeatmaps, showConvertedBeatmapsButton.Active);
             config.BindWith(OsuSetting.SongSelectSortingMode, sortDropdown.Current);
+            config.BindWith(OsuSetting.RitsuPerformanceGroupInterval, performanceIntervalDropdown.Current);
+            config.BindWith(OsuSetting.RitsuCalculateMapPerformance, performanceCalculationToggle.Active);
             config.BindWith(OsuSetting.SongSelectCollectionFilter, configCollectionFilter);
 
             ruleset.BindValueChanged(_ => updateCriteria());
@@ -251,7 +309,7 @@ namespace osu.Game.Screens.Select
 
                 // Sorting, grouping and star rating filters use mod-adjusted star ratings,
                 // so ordering, group membership or matches may change when difficulty-altering mods are toggled.
-                bool difficultyCriteriaMayChange = difficultyCriteriaActive && difficultyModsChanged(m.OldValue, m.NewValue);
+                bool difficultyCriteriaMayChange = (performanceCriteriaActive || difficultyCriteriaActive) && difficultyModsChanged(m.OldValue, m.NewValue);
 
                 if (rulesetCriteria?.FilterMayChangeFromMods(currentCriteria, m) == true || difficultyCriteriaMayChange)
                     updateCriteria();
@@ -273,10 +331,14 @@ namespace osu.Game.Screens.Select
 
             difficultyRangeSlider.LowerBound.BindValueChanged(_ => debouncedUpdateCriteria());
             difficultyRangeSlider.UpperBound.BindValueChanged(_ => debouncedUpdateCriteria());
+            minimumPerformance.BindValueChanged(_ => debouncedUpdateCriteria());
+            maximumPerformance.BindValueChanged(_ => debouncedUpdateCriteria());
 
             showConvertedBeatmapsButton.Active.BindValueChanged(_ => updateCriteria());
             sortDropdown.Current.BindValueChanged(_ => updateCriteria());
             groupDropdown.Current.BindValueChanged(_ => updateCriteria());
+            performanceIntervalDropdown.Current.BindValueChanged(_ => updateCriteria());
+            performanceCalculationToggle.Active.BindValueChanged(_ => updateCriteria());
             configCollectionFilter.BindValueChanged(_ => updateCriteria());
             collectionsSubscription = realm.RegisterForNotifications(r => r.All<BeatmapCollection>(), (_, changeSet) =>
             {
@@ -295,6 +357,8 @@ namespace osu.Game.Screens.Select
         /// Whether the current sorting, grouping or star rating filters use mod-adjusted star ratings.
         /// When beatmaps are grouped by set, difficulties within each set are also ordered by mod-adjusted star rating.
         /// </summary>
+        private bool performanceCriteriaActive => !minimumPerformance.IsDefault || !maximumPerformance.IsDefault || currentCriteria.Sort == SortMode.Farmability || currentCriteria.Sort == SortMode.PerformancePoints || currentCriteria.Group == GroupMode.PerformancePoints100;
+
         private bool difficultyCriteriaActive => currentCriteria.Sort == SortMode.Difficulty
                                                  || currentCriteria.Group == GroupMode.Difficulty
                                                  || currentCriteria.StarDifficulty.HasFilter
@@ -311,7 +375,7 @@ namespace osu.Game.Screens.Select
             modSettingChangeTracker.SettingChanged += mod =>
             {
                 // Variant grouping also reads mods, but is invariant to rate and other setting changes today, so it isn't checked here.
-                if (!StarRatingApproximator.ModAffectsDifficulty(mod) || !difficultyCriteriaActive)
+                if (!StarRatingApproximator.ModAffectsDifficulty(mod) || (!performanceCriteriaActive && !difficultyCriteriaActive))
                     return;
 
                 // Settings can change very often (e.g. when dragging a rate slider), so debounce re-filtering.
@@ -345,6 +409,10 @@ namespace osu.Game.Screens.Select
             {
                 SelectedBeatmapSet = ScopedBeatmapSet.Value,
                 Sort = sortDropdown.Current.Value,
+                ReverseSort = reverseSort,
+                ReverseGroup = reverseGroup,
+                PerformanceGroupInterval = performanceIntervalDropdown.Current.Value,
+                CalculateMapPerformance = performanceCalculationToggle.Active.Value,
                 Group = groupDropdown.Current.Value?.Value ?? GroupMode.None,
                 AllowConvertedBeatmaps = showConvertedBeatmapsButton.Active.Value,
                 Ruleset = ruleset.Value,
@@ -360,6 +428,11 @@ namespace osu.Game.Screens.Select
 
             if (!difficultyRangeSlider.UpperBound.IsDefault)
                 criteria.UserStarDifficulty.Max = difficultyRangeSlider.UpperBound.Value;
+
+            if (!minimumPerformance.IsDefault)
+                criteria.UserPerformance.Min = minimumPerformance.Value;
+            if (!maximumPerformance.IsDefault)
+                criteria.UserPerformance.Max = maximumPerformance.Value;
 
             criteria.RulesetCriteria = ruleset.Value.CreateInstance().CreateRulesetFilterCriteria();
 
@@ -429,9 +502,104 @@ namespace osu.Game.Screens.Select
                 .FadeOut(SongSelect.ENTER_DURATION / 3, Easing.In);
         }
 
-        internal partial class SongSelectSearchTextBox : ShearedFilterTextBox
+        internal partial class SongSelectSearchTextBox : ShearedFilterTextBox, IHasContextMenu
         {
             public IBindable<BeatmapSetInfo?> ScopedBeatmapSet { get; } = new Bindable<BeatmapSetInfo?>();
+
+            private const string history_file = "ritsu/search-history.json";
+            private Storage storage = null!;
+            private SearchHistory history = new SearchHistory();
+            private ScheduledDelegate? historyDelay;
+
+            [BackgroundDependencyLoader]
+            private void load(Storage storage)
+            {
+                this.storage = storage;
+                try
+                {
+                    if (storage.Exists(history_file))
+                    {
+                        using var stream = storage.GetStream(history_file, FileAccess.Read, FileMode.Open);
+                        using var reader = new StreamReader(stream);
+                        history = JsonConvert.DeserializeObject<SearchHistory>(reader.ReadToEnd()) ?? new SearchHistory();
+                        history.Recent ??= new List<string>();
+                        history.Favourites ??= new List<string>();
+                    }
+                }
+                catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+                {
+                    Logger.Error(e, "Failed to load search history");
+                }
+            }
+
+            protected override void LoadComplete()
+            {
+                base.LoadComplete();
+                Current.BindValueChanged(value =>
+                {
+                    historyDelay?.Cancel();
+                    string query = value.NewValue.Trim();
+                    if (query.Length == 0)
+                        return;
+                    historyDelay = Scheduler.AddDelayed(() =>
+                    {
+                        history.Recent.RemoveAll(item => item == query);
+                        history.Recent.Insert(0, query);
+                        if (history.Recent.Count > 30)
+                            history.Recent.RemoveRange(30, history.Recent.Count - 30);
+                        saveHistory();
+                    }, 1500);
+                });
+            }
+
+            public MenuItem[] ContextMenuItems
+            {
+                get
+                {
+                    string query = Current.Value.Trim();
+                    var items = new List<MenuItem>();
+                    if (query.Length > 0)
+                    {
+                        bool saved = history.Favourites.Contains(query);
+                        items.Add(new OsuMenuItem(saved ? "Remove from favourites" : "Add to favourites", MenuItemType.Standard, () =>
+                        {
+                            if (saved) history.Favourites.Remove(query);
+                            else history.Favourites.Add(query);
+                            saveHistory();
+                        }));
+                    }
+                    if (history.Favourites.Count > 0)
+                        items.Add(new OsuMenuItem("Favourites") { Items = history.Favourites.Select(value => new OsuMenuItem(value, MenuItemType.Standard, () => Current.Value = value)).ToArray() });
+                    if (history.Recent.Count > 0)
+                    {
+                        items.Add(new OsuMenuItem("Recent searches") { Items = history.Recent.Select(value => new OsuMenuItem(value, MenuItemType.Standard, () => Current.Value = value)).ToArray() });
+                        items.Add(new OsuMenuItem("Clear history", MenuItemType.Destructive, () => { history.Recent.Clear(); saveHistory(); }));
+                    }
+                    if (items.Count == 0)
+                        items.Add(new OsuMenuItem("No saved searches") { Action = { Disabled = true } });
+                    return items.ToArray();
+                }
+            }
+
+            private void saveHistory()
+            {
+                try
+                {
+                    using var stream = storage.CreateFileSafely(history_file);
+                    using var writer = new StreamWriter(stream);
+                    writer.Write(JsonConvert.SerializeObject(history));
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    Logger.Error(e, "Failed to save search history");
+                }
+            }
+
+            private sealed class SearchHistory
+            {
+                public List<string> Recent { get; set; } = new List<string>();
+                public List<string> Favourites { get; set; } = new List<string>();
+            }
 
             protected override InnerSearchTextBox CreateInnerTextBox() => new InnerTextBox
             {
@@ -465,6 +633,11 @@ namespace osu.Game.Screens.Select
                     return base.OnPressed(e);
                 }
             }
+        }
+
+        private partial class PerformanceCalculationButton : ShearedToggleButton, IHasTooltip
+        {
+            public LocalisableString TooltipText => "Calculate PP for maps. When disabled, only cached values are used.";
         }
 
         private partial class GroupModeDropdown : ShearedDropdown<GroupModeDropdownItem>

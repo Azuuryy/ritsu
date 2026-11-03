@@ -9,6 +9,7 @@ using System.Linq;
 using Humanizer;
 using NUnit.Framework;
 using osu.Framework.Testing;
+using osu.Framework.Graphics.Containers;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests;
 using osu.Game.Online.API.Requests.Responses;
@@ -79,6 +80,14 @@ namespace osu.Game.Tests.Visual.Online
 
             Child = changelog = new TestChangelogOverlay();
         });
+
+        [Test]
+        public void ShowLocalReleaseOffline()
+        {
+            AddStep("show local release", () => changelog.ShowLocalBuild("0.3.0", "Local notes"));
+            AddUntilStep("local changelog visible", () => changelog.State.Value == Visibility.Visible && changelog.ChildrenOfType<RitsuLocalChangelogContent>().Any());
+            AddAssert("no streams fetched", () => changelog.Streams == null);
+        }
 
         [Test]
         public void ShowWithNoFetch()

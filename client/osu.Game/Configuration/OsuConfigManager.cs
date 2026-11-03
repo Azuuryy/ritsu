@@ -125,6 +125,8 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.ShowConvertedBeatmaps, true);
             SetDefault(OsuSetting.DisplayStarsMinimum, 0.0, 0, 10, 0.1);
             SetDefault(OsuSetting.DisplayStarsMaximum, 10.1, 0, 10.1, 0.1);
+            SetDefault(OsuSetting.RitsuPerformanceGroupInterval, 100);
+            SetDefault(OsuSetting.RitsuCalculateMapPerformance, true);
 
             SetDefault(OsuSetting.SongSelectGroupMode, GroupMode.None);
             SetDefault(OsuSetting.SongSelectSortingMode, SortMode.Title);
@@ -264,6 +266,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.LastKnownBuildStream, string.Empty);
 
             SetDefault(OsuSetting.Version, string.Empty);
+            SetDefault(OsuSetting.RitsuLastVersion, string.Empty);
 
             // Torii: server pulse toolbar widget (live "currently playing" stats).
             SetDefault(OsuSetting.ToriiServerPulseEnabled, false);
@@ -783,5 +786,8 @@ namespace osu.Game.Configuration
         ToriiSeenRealmDifficultyVersions,
         RitsuSkipBreakToEnd,
         RitsuLiveStars,
+        RitsuPerformanceGroupInterval,
+        RitsuCalculateMapPerformance,
+        RitsuLastVersion,
     }
 }

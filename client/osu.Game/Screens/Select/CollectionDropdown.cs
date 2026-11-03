@@ -46,6 +46,7 @@ namespace osu.Game.Screens.Select
         private RealmAccess realm { get; set; } = null!;
 
         private IDisposable? realmSubscription;
+        private bool reverseCollections;
 
         private readonly CollectionFilterMenuItem allBeatmapsItem = new AllBeatmapsCollectionFilterMenuItem();
 
@@ -56,6 +57,12 @@ namespace osu.Game.Screens.Select
 
             Current.Value = allBeatmapsItem;
             AlwaysShowSearchBar = true;
+            MiddleClickAction = () =>
+            {
+                reverseCollections = !reverseCollections;
+                SetReversedSortIndicator(reverseCollections, CollectionsStrings.Collection);
+                subscribeToCollections();
+            };
         }
 
         [BackgroundDependencyLoader]
@@ -68,9 +75,17 @@ namespace osu.Game.Screens.Select
         {
             base.LoadComplete();
 
-            realmSubscription = realm.RegisterForNotifications(r => r.All<BeatmapCollection>().OrderBy(c => c.Name), collectionsChanged);
+            subscribeToCollections();
 
             Current.BindValueChanged(selectionChanged);
+        }
+
+        private void subscribeToCollections()
+        {
+            realmSubscription?.Dispose();
+            realmSubscription = realm.RegisterForNotifications(
+                r => reverseCollections ? r.All<BeatmapCollection>().OrderByDescending(c => c.Name) : r.All<BeatmapCollection>().OrderBy(c => c.Name),
+                collectionsChanged);
         }
 
         private void collectionsChanged(IRealmCollection<BeatmapCollection> collections, ChangeSet? changes)
