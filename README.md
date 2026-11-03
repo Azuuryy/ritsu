@@ -1,5 +1,7 @@
 # Ritsu
 
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/QESZQbgzBv)
+
 Ritsu is a standalone osu!lazer client for local play, built on Torii. It keeps osu!'s gameplay and interface, adds local profiles and the Modosu training mods, and runs without an account or an Internet connection.
 
 > **Current milestone: offline foundation.** Authentication, leaderboards, downloads, updates, chat, presence, telemetry and other online services are intentionally disabled. Later milestones are described in [ROADMAP.md](ROADMAP.md) and are not implemented yet.
