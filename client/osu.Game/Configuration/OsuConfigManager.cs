@@ -266,6 +266,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.LastKnownBuildStream, string.Empty);
 
             SetDefault(OsuSetting.Version, string.Empty);
+            SetDefault(OsuSetting.RitsuLastVersion, string.Empty);
 
             // Torii: server pulse toolbar widget (live "currently playing" stats).
             SetDefault(OsuSetting.ToriiServerPulseEnabled, false);

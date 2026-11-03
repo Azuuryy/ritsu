@@ -1761,8 +1761,13 @@ namespace osu.Game
             string version = Version;
 
             // only show a notification if we've previously saved a version to the config file (ie. not the first run).
-            if (IsDeployedBuild && !string.IsNullOrEmpty(lastVersion) && version != lastVersion)
-                Notifications.Post(new UpdateCompleteNotification(version));
+            string lastRitsuVersion = LocalConfig.Get<string>(OsuSetting.RitsuLastVersion);
+            if (IsDeployedBuild)
+            {
+                if (!string.IsNullOrEmpty(lastVersion) && lastRitsuVersion != RitsuReleaseNotes.Version)
+                    Notifications.Post(new UpdateCompleteNotification(RitsuReleaseNotes.Version));
+                LocalConfig.SetValue(OsuSetting.RitsuLastVersion, RitsuReleaseNotes.Version);
+            }
 
             // finally, update the version stored to the configuration.
             // this MUST happen after `applyConfigMigrations()` call, as it relies on comparing the previous version.

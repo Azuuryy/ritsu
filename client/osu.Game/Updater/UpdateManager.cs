@@ -1,4 +1,4 @@
-// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
@@ -253,7 +253,7 @@ namespace osu.Game.Updater
         public UpdateCompleteNotification(string version)
         {
             this.version = version;
-            Text = NotificationsStrings.GameVersionAfterUpdate(version);
+            Text = $"Ritsu {version} is ready. Click to see what's new.";
         }
 
         [BackgroundDependencyLoader]
@@ -265,7 +265,7 @@ namespace osu.Game.Updater
             Activated = delegate
             {
                 notificationOverlay.Hide();
-                changelog.ShowBuild(version);
+                changelog.ShowLocalBuild(version, RitsuReleaseNotes.Current);
                 return true;
             };
         }
