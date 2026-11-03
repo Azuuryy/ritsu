@@ -1,7 +1,7 @@
 # Announce published GitHub releases in a Discord channel.
 #
 # This workflow sends external messages: it requires the DISCORD_WEBHOOK_URL
-# repository secret. See README.md ("Release announcements on Discord").
+# repository secret. See artifacts/README.md ("Announce on Discord").
 #
 # Automatic runs use the release payload. Manual runs take a release tag and
 # fetch the title, notes and URL from the API, so the markdown keeps its line
