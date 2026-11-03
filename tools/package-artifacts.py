@@ -36,8 +36,8 @@ macOS package: unsigned and not notarized. macOS may display a Gatekeeper warnin
 
 def licenses(root):
     return {
-        'LICENCE-client.txt': root / 'client/LICENCE',
-        'LICENCE-Modosu.txt': root / 'client/LICENCE-Modosu.txt',
+        'LICENCE-client.txt': root / 'LICENCE',
+        'LICENCE-Modosu.txt': root / 'LICENCE-Modosu.txt',
         'LICENCE-framework.txt': root / 'toriirefresh-framework/LICENCE',
         'LICENCE-resources.md': root / 'toriirefresh-resources/LICENCE.md',
         'THIRD-PARTY-NOTICES.txt': root / 'client/THIRD-PARTY-NOTICES.txt',

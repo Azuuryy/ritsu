@@ -15,8 +15,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
 foreach ($ritsuDocument in @('GUIDE.md','ROADMAP.md','VALIDATION.md','CHANGELOG.md','VERSION','dependencies.json')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $ritsuDocument) -Destination $ritsuPublish
 }
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'client/LICENCE') -Destination (Join-Path $ritsuPublish 'LICENCE-client.txt')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'client/LICENCE-Modosu.txt') -Destination $ritsuPublish
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LICENCE') -Destination (Join-Path $ritsuPublish 'LICENCE-client.txt')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LICENCE-Modosu.txt') -Destination $ritsuPublish
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'toriirefresh-framework/LICENCE') -Destination (Join-Path $ritsuPublish 'LICENCE-framework.txt')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'toriirefresh-resources/LICENCE.md') -Destination (Join-Path $ritsuPublish 'LICENCE-resources.md')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $ritsuPublish 'RITSU-README.md')

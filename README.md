@@ -64,4 +64,4 @@ This announcement is maintainer tooling, separate from the in-client update chec
 - [**Modosu**](https://github.com/Azuuryy/Modosu), maintained by the user.
 - [**MOsu**](https://github.com/p-720/mosu), by p-720 and its contributors: the origin of the Modosu work.
 
-Contributions from these projects remain credited to their original authors. Client, framework, and resource notices are preserved. The Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2, and Miss Challenge mods are adapted from Modosu/MOsu; their GPL-3.0 license is kept in `client/LICENCE-Modosu.txt` and in the package. New features still need in-game validation.
+Contributions from these projects remain credited to their original authors. Client, framework, and resource notices are preserved. The Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2, and Miss Challenge mods are adapted from Modosu/MOsu; their GPL-3.0 license is kept in `LICENCE-Modosu.txt` and in the package. New features still need in-game validation.

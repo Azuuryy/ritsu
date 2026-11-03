@@ -2,7 +2,7 @@
 
 The local copy is at `C:\Users\natha\OneDrive\Documents\ChatGPT\Mosu clone\source`. Its `codex/offline-practice` branch is at commit `ef807e8df043323014a781ca74942c547986f56e`, matching the remote branch of the same name and descending from `master` (`5224a4d2dddfecd2a5bcc73e8828e3cb4c829fbe`). It also contains uncommitted changes to performance export to tosu; those changes are not on GitHub and were not included in the initial port.
 
-Sources reviewed: [Modosu, Azuuryy](https://github.com/Azuuryy/Modosu) and [MOsu, p-720](https://github.com/p-720/mosu), revision `2df91468c545dbc1dfe01951e6f9f8d8b991f45d`. Modosu and MOsu identify GPL-3.0 as their license. The license is preserved in `client/LICENCE-Modosu.txt` and in the package.
+Sources reviewed: [Modosu, Azuuryy](https://github.com/Azuuryy/Modosu) and [MOsu, p-720](https://github.com/p-720/mosu), revision `2df91468c545dbc1dfe01951e6f9f8d8b991f45d`. Modosu and MOsu identify GPL-3.0 as their license. The license is preserved in `LICENCE-Modosu.txt` and in the package.
 
 | MOsu feature | Status in Ritsu | Follow-up |
 | --- | --- | --- |

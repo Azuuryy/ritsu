@@ -19,7 +19,7 @@ foreach ($ritsuDependency in @($ritsuManifest.client, $ritsuManifest.framework, 
         $ritsuPatch = Join-Path $ritsuRoot $ritsuDependency.patch
         $ritsuSavedErrorPolicy = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        & git -C $ritsuCheckout apply --reverse --check -- $ritsuPatch 2>$null
+        & git -C $ritsuRoot apply --reverse --check --directory=client -- $ritsuPatch 2>$null
         $ritsuPatchIsPresent = $LASTEXITCODE -eq 0
         $ErrorActionPreference = $ritsuSavedErrorPolicy
         if (-not $ritsuPatchIsPresent) { throw 'Bundled client source does not contain the offline patch.' }
