@@ -4,6 +4,20 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
+## [0.3.1] - 2026-11-03
+
+### Added
+
+- Exclude individual local scores, beatmaps, or beatmap sets from profile PP while retaining their scores and replays.
+
+### Changed
+
+- Rename the Spacing Overtime mod acronym from SO to SOT.
+
+### Fixed
+
+- Load saved skin layouts when their component types refer to different client assembly versions.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added
