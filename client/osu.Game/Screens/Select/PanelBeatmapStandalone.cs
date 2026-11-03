@@ -20,6 +20,7 @@ using osu.Game.Graphics.Carousel;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Overlays;
+using osu.Game.Offline;
 using osu.Game.Performance;
 using osu.Game.Resources.Localisation.Web;
 using osu.Game.Rulesets;
@@ -34,6 +35,9 @@ namespace osu.Game.Screens.Select
 
         [Resolved]
         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
+
+        [Resolved(CanBeNull = true)]
+        private RitsuProfileManager? ritsuProfiles { get; set; }
 
         [Resolved]
         private IBindable<IReadOnlyList<Mod>> mods { get; set; } = null!;
@@ -334,6 +338,13 @@ namespace osu.Game.Screens.Select
                     return Array.Empty<MenuItem>();
 
                 List<MenuItem> items = new List<MenuItem>();
+
+                if (ritsuProfiles != null)
+                {
+                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, beatmap.ID);
+                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap's scores from PP" : "Include this beatmap's scores in PP", MenuItemType.Standard,
+                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, beatmap.ID, !included)));
+                }
 
                 if (songSelect != null)
                     items.AddRange(songSelect.GetForwardActions(beatmap));

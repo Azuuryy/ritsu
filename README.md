@@ -22,6 +22,7 @@ Ritsu is a standalone osu!lazer client for local play, built on Torii. It keeps 
 
 - Multiple local profiles with stable IDs, switchable from the top bar.
 - Local PP estimates per profile, with an option to include Relax and Autopilot.
+- Exclude individual scores, beatmaps, or beatmap sets from a profile's PP while retaining their scores and replays.
 - Profile pictures, country flags and custom flag images.
 - Local result rankings after a score: position among the profile's best plays, rank on the map, and PP gained.
 - Release notes readable offline from the update notification and the settings footer.
