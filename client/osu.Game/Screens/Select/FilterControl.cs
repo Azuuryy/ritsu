@@ -502,9 +502,104 @@ namespace osu.Game.Screens.Select
                 .FadeOut(SongSelect.ENTER_DURATION / 3, Easing.In);
         }
 
-        internal partial class SongSelectSearchTextBox : ShearedFilterTextBox
+        internal partial class SongSelectSearchTextBox : ShearedFilterTextBox, IHasContextMenu
         {
             public IBindable<BeatmapSetInfo?> ScopedBeatmapSet { get; } = new Bindable<BeatmapSetInfo?>();
+
+            private const string history_file = "ritsu/search-history.json";
+            private Storage storage = null!;
+            private SearchHistory history = new SearchHistory();
+            private ScheduledDelegate? historyDelay;
+
+            [BackgroundDependencyLoader]
+            private void load(Storage storage)
+            {
+                this.storage = storage;
+                try
+                {
+                    if (storage.Exists(history_file))
+                    {
+                        using var stream = storage.GetStream(history_file, FileAccess.Read, FileMode.Open);
+                        using var reader = new StreamReader(stream);
+                        history = JsonConvert.DeserializeObject<SearchHistory>(reader.ReadToEnd()) ?? new SearchHistory();
+                        history.Recent ??= new List<string>();
+                        history.Favourites ??= new List<string>();
+                    }
+                }
+                catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+                {
+                    Logger.Error(e, "Failed to load search history");
+                }
+            }
+
+            protected override void LoadComplete()
+            {
+                base.LoadComplete();
+                Current.BindValueChanged(value =>
+                {
+                    historyDelay?.Cancel();
+                    string query = value.NewValue.Trim();
+                    if (query.Length == 0)
+                        return;
+                    historyDelay = Scheduler.AddDelayed(() =>
+                    {
+                        history.Recent.RemoveAll(item => item == query);
+                        history.Recent.Insert(0, query);
+                        if (history.Recent.Count > 30)
+                            history.Recent.RemoveRange(30, history.Recent.Count - 30);
+                        saveHistory();
+                    }, 1500);
+                });
+            }
+
+            public MenuItem[] ContextMenuItems
+            {
+                get
+                {
+                    string query = Current.Value.Trim();
+                    var items = new List<MenuItem>();
+                    if (query.Length > 0)
+                    {
+                        bool saved = history.Favourites.Contains(query);
+                        items.Add(new OsuMenuItem(saved ? "Remove from favourites" : "Add to favourites", MenuItemType.Standard, () =>
+                        {
+                            if (saved) history.Favourites.Remove(query);
+                            else history.Favourites.Add(query);
+                            saveHistory();
+                        }));
+                    }
+                    if (history.Favourites.Count > 0)
+                        items.Add(new OsuMenuItem("Favourites") { Items = history.Favourites.Select(value => new OsuMenuItem(value, MenuItemType.Standard, () => Current.Value = value)).ToArray() });
+                    if (history.Recent.Count > 0)
+                    {
+                        items.Add(new OsuMenuItem("Recent searches") { Items = history.Recent.Select(value => new OsuMenuItem(value, MenuItemType.Standard, () => Current.Value = value)).ToArray() });
+                        items.Add(new OsuMenuItem("Clear history", MenuItemType.Destructive, () => { history.Recent.Clear(); saveHistory(); }));
+                    }
+                    if (items.Count == 0)
+                        items.Add(new OsuMenuItem("No saved searches") { Action = { Disabled = true } });
+                    return items.ToArray();
+                }
+            }
+
+            private void saveHistory()
+            {
+                try
+                {
+                    using var stream = storage.CreateFileSafely(history_file);
+                    using var writer = new StreamWriter(stream);
+                    writer.Write(JsonConvert.SerializeObject(history));
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    Logger.Error(e, "Failed to save search history");
+                }
+            }
+
+            private sealed class SearchHistory
+            {
+                public List<string> Recent { get; set; } = new List<string>();
+                public List<string> Favourites { get; set; } = new List<string>();
+            }
 
             protected override InnerSearchTextBox CreateInnerTextBox() => new InnerTextBox
             {
