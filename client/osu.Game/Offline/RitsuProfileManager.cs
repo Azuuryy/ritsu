@@ -4,10 +4,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using Realms;
 using osu.Framework.Platform;
 using osu.Game.Database;
+using osu.Game.Beatmaps;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
+using osu.Game.Users;
+using osu.Game.Online.API.Requests.Responses;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -63,24 +67,7 @@ namespace osu.Game.Offline
 
         public void SetAvatar(Guid profileId, FileInfo? imageFile)
         {
-            string? avatarFileName = null;
-
-            if (imageFile != null)
-            {
-                if (!imageFile.Exists)
-                    throw new FileNotFoundException("The selected profile picture could not be found.", imageFile.FullName);
-
-                if (imageFile.Length > 10 * 1024 * 1024)
-                    throw new InvalidDataException("Profile pictures must be 10 MB or smaller.");
-
-                using var image = Image.Load<Rgba32>(imageFile.FullName);
-                if (image.Width > 4096 || image.Height > 4096)
-                    throw new InvalidDataException("Profile pictures must be 4096 × 4096 pixels or smaller.");
-
-                avatarFileName = $"profile-{profileId:N}-{Guid.NewGuid():N}";
-                using var stream = avatarStorage.CreateFileSafely($"{avatarFileName}.png");
-                image.SaveAsPng(stream);
-            }
+            string? avatarFileName = saveImage(profileId, imageFile, "profile");
 
             lock (sync)
             {
@@ -93,10 +80,67 @@ namespace osu.Game.Offline
             Changed?.Invoke();
         }
 
+        private string? saveImage(Guid profileId, FileInfo? imageFile, string prefix)
+        {
+            string? avatarFileName = null;
+            if (imageFile != null)
+            {
+                if (!imageFile.Exists)
+                    throw new FileNotFoundException("The selected profile picture could not be found.", imageFile.FullName);
+
+                if (imageFile.Length > 10 * 1024 * 1024)
+                    throw new InvalidDataException("Profile pictures must be 10 MB or smaller.");
+
+                using var image = Image.Load<Rgba32>(imageFile.FullName);
+                if (image.Width > 4096 || image.Height > 4096)
+                    throw new InvalidDataException("Profile pictures must be 4096 × 4096 pixels or smaller.");
+
+                avatarFileName = $"{prefix}-{profileId:N}-{Guid.NewGuid():N}";
+                using var stream = avatarStorage.CreateFileSafely($"{avatarFileName}.png");
+                image.SaveAsPng(stream);
+            }
+
+            return avatarFileName;
+        }
+
+        public void SetCountry(Guid profileId, CountryCode country)
+        {
+            if (!Enum.IsDefined(country)) throw new ArgumentOutOfRangeException(nameof(country));
+            lock (sync)
+            {
+                var profile = data.Profiles.Single(p => p.Id == profileId);
+                profile.CountryCode = country;
+                profile.FlagFileName = null;
+                save();
+            }
+            Changed?.Invoke();
+        }
+
+        public void SetFlagImage(Guid profileId, FileInfo? file)
+        {
+            string? flagFileName = saveImage(profileId, file, "flag");
+            lock (sync)
+            {
+                var profile = data.Profiles.Single(p => p.Id == profileId);
+                profile.FlagFileName = flagFileName;
+                save();
+            }
+            Changed?.Invoke();
+        }
+
+        public static APIUser CreateUser(RitsuProfile profile) => new APIUser
+        {
+            Id = APIUser.SYSTEM_USER_ID,
+            Username = profile.Name,
+            CountryCode = profile.CountryCode,
+            LocalAvatarFileName = profile.AvatarFileName,
+            LocalFlagFileName = profile.FlagFileName,
+        };
+
         public IReadOnlyList<RitsuProfile> GetProfiles()
         {
             lock (sync)
-                return data.Profiles.Select(p => new RitsuProfile { Id = p.Id, Name = p.Name, IncludeRelaxAutopilot = p.IncludeRelaxAutopilot, AvatarFileName = p.AvatarFileName }).ToArray();
+                return data.Profiles.Select(p => new RitsuProfile { Id = p.Id, Name = p.Name, IncludeRelaxAutopilot = p.IncludeRelaxAutopilot, AvatarFileName = p.AvatarFileName, CountryCode = p.CountryCode, FlagFileName = p.FlagFileName }).ToArray();
         }
 
         public RitsuProfile GetActiveProfile()
@@ -104,7 +148,7 @@ namespace osu.Game.Offline
             lock (sync)
             {
                 var profile = activeProfile();
-                return new RitsuProfile { Id = profile.Id, Name = profile.Name, IncludeRelaxAutopilot = profile.IncludeRelaxAutopilot, AvatarFileName = profile.AvatarFileName };
+                return new RitsuProfile { Id = profile.Id, Name = profile.Name, IncludeRelaxAutopilot = profile.IncludeRelaxAutopilot, AvatarFileName = profile.AvatarFileName, CountryCode = profile.CountryCode, FlagFileName = profile.FlagFileName };
             }
         }
 
@@ -221,14 +265,19 @@ namespace osu.Game.Offline
             if (score.IsManaged)
                 throw new InvalidOperationException("Profile names can only be applied to detached scores.");
 
-            string? profileName;
+            RitsuProfile? profile;
             lock (sync)
-                profileName = data.Scores.TryGetValue(score.ID, out var metadata)
-                    ? data.Profiles.FirstOrDefault(p => p.Id == metadata.ProfileId)?.Name
+                profile = data.Scores.TryGetValue(score.ID, out var metadata)
+                    ? data.Profiles.FirstOrDefault(p => p.Id == metadata.ProfileId)
                     : null;
 
-            if (profileName != null)
-                score.User.Username = profileName;
+            if (profile != null)
+            {
+                score.User.Username = profile.Name;
+                score.User.CountryCode = profile.CountryCode;
+                score.User.LocalAvatarFileName = profile.AvatarFileName;
+                score.User.LocalFlagFileName = profile.FlagFileName;
+            }
         }
 
         public List<ScoreInfo> GetScores(Guid profileId, string ruleset)
@@ -324,6 +373,8 @@ namespace osu.Game.Offline
         public string Name { get; set; } = string.Empty;
         public bool IncludeRelaxAutopilot { get; set; }
         public string? AvatarFileName { get; set; }
+        public CountryCode CountryCode { get; set; }
+        public string? FlagFileName { get; set; }
         public override string ToString() => Name;
     }
 

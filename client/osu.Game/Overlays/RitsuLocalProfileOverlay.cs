@@ -123,11 +123,10 @@ namespace osu.Game.Overlays
         {
             int version = ++refreshVersion;
             Guid id = profiles.ActiveProfileId;
-            string name = profiles.ActiveProfileName;
             RulesetInfo mode = ruleset.Value.Clone();
             var allProfiles = profiles.GetProfiles();
 
-            Header.User.Value = new UserProfileData(new APIUser { Id = APIUser.SYSTEM_USER_ID, Username = name }, mode);
+            Header.User.Value = new UserProfileData(RitsuProfileManager.CreateUser(profiles.GetActiveProfile()), mode);
             Header.RefreshProfiles();
             Header.SetHistory(Array.Empty<RitsuPpPoint>());
             Header.SetLocalRank(null);
@@ -163,7 +162,8 @@ namespace osu.Game.Overlays
                 }
 
                 var result = task.GetResultSafely();
-                var user = new APIUser { Id = APIUser.SYSTEM_USER_ID, Username = name, Statistics = result.Display };
+                var user = RitsuProfileManager.CreateUser(allProfiles.Single(p => p.Id == id));
+                user.Statistics = result.Display;
                 Header.User.Value = new UserProfileData(user, mode);
                 Header.RefreshProfiles(result.PPByProfile);
                 Header.SetHistory(result.Statistics.History);

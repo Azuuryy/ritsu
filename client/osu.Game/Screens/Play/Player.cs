@@ -1444,12 +1444,7 @@ namespace osu.Game.Screens.Play
             {
                 ScoreInfo = new ScoreInfo
                 {
-                    User = profile == null ? api.LocalUser.Value : new APIUser
-                    {
-                        Id = APIUser.SYSTEM_USER_ID,
-                        Username = profile.Name,
-                        CountryCode = api.LocalUser.Value.CountryCode,
-                    },
+                    User = profile == null ? api.LocalUser.Value : osu.Game.Offline.RitsuProfileManager.CreateUser(profile),
                     ClientVersion = game.Version,
                 },
             };

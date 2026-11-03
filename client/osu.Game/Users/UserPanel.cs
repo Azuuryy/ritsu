@@ -149,6 +149,7 @@ namespace osu.Game.Users
 
         protected UpdateableFlag CreateFlag() => new UpdateableFlag(User.CountryCode)
         {
+            LocalFlagFileName = User.LocalFlagFileName,
             Size = new Vector2(36, 26),
             Action = Action,
         };

@@ -285,6 +285,7 @@ namespace osu.Game.Screens.Select
                                                         {
                                                             new UpdateableFlag(Score.User.CountryCode)
                                                             {
+                                                                LocalFlagFileName = Score.User.LocalFlagFileName,
                                                                 Anchor = Anchor.CentreLeft,
                                                                 Origin = Anchor.CentreLeft,
                                                                 Size = new Vector2(20, 14),

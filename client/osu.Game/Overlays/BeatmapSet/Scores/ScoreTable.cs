@@ -158,6 +158,7 @@ namespace osu.Game.Overlays.BeatmapSet.Scores
                 },
                 new UpdateableFlag(score.User.CountryCode)
                 {
+                    LocalFlagFileName = score.User.LocalFlagFileName,
                     Size = new Vector2(19, 14),
                 },
                 new FillFlowContainer

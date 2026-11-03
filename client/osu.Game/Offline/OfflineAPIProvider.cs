@@ -32,6 +32,7 @@ namespace osu.Game.Offline
 
         public IBindable<APIUser> LocalUser => localUserState.User;
         public void SetLocalProfile(string username) => localUserState.SetOfflineProfile(username);
+        public void SetLocalProfile(RitsuProfile profile) => localUserState.SetOfflineProfile(RitsuProfileManager.CreateUser(profile));
         public ILocalUserState LocalUserState => localUserState;
         public string ScoreProcessingNoticeUrl => string.Empty;
         public Language Language => Language.en;

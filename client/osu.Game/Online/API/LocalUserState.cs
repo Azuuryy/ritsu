@@ -55,10 +55,9 @@ namespace osu.Game.Online.API
 
         private static APIUser createGuestUser() => new GuestUser();
 
-        internal void SetOfflineProfile(string username)
-        {
-            localUser.Value = new APIUser { Id = APIUser.SYSTEM_USER_ID, Username = username };
-        }
+        internal void SetOfflineProfile(string username) => SetOfflineProfile(new APIUser { Id = APIUser.SYSTEM_USER_ID, Username = username });
+
+        internal void SetOfflineProfile(APIUser user) => localUser.Value = user;
 
         /// <summary>
         /// Show a placeholder user if saved credentials are available.
