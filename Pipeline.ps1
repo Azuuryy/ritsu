@@ -10,7 +10,7 @@ $ritsuZipPath = Join-Path $PSScriptRoot "artifacts/Ritsu-$ritsuVersion-win-x64.z
 $ritsuArchive = [System.IO.Compression.ZipFile]::OpenRead($ritsuZipPath)
 try {
     $ritsuEntries = @($ritsuArchive.Entries | ForEach-Object { $_.FullName })
-    foreach ($ritsuRequired in @('torii.exe','torii.dll','torii.runtimeconfig.json','coreclr.dll','hostfxr.dll','SDL3.dll','bass.dll','Launch Ritsu.cmd','GUIDE.md','ROADMAP.md','VALIDATION.md','CHANGELOG.md','VERSION','LICENCE-client.txt','LICENCE-Modosu.txt','LICENCE-framework.txt','LICENCE-resources.md','THIRD-PARTY-NOTICES.txt')) {
+    foreach ($ritsuRequired in @('torii.exe','torii.dll','torii.runtimeconfig.json','coreclr.dll','hostfxr.dll','SDL3.dll','bass.dll','Launch Ritsu.cmd','GUIDE.md','INSTALLATION.md','ROADMAP.md','VALIDATION.md','CHANGELOG.md','VERSION','LICENCE-client.txt','LICENCE-Modosu.txt','LICENCE-framework.txt','LICENCE-resources.md','THIRD-PARTY-NOTICES.txt')) {
         if ($ritsuRequired -notin $ritsuEntries) { throw "Package missing: $ritsuRequired" }
     }
     if (@($ritsuEntries | Where-Object { $_ -match '\.(realm|ini|log|osz|osk|osr)$' }).Count -gt 0) { throw 'Package contains user or test data.' }

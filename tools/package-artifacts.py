@@ -22,7 +22,7 @@ PLATFORMS = {
     'osx-arm64': 'macOS arm64',
 }
 
-DOCUMENTS = ['GUIDE.md', 'ROADMAP.md', 'VALIDATION.md', 'CHANGELOG.md', 'VERSION', 'dependencies.json']
+DOCUMENTS = ['GUIDE.md', 'INSTALLATION.md', 'ROADMAP.md', 'VALIDATION.md', 'CHANGELOG.md', 'VERSION', 'dependencies.json']
 
 PREVIEW_NOTE = '''Ritsu {version} preview build for {platform}.
 

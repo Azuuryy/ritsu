@@ -12,7 +12,7 @@ $ritsuProject = Join-Path $PSScriptRoot 'client/osu.Desktop/osu.Desktop.csproj'
 # product version at 0.x while setting that internal deployment marker.
 & dotnet publish $ritsuProject -c Release -r win-x64 --self-contained true -o $ritsuPublish "-p:NuGetPackages=$(Join-Path $ritsuCache 'nuget')" "-p:Version=$ritsuVersion" "-p:InformationalVersion=$ritsuVersion" "-p:FileVersion=$ritsuVersion" -p:AssemblyVersion=1.0.0.0 -p:PublishSingleFile=false -v:minimal
 if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
-foreach ($ritsuDocument in @('GUIDE.md','ROADMAP.md','VALIDATION.md','CHANGELOG.md','VERSION','dependencies.json')) {
+foreach ($ritsuDocument in @('GUIDE.md','INSTALLATION.md','ROADMAP.md','VALIDATION.md','CHANGELOG.md','VERSION','dependencies.json')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $ritsuDocument) -Destination $ritsuPublish
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LICENCE') -Destination (Join-Path $ritsuPublish 'LICENCE-client.txt')

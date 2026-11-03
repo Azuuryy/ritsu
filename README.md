@@ -1,61 +1,64 @@
-# Ritsu — Torii offline foundation
+# Ritsu
 
-The first Windows x64 milestone is a standalone Torii client for local play. Torii's names and appearance are intentionally retained; renaming is deferred.
+Ritsu is a standalone osu!lazer client for local play, built on Torii. It keeps osu!'s gameplay and interface, adds local profiles and the Modosu training mods, and runs without an account or an Internet connection.
 
-## Play
+> **Current milestone: offline foundation.** Authentication, leaderboards, downloads, updates, chat, presence, telemetry and other online services are intentionally disabled. Later milestones are described in [ROADMAP.md](ROADMAP.md) and are not implemented yet.
 
-On Windows x64, run `Pipeline.ps1` to build the client and create `Ritsu-<version>-win-x64.zip` in `artifacts/`. Extract it and open **Launch Ritsu.cmd**. The current version is listed in [`VERSION`](VERSION), with release history in [`CHANGELOG.md`](CHANGELOG.md). Choose an existing osu!lazer folder to share its data, or keep the default local storage in `%APPDATA%\Ritsu`. No account, service, or network access is required to play. Do not put the package inside an existing Torii or lazer installation.
+<!-- Banner and screenshots can be added here. -->
 
-Import `.osz`, `.osk`, and `.osr` files by dragging them into the window or through **Settings → Maintenance → Import files**. Maps must be available locally to play their replays. An osu!lazer folder can be detected or selected manually and used directly, without copying. Map downloads are not available.
+## Features
 
-See [GUIDE.md](GUIDE.md), [ROADMAP.md](ROADMAP.md), and [VALIDATION.md](VALIDATION.md).
+### Local play
 
-## Build
+- All four osu! rulesets, played and scored locally.
+- Local scores and replays, with `.osz`, `.osk` and `.osr` imports by drag and drop or from **Settings → Maintenance → Import files**.
+- Link an existing osu!lazer folder and use its maps, scores, skins and collections directly, without copying; or keep local storage in `%APPDATA%\Ritsu`.
+- osu!stable detection and local import.
+- Local play and the editors work without a connection.
 
-Requirements: Windows x64, Git, and the .NET 10 SDK (validated with 10.0.103; the packaged runtime is 10.0.3). Downloading source and dependencies requires Internet access; the resulting client works offline.
+### Profiles and progress
 
-Run the full pipeline without opening the game:
+- Multiple local profiles with stable IDs, switchable from the top bar.
+- Local PP estimates per profile, with an option to include Relax and Autopilot.
+- Profile pictures, country flags and custom flag images.
+- Local result rankings after a score: position among the profile's best plays, rank on the map, and PP gained.
+- Release notes readable offline from the update notification and the settings footer.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Pipeline.ps1
-```
+### Beatmap browsing
 
-To prepare and build separately:
+- Sort beatmaps by perfect-play PP or farmability, group them by perfect-play or profile-earned PP, and filter by PP range.
+- Perfect-play PP values use a persistent cache and can be disabled to reuse cached values only.
+- Local leaderboards sortable by PP, with reversed sorting on the middle mouse button.
+- Search history and favourites in the song select search box.
+- Modded star rating shown on score rows when difficulty-changing mods are used.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Bootstrap.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Build.ps1
-```
+### Mods
 
-Dependency revisions are pinned in `dependencies.json`. The repository already contains the pinned Torii source and its offline adaptations. `Bootstrap.ps1` verifies it and restores the required framework and resources from their pinned repositories. It rejects unexpected revisions and does not overwrite local changes. `Build.ps1` creates a self-contained distribution with native libraries and a SHA-256 checksum. Caches and logs stay in `.cache/`.
+- Modosu training mods integrated into the shared osu! mod list: Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2 and Miss Challenge.
+- JSON mod presets, a live star counter for the skin editor, and replay settings for RandomV2 and Spacing Adjust.
 
-Developer checks can also be run on their own:
+### Data and safety
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Verify.ps1
-```
+- A linked osu!lazer folder is used in place; Ritsu does not copy, migrate or delete it automatically.
+- Packages ship the client, framework, resources and Modosu licences and notices.
 
-This command builds and runs offline checks without opening the game. Optional graphical scenarios run only with `-IncludeGameScenarios`; they require Python 3, open a window, and use a separate test profile. `Build.ps1` and `Pipeline.ps1` never launch the game.
+## Status
 
-The client source retains Torii's history, with this milestone's changes on `codex/ritsu-offline`. Legacy workflows are kept with the `.disabled` extension and do not run on GitHub.
+The current version is in [`VERSION`](VERSION) and release history in [`CHANGELOG.md`](CHANGELOG.md). What has actually been verified, and what still needs in-game checks, is documented in [VALIDATION.md](VALIDATION.md). Compatibility of new mods, scores and replays with other clients has not been verified.
 
-### Release artifacts
+## Getting started
 
-`Package.ps1` publishes the client for Windows, Linux and macOS and writes one archive per platform, with a SHA-256 sidecar, to `artifacts/`:
+See [INSTALLATION.md](INSTALLATION.md) for download, build and packaging instructions, and [GUIDE.md](GUIDE.md) for first steps in the client.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Package.ps1
-```
+## Documentation
 
-The Windows package is the only one launched and validated on Windows; the Linux and macOS packages are cross-published previews, and the macOS package is unsigned. See [`artifacts/README.md`](artifacts/README.md) for the outputs, options and limitations.
-
-## Release announcements on Discord
-
-`.github/workflows/github-releases-to-discord.yml` posts each published GitHub release to a Discord channel. It needs the `DISCORD_WEBHOOK_URL` repository secret: in **Settings → Secrets and variables → Actions**, create the secret and paste the webhook URL. Do not put the webhook URL in the workflow file.
-
-Publishing a release posts its title, notes, and link. For a manual run, provide the release tag (for example `v0.3.0`); the workflow fetches the title, notes, and URL from the release API, so the markdown keeps its formatting. Re-publishing an existing release does not reliably trigger the automatic announcement, so use a manual run in that case. The action is pinned to `SethCohen/github-releases-to-discord` v1.20.0 (`24d166886aee4646d448c8a389ff9e1ebcab3682`); review and bump the pin deliberately. Adjust `username`, `color`, `footer_title`, and `reduce_headings` in the workflow to change the embed.
-
-This announcement is maintainer tooling, separate from the in-client update checks, which remain disabled.
+- [INSTALLATION.md](INSTALLATION.md) — install, build, verify and package.
+- [GUIDE.md](GUIDE.md) — quick start, profiles, training and offline behaviour.
+- [ROADMAP.md](ROADMAP.md) — milestones and planned work.
+- [VALIDATION.md](VALIDATION.md) — what has been validated and known limitations.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — setup, patch rules, commits and pull requests.
+- [CHANGELOG.md](CHANGELOG.md) — release notes.
+- [artifacts/README.md](artifacts/README.md) — release assets, publishing steps and Discord announcements.
 
 ## Origin and credits
 
@@ -64,4 +67,4 @@ This announcement is maintainer tooling, separate from the in-client update chec
 - [**Modosu**](https://github.com/Azuuryy/Modosu), maintained by the user.
 - [**MOsu**](https://github.com/p-720/mosu), by p-720 and its contributors: the origin of the Modosu work.
 
-Contributions from these projects remain credited to their original authors. Client, framework, and resource notices are preserved. The Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2, and Miss Challenge mods are adapted from Modosu/MOsu; their GPL-3.0 license is kept in `LICENCE-Modosu.txt` and in the package. New features still need in-game validation.
+Contributions from these projects remain credited to their original authors. Client, framework, and resource notices are preserved. The Metronome, Spacing Adjust, Fun Spacing, Circle Generation, No Sliding, RandomV2, and Miss Challenge mods are adapted from Modosu/MOsu; their GPL-3.0 license is kept in [`LICENCE-Modosu.txt`](LICENCE-Modosu.txt) and in the package. New features still need in-game validation.
