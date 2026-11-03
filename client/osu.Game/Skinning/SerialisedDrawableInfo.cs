@@ -11,6 +11,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Logging;
 using osu.Game.Configuration;
 using osu.Game.Extensions;
+using osu.Game.IO.Serialization.Converters;
 using osu.Game.Rulesets;
 using osuTK;
 
@@ -27,6 +28,7 @@ namespace osu.Game.Skinning
     [Serializable]
     public sealed class SerialisedDrawableInfo
     {
+        [JsonConverter(typeof(SkinComponentTypeConverter))]
         public Type Type { get; set; } = null!;
 
         public Vector2 Position { get; set; }

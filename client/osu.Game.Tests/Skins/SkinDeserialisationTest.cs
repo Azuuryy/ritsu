@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using Newtonsoft.Json;
+using osu.Game.Rulesets.Osu.HUD;
 using osu.Framework.Audio.Sample;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics.Textures;
@@ -184,6 +186,37 @@ namespace osu.Game.Tests.Skins
             }
         }
 
+        [TestCase("2026.921.0.0")]
+        [TestCase("9999.0.0.0")]
+        public void TestDeserialiseLayoutFromDifferentAssemblyVersion(string version)
+        {
+            string json = $$"""
+                          {
+                            "Version": 1,
+                            "DrawableInfo": {
+                              "osu": [{
+                                "Type": "osu.Game.Rulesets.Osu.HUD.AimErrorMeter, osu.Game.Rulesets.Osu, Version={{version}}, Culture=neutral, PublicKeyToken=null",
+                                "Position": { "x": 123, "y": 45 },
+                                "Settings": { "hit_marker_size": 12 },
+                                "Children": [{
+                                  "Type": "osu.Game.Screens.Play.HUD.DefaultSongProgress, osu.Game, Version={{version}}, Culture=neutral, PublicKeyToken=null"
+                                }]
+                              }]
+                            }
+                          }
+                          """;
+
+            var layout = JsonConvert.DeserializeObject<SkinLayoutInfo>(json)!;
+            var component = layout.DrawableInfo["osu"].Single();
+            Assert.That(component.Type, Is.EqualTo(typeof(AimErrorMeter)));
+            Assert.That(component.Position.X, Is.EqualTo(123));
+            Assert.That(component.Settings["hit_marker_size"], Is.EqualTo(12));
+            Assert.That(component.Children.Single().Type, Is.EqualTo(typeof(osu.Game.Screens.Play.HUD.DefaultSongProgress)));
+
+            string exported = JsonConvert.SerializeObject(layout, new JsonSerializerSettings { Converters = { new osu.Framework.IO.Serialization.Vector2Converter() } });
+            Assert.That(exported, Does.Not.Contain("Version="));
+            Assert.That(JsonConvert.DeserializeObject<SkinLayoutInfo>(exported)!.DrawableInfo["osu"].Single().Type, Is.EqualTo(typeof(AimErrorMeter)));
+        }
         private class TestSkin : Skin
         {
             public TestSkin(SkinInfo skin, IStorageResourceProvider? resources, IResourceStore<byte[]>? fallbackStore = null, string configurationFilename = "skin.ini")
