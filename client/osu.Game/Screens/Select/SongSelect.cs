@@ -1669,8 +1669,13 @@ namespace osu.Game.Screens.Select
             if (scopedBeatmapSet.Value == null)
                 return;
 
-            if (beforeScopedSelection != null && restorePreviousSelection)
-                queueBeatmapSelection(beforeScopedSelection);
+            if (restorePreviousSelection)
+            {
+                var selectionToRestore = carousel.CurrentGroupedBeatmap ?? beforeScopedSelection;
+
+                if (selectionToRestore != null)
+                    queueBeatmapSelection(selectionToRestore);
+            }
 
             scopedBeatmapSet.Value = null;
             beforeScopedSelection = null;

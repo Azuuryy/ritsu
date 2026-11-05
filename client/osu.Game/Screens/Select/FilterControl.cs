@@ -248,7 +248,7 @@ namespace osu.Game.Screens.Select
                                             {
                                                 RelativeSizeAxes = Axes.X,
                                                 Items = Enum.GetValues<SortMode>(),
-                                                MiddleClickAction = () => { reverseSort = !reverseSort; sortDropdown.SetReversedSortIndicator(reverseSort, SongSelectStrings.Sort); updateCriteria(); },
+                                                MiddleClickAction = () => { reverseSort = !reverseSort; sortDropdown.SetReversedSortIndicator(reverseSort, SongSelectStrings.Sort); updateCriteria(clearScopedSet: false); },
                                             },
                                             Empty(),
                                             groupDropdown = new GroupModeDropdown(SongSelectStrings.Group)
@@ -335,7 +335,7 @@ namespace osu.Game.Screens.Select
             maximumPerformance.BindValueChanged(_ => debouncedUpdateCriteria());
 
             showConvertedBeatmapsButton.Active.BindValueChanged(_ => updateCriteria());
-            sortDropdown.Current.BindValueChanged(_ => updateCriteria());
+            sortDropdown.Current.BindValueChanged(_ => updateCriteria(clearScopedSet: false));
             groupDropdown.Current.BindValueChanged(_ => updateCriteria());
             performanceIntervalDropdown.Current.BindValueChanged(_ => updateCriteria());
             performanceCalculationToggle.Active.BindValueChanged(_ => updateCriteria());

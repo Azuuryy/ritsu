@@ -353,15 +353,21 @@ namespace osu.Game.Screens.Select
 
                 List<MenuItem> items = new List<MenuItem>();
 
-                if (ritsuProfiles != null)
-                {
-                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, beatmap.ID);
-                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap's scores from PP" : "Include this beatmap's scores in PP", MenuItemType.Standard,
-                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, beatmap.ID, !included)));
-                }
-
                 if (songSelect != null)
                     items.AddRange(songSelect.GetForwardActions(beatmap));
+
+                if (ritsuProfiles != null)
+                {
+                    Guid profileId = ritsuProfiles.ActiveProfileId;
+                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(profileId, beatmap.ID, beatmap.BeatmapSet?.ID);
+                    var ppItem = new OsuMenuItem(included ? "Exclude this beatmap's scores from profile PP" : "Include this beatmap's scores in profile PP", MenuItemType.Standard,
+                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(profileId, beatmap.ID, !included, beatmap.BeatmapSet?.ID));
+                    int editSeparator = songSelect is SoloSongSelect ? items.FindIndex(item => item is OsuMenuItemSpacer) : -1;
+                    if (editSeparator >= 0)
+                        items.InsertRange(editSeparator + 1, new MenuItem[] { ppItem, new OsuMenuItemSpacer() });
+                    else
+                        items.Add(ppItem);
+                }
 
                 return items.ToArray();
             }

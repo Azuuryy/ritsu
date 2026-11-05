@@ -609,6 +609,52 @@ namespace osu.Game.Tests.Visual.SongSelect
         }
 
         [Test]
+        public void TestChangingSortKeepsScopeAndChangingGroupClearsIt()
+        {
+            ImportBeatmapForRuleset(0);
+            ImportBeatmapForRuleset(0);
+            LoadSongSelect();
+            SortBy(SortMode.Artist);
+            GroupBy(GroupMode.None);
+            WaitForFiltering();
+            checkMatchedBeatmaps(6);
+            Guid scopedSetId = Guid.Empty;
+            AddStep("scope selected set", () =>
+            {
+                var set = Beatmap.Value.BeatmapInfo.BeatmapSet!;
+                scopedSetId = set.ID;
+                SongSelect.ScopeToBeatmapSet(set);
+            });
+            WaitForFiltering();
+            AddAssert("scope is active", () => SongSelect.ScopedBeatmapSet.Value, () => Is.Not.Null);
+
+            SortBy(SortMode.Difficulty);
+            WaitForFiltering();
+            AddAssert("same set remains scoped", () => SongSelect.ScopedBeatmapSet.Value?.ID, () => Is.EqualTo(scopedSetId));
+            AddAssert("sort changed", () => lastCriteria?.Sort, () => Is.EqualTo(SortMode.Difficulty));
+            checkMatchedBeatmaps(3);
+
+            GroupBy(GroupMode.Difficulty);
+            WaitForFiltering();
+            AddAssert("group change clears scope", () => SongSelect.ScopedBeatmapSet.Value, () => Is.Null);
+        }
+
+        [Test]
+        public void TestChangingCollectionClearsScope()
+        {
+            ImportBeatmapForRuleset(0);
+            LoadSongSelect();
+            checkMatchedBeatmaps(3);
+            AddStep("scope selected set", () => SongSelect.ScopeToBeatmapSet(Beatmap.Value.BeatmapInfo.BeatmapSet!));
+            WaitForFiltering();
+            AddAssert("scope is active", () => SongSelect.ScopedBeatmapSet.Value, () => Is.Not.Null);
+            AddStep("change collection", () => Config.SetValue(OsuSetting.SongSelectCollectionFilter, Guid.NewGuid().ToString()));
+            WaitForFiltering();
+            AddAssert("collection change clears scope", () => SongSelect.ScopedBeatmapSet.Value, () => Is.Null);
+            AddStep("reset collection", () => Config.GetBindable<string>(OsuSetting.SongSelectCollectionFilter).SetDefault());
+        }
+
+        [Test]
         public void TestDismissingScopeDoesNotClearSearchTextBox()
         {
             ImportBeatmapForRuleset(0);
@@ -633,7 +679,7 @@ namespace osu.Game.Tests.Visual.SongSelect
 
         [TestCase(false)]
         [TestCase(true)]
-        public void TestUnscopeRevertsToOriginalSelection(bool grouped)
+        public void TestUnscopeKeepsLatestSelection(bool grouped)
         {
             ImportBeatmapForRuleset(0);
             ImportBeatmapForRuleset(0);
@@ -659,7 +705,7 @@ namespace osu.Game.Tests.Visual.SongSelect
             WaitForFiltering();
 
             checkMatchedBeatmaps(6);
-            AddAssert("normal difficulty is selected", () => Beatmap.Value.BeatmapInfo, () => Is.EqualTo(findBeatmap("Normal")));
+            AddAssert("latest scoped difficulty is selected", () => Beatmap.Value.BeatmapInfo, () => Is.EqualTo(findBeatmap("Insane")));
 
             AddStep("reset star difficulty filter", () => Config.SetValue(OsuSetting.DisplayStarsMaximum, 10.1));
         }
