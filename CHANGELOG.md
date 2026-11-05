@@ -4,11 +4,23 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
+## [0.4.0] - 2026-11-05
+
+### Added
+
+- Browse the Torii beatmap catalogue with search, covers, audio previews and beatmap details, then download and import beatmaps through the existing importer.
+- Local profiles show estimated playtime, with a setting to calculate it from full map length or drain length.
+
+### Changed
+
+- Returning from a score opened in a local profile restores song selection on that score's beatmap and difficulty.
+- The temporary view of all difficulties in a beatmap set retains the latest selected difficulty when leaving the view; changing sort keeps the view open, while changing group or collection closes it.
+
 ## [0.3.1] - 2026-11-03
 
 ### Added
 
-- Exclude individual local scores, beatmaps, or beatmap sets from profile PP while retaining their scores and replays.
+- Exclude individual local scores from profile PP in the profile or beatmap ranking, or exclude all existing scores for a beatmap or beatmap set from song select, while retaining their scores and replays.
 
 ### Changed
 

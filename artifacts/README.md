@@ -10,7 +10,7 @@ From the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Package.ps1
 ```
 
-The version comes from [`VERSION`](../VERSION) (`0.3.0` for this release). Requirements: Windows x64, the .NET 10 SDK, Python 3, and Internet access for the first package restore. Pass `-SkipBootstrap` when the pinned client, framework and resources are already prepared, `-SkipPublish` to package the existing `.cache\Ritsu-<version>-<rid>` outputs, or `-Platforms win-x64,linux-x64` to restrict the build.
+The version comes from [`VERSION`](../VERSION) (`0.4.0` for this release). Requirements: Windows x64, the .NET 10 SDK, Python 3, and Internet access for the first package restore. Pass `-SkipBootstrap` when the pinned client, framework and resources are already prepared, `-SkipPublish` to package the existing `.cache\Ritsu-<version>-<rid>` outputs, or `-Platforms win-x64,linux-x64` to restrict the build.
 
 To package only the Windows build:
 
@@ -41,7 +41,7 @@ The commands below assume the version in `VERSION` is already bumped and committ
 
 ```powershell
 $version = (Get-Content VERSION -Raw).Trim()
-$branch = 'new-pp-ui-flow'
+$branch = <branch-name>
 ```
 
 ### 1. Merge the branch
@@ -71,6 +71,7 @@ Only when moving an already published tag, use `git tag -f -a ...` and `git push
 New-Item -ItemType Directory -Force .cache | Out-Null
 $notes = [regex]::Match((Get-Content CHANGELOG.md -Raw), "(?ms)^## \[$([regex]::Escape($version))\].*?(?=^## \[)").Value.Trim()
 if (-not $notes) { throw "No CHANGELOG section for $version." }
+$notes = [regex]::Replace($notes, "(?m)^## \[$([regex]::Escape($version))\] - \d{4}-\d{2}-\d{2}\r?$", "## What's new", 1)
 $notesPath = Join-Path $PWD ".cache\release-notes-$version.md"
 [IO.File]::WriteAllText($notesPath, $notes)
 
