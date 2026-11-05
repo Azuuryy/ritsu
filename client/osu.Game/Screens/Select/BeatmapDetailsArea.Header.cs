@@ -42,6 +42,8 @@ namespace osu.Game.Screens.Select
 
             private readonly Bindable<LeaderboardSortMode> configLeaderboardSortMode = new Bindable<LeaderboardSortMode>();
 
+            private bool sortingBoundToConfig;
+
             public IBindable<bool> FilterBySelectedMods => selectedModsToggle.Active;
 
             [BackgroundDependencyLoader]
@@ -135,12 +137,21 @@ namespace osu.Game.Screens.Select
 
                     if (scope.NewValue is BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll)
                     {
-                        sortDropdown.Current.BindTo(configLeaderboardSortMode);
+                        if (!sortingBoundToConfig)
+                        {
+                            sortDropdown.Current.BindTo(configLeaderboardSortMode);
+                            sortingBoundToConfig = true;
+                        }
                     }
                     else
                     {
                         // future implementation when we have web-side support.
-                        sortDropdown.Current.UnbindFrom(configLeaderboardSortMode);
+                        if (sortingBoundToConfig)
+                        {
+                            sortDropdown.Current.UnbindFrom(configLeaderboardSortMode);
+                            sortingBoundToConfig = false;
+                        }
+
                         sortDropdown.Current.Value = LeaderboardSortMode.Score;
                         sortDropdown.Current.Disabled = true;
                     }
