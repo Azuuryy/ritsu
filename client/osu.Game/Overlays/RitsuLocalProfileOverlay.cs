@@ -14,6 +14,8 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Framework.Logging;
+using osu.Game.Beatmaps;
+using osu.Game.Configuration;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Cursor;
@@ -47,6 +49,8 @@ namespace osu.Game.Overlays
         private readonly LoadingLayer loading;
         private ProfileSection? lastSection;
         private int refreshVersion;
+        private RitsuPlaytime playtime = null!;
+        private IBindable<RitsuPlaytimeMode> playtimeMode = null!;
 
         public RitsuLocalProfileOverlay()
             : base(OverlayColourScheme.Pink)
@@ -103,8 +107,11 @@ namespace osu.Game.Overlays
         protected override Color4 BackgroundColour => ColourProvider.Background5;
 
         [BackgroundDependencyLoader]
-        private void load()
+        private void load(BeatmapManager beatmaps, OsuConfigManager config)
         {
+            playtime = new RitsuPlaytime(beatmaps);
+            playtimeMode = config.GetBindable<RitsuPlaytimeMode>(OsuSetting.RitsuPlaytimeMode).GetBoundCopy();
+            playtimeMode.BindValueChanged(_ => Schedule(() => { if (State.Value == Visibility.Visible) refresh(); }));
             ((IBindable<RulesetInfo>)ruleset).BindTo(currentRuleset);
             ruleset.BindValueChanged(_ => Schedule(() => { if (State.Value == Visibility.Visible) refresh(); }));
             profiles.Changed += onProfilesChanged;
@@ -124,12 +131,14 @@ namespace osu.Game.Overlays
             int version = ++refreshVersion;
             Guid id = profiles.ActiveProfileId;
             RulesetInfo mode = ruleset.Value.Clone();
+            var durationMode = playtimeMode.Value;
             var allProfiles = profiles.GetProfiles();
 
             Header.User.Value = new UserProfileData(RitsuProfileManager.CreateUser(profiles.GetActiveProfile()), mode);
             Header.RefreshProfiles();
             Header.SetHistory(Array.Empty<RitsuPpPoint>());
             Header.SetLocalRank(null);
+            Header.SetPlaytimeMissing(0);
             scores.User.Value = Header.User.Value;
             scores.SetScores(Array.Empty<ScoreInfo>(), Array.Empty<ScoreInfo>());
             scores.SetError(null);
@@ -138,6 +147,7 @@ namespace osu.Game.Overlays
             Task.Run(() =>
             {
                 var statistics = profiles.GetStatistics(id, mode.ShortName);
+                var duration = playtime.Calculate(statistics.RecentScores, durationMode);
                 var ppByProfile = new Dictionary<Guid, double> { [id] = statistics.PP };
                 foreach (var profile in allProfiles.Where(p => p.Id != id))
                 {
@@ -147,7 +157,7 @@ namespace osu.Game.Overlays
                 int? localRank = statistics.BestScores.Count > 0
                     ? 1 + ppByProfile.Count(pair => pair.Key != id && pair.Value > statistics.PP)
                     : null;
-                return (Statistics: statistics, PPByProfile: ppByProfile, LocalRank: localRank, Display: createDisplayStatistics(statistics));
+                return (Statistics: statistics, PPByProfile: ppByProfile, LocalRank: localRank, Missing: duration.Missing, Display: createDisplayStatistics(statistics, duration.Seconds));
             }).ContinueWith(task => Schedule(() =>
             {
                 // Observe failures even if a newer refresh has superseded this one.
@@ -168,13 +178,14 @@ namespace osu.Game.Overlays
                 Header.RefreshProfiles(result.PPByProfile);
                 Header.SetHistory(result.Statistics.History);
                 Header.SetLocalRank(result.LocalRank);
+                Header.SetPlaytimeMissing(result.Missing);
                 scores.User.Value = Header.User.Value;
                 scores.SetScores(result.Statistics.RecentScores, result.Statistics.BestScores);
                 loading.Hide();
             }));
         }
 
-        private static UserStatistics createDisplayStatistics(RitsuProfileStatistics stats)
+        private static UserStatistics createDisplayStatistics(RitsuProfileStatistics stats, double playtimeSeconds)
         {
             var scores = stats.RecentScores;
             long hits = scores.Sum(s => s.Statistics.Where(h => h.Key.IsHit()).Sum(h => (long)h.Value));
@@ -185,6 +196,7 @@ namespace osu.Game.Overlays
                 GlobalRank = stats.EstimatedGlobalRank,
                 Accuracy = stats.Accuracy,
                 PlayCount = stats.PlayCount,
+                PlayTime = (int)Math.Clamp(playtimeSeconds, 0, int.MaxValue),
                 TotalScore = scores.Sum(s => s.TotalScore),
                 TotalHits = (int)Math.Min(int.MaxValue, hits),
                 MaxCombo = scores.Select(s => s.MaxCombo).DefaultIfEmpty().Max(),
@@ -205,6 +217,7 @@ namespace osu.Game.Overlays
             {
                 if (profiles != null) profiles.Changed -= onProfilesChanged;
                 ruleset.UnbindBindings();
+                playtimeMode.UnbindBindings();
             }
             base.Dispose(isDisposing);
         }

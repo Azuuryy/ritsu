@@ -7,6 +7,7 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Effects;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Localisation;
@@ -54,6 +55,8 @@ namespace osu.Game.Overlays.Profile
         public void SetHistory(IReadOnlyList<RitsuPpPoint> pp) => details.SetHistory(pp);
 
         public void SetLocalRank(int? rank) => details.SetLocalRank(rank);
+
+        public void SetPlaytimeMissing(int count) => details.SetPlaytimeMissing(count);
 
         private partial class LocalProfileTitle : OverlayTitle
         {
@@ -153,6 +156,7 @@ namespace osu.Game.Overlays.Profile
     {
         public readonly Bindable<UserProfileData?> User = new Bindable<UserProfileData?>();
         private RitsuLocalMainDetails main = null!;
+        private RitsuLocalExtendedDetails extended = null!;
 
         [BackgroundDependencyLoader]
         private void load(OverlayColourProvider colours)
@@ -175,7 +179,7 @@ namespace osu.Game.Overlays.Profile
                         {
                             main = new RitsuLocalMainDetails { RelativeSizeAxes = Axes.X, User = { BindTarget = User } },
                             new Box { RelativeSizeAxes = Axes.Y, Width = 2, Colour = colours.Background6, Margin = new MarginPadding { Horizontal = 15 } },
-                            new RitsuLocalExtendedDetails { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft, User = { BindTarget = User } },
+                            extended = new RitsuLocalExtendedDetails { Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft, User = { BindTarget = User } },
                         },
                     },
                 },
@@ -185,6 +189,8 @@ namespace osu.Game.Overlays.Profile
         public void SetHistory(IReadOnlyList<RitsuPpPoint> pp) => Schedule(() => main.SetHistory(pp));
 
         public void SetLocalRank(int? rank) => Schedule(() => main.SetLocalRank(rank));
+
+        public void SetPlaytimeMissing(int count) => Schedule(() => extended.SetPlaytimeMissing(count));
     }
 
     public partial class RitsuLocalMainDetails : CompositeDrawable
@@ -309,7 +315,7 @@ namespace osu.Game.Overlays.Profile
     public partial class RitsuLocalExtendedDetails : CompositeDrawable
     {
         public readonly Bindable<UserProfileData?> User = new Bindable<UserProfileData?>();
-        private readonly Dictionary<string, OsuSpriteText> values = new Dictionary<string, OsuSpriteText>();
+        private readonly Dictionary<string, EntryValue> values = new Dictionary<string, EntryValue>();
 
         [BackgroundDependencyLoader]
         private void load(OverlayColourProvider colours)
@@ -317,7 +323,7 @@ namespace osu.Game.Overlays.Profile
             AutoSizeAxes = Axes.Both;
             CornerRadius = 6;
             Masking = true;
-            string[] labels = { "Hit accuracy", "Play count", "Total score", "Total hits", "Hits per play", "Maximum combo" };
+            string[] labels = { "Hit accuracy", "Play count", "Total score", "Total hits", "Hits per play", "Maximum combo", "Estimated playtime" };
             InternalChildren = new Drawable[]
             {
                 new Box { RelativeSizeAxes = Axes.Both, Colour = colours.Background4 },
@@ -341,7 +347,7 @@ namespace osu.Game.Overlays.Profile
                             AutoSizeAxes = Axes.Both,
                             Direction = FillDirection.Vertical,
                             Spacing = new Vector2(0, 4),
-                            Children = labels.Select(label => values[label] = new ExtendedDetails.ExtendedDetailsEntryValue(colours)).ToArray(),
+                            Children = labels.Select(label => values[label] = new EntryValue(colours)).ToArray(),
                         },
                     },
                 },
@@ -362,6 +368,23 @@ namespace osu.Game.Overlays.Profile
             values["Total hits"].Text = $"{stats?.TotalHits ?? 0:N0}";
             values["Hits per play"].Text = $"{(stats?.PlayCount > 0 ? stats.TotalHits / stats.PlayCount : 0):N0}";
             values["Maximum combo"].Text = $"{stats?.MaxCombo ?? 0:N0}";
+            int seconds = stats?.PlayTime ?? 0;
+            values["Estimated playtime"].Text = $"{seconds / 3600:N0}h {seconds % 3600 / 60}m";
+
+        }
+        public void SetPlaytimeMissing(int count)
+        {
+            values["Estimated playtime"].TooltipText = $"Estimate from recorded scores. Failed scores use the full map; unsaved attempts are absent. {count:N0} scores omitted due to unavailable map data or unsupported variable speed. Change the method in Settings > Torii > Gameplay.";
+        }
+
+        private partial class EntryValue : ExtendedDetails.ExtendedDetailsEntryValue, IHasTooltip
+        {
+            public LocalisableString TooltipText { get; set; }
+
+            public EntryValue(OverlayColourProvider colours)
+                : base(colours)
+            {
+            }
         }
     }
 }

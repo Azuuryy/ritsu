@@ -7,6 +7,7 @@ using osu.Framework.Localisation;
 using osu.Game.Configuration;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Localisation;
+using osu.Game.Offline;
 
 namespace osu.Game.Overlays.Settings.Sections.Torii
 {
@@ -25,6 +26,12 @@ namespace osu.Game.Overlays.Settings.Sections.Torii
         {
             Children = new Drawable[]
             {
+                new SettingsItemV2(new FormEnumDropdown<RitsuPlaytimeMode>
+                {
+                    Caption = "Local profile playtime method",
+                    Current = config.GetBindable<RitsuPlaytimeMode>(OsuSetting.RitsuPlaytimeMode),
+                    HintText = "Estimate from recorded scores, using the playable map length with or without breaks. Failed attempts may be overestimated.",
+                }),
                 new SettingsItemV2(new FormCheckBox
                 {
                     Caption = "Confirm Retry/Quit on long attempts",

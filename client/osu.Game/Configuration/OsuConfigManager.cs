@@ -355,6 +355,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.AlphaPpDevModeEnabled, false);
             SetDefault(OsuSetting.ToriiConfirmDangerousButtonsOnLongAttempts, false);
             SetDefault(OsuSetting.ToriiSkipBreaksEnabled, true);
+            SetDefault(OsuSetting.RitsuPlaytimeMode, Offline.RitsuPlaytimeMode.MapLength);
             SetDefault(OsuSetting.RitsuSkipBreakToEnd, false);
             SetDefault(OsuSetting.RitsuLiveStars, true);
 
@@ -789,5 +790,6 @@ namespace osu.Game.Configuration
         RitsuPerformanceGroupInterval,
         RitsuCalculateMapPerformance,
         RitsuLastVersion,
+        RitsuPlaytimeMode,
     }
 }
