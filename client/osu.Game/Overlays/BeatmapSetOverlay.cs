@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -9,6 +9,7 @@ using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Game.Online.API;
+using osu.Game.Rulesets;
 using osu.Game.Online.API.Requests;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Overlays.BeatmapSet;
@@ -21,6 +22,8 @@ namespace osu.Game.Overlays
 {
     public partial class BeatmapSetOverlay : OnlineOverlay<BeatmapSetHeader>
     {
+        protected override bool AllowOfflineDisplay => true;
+
         public const float Y_PADDING = 25;
         public const float RIGHT_WIDTH = 275;
 
@@ -29,12 +32,15 @@ namespace osu.Game.Overlays
         [Resolved]
         private IAPIProvider api { get; set; }
 
+        [Resolved]
+        private RulesetStore rulesets { get; set; }
+
         private IBindable<APIUser> apiUser;
 
         private (BeatmapSetLookupType type, int id)? lastLookup;
 
         public BeatmapSetOverlay()
-            : base(OverlayColourScheme.Blue)
+            : base(OverlayColourScheme.Blue, requiresSignIn: !Offline.RitsuOffline.Enabled)
         {
             Info info;
             CommentsSection comments;
@@ -51,17 +57,17 @@ namespace osu.Game.Overlays
                     {
                         Beatmap = { BindTarget = Header.HeaderContent.Picker.Beatmap }
                     },
-                    new ScoresContainer
+                    Offline.RitsuOffline.Enabled ? new Container() : new ScoresContainer
                     {
                         Beatmap = { BindTarget = Header.HeaderContent.Picker.Beatmap }
                     },
-                    comments = new CommentsSection()
+                    comments = new CommentsSection { Alpha = Offline.RitsuOffline.Enabled ? 0 : 1 }
                 }
             };
 
             Header.BeatmapSet.BindTo(beatmapSet);
             info.BeatmapSet.BindTo(beatmapSet);
-            comments.BeatmapSet.BindTo(beatmapSet);
+            if (!Offline.RitsuOffline.Enabled) comments.BeatmapSet.BindTo(beatmapSet);
 
             Header.HeaderContent.Picker.Beatmap.ValueChanged += _ => ScrollFlow.ScrollToStart();
         }
@@ -113,6 +119,11 @@ namespace osu.Game.Overlays
         public void ShowBeatmapSet(APIBeatmapSet set)
         {
             beatmapSet.Value = set;
+            if (Offline.RitsuOffline.Enabled && set.Beatmaps.Length > 0)
+            {
+                Header.RulesetSelector.Current.Value = rulesets.GetRuleset(set.Beatmaps[0].RulesetID);
+                Header.HeaderContent.Picker.Beatmap.Value = set.Beatmaps[0];
+            }
             Show();
         }
 

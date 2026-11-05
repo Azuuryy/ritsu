@@ -3,7 +3,6 @@ using System;
 
 namespace osu.Game.Offline
 {
-    /// <summary>The capabilities of this local-only distribution. Not a user preference.</summary>
     public static class RitsuOffline
     {
         public static bool Enabled => true;
@@ -14,7 +13,7 @@ namespace osu.Game.Offline
     public sealed class OfflineOperationException : InvalidOperationException
     {
         public OfflineOperationException()
-            : base("This Ritsu build operates entirely offline. Online services are unavailable.")
+            : base("This online service is unavailable in Ritsu.")
         {
         }
     }

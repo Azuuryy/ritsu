@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using osu.Framework.Bindables;
@@ -45,7 +45,7 @@ namespace osu.Game.Overlays.BeatmapListing
                 {
                     new[]
                     {
-                        new OsuTextFlowContainer(t => t.Font = OsuFont.GetFont(size: 13))
+                        new OsuTextFlowContainer(t => t.Font = OsuFont.GetFont(size: 14))
                         {
                             RelativeSizeAxes = Axes.X,
                             AutoSizeAxes = Axes.Y,

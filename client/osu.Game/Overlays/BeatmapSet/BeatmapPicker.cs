@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
@@ -95,7 +95,7 @@ namespace osu.Game.Overlays.BeatmapSet
                                 },
                             }
                         },
-                        infoContainer = new LinkFlowContainer(t => t.Font = OsuFont.GetFont(weight: FontWeight.Bold, size: 11))
+                        infoContainer = new LinkFlowContainer(t => t.Font = OsuFont.GetFont(weight: FontWeight.Bold, size: 12))
                         {
                             RelativeSizeAxes = Axes.X,
                             AutoSizeAxes = Axes.Y,
@@ -204,7 +204,7 @@ namespace osu.Game.Overlays.BeatmapSet
         {
             infoContainer.Clear();
 
-            infoContainer.AddText(beatmapInfo?.DifficultyName ?? string.Empty, s => s.Font = OsuFont.GetFont(size: 17, weight: FontWeight.Bold));
+            infoContainer.AddText(beatmapInfo?.DifficultyName ?? string.Empty, s => s.Font = OsuFont.GetFont(size: 19, weight: FontWeight.Bold));
             infoContainer.AddArbitraryDrawable(Empty().With(e => e.Width = 5));
 
             var beatmapOwners = beatmapInfo?.BeatmapOwners;
@@ -258,7 +258,7 @@ namespace osu.Game.Overlays.BeatmapSet
                     LocalisableString.Interpolate($"{BeatmapsetsStrings.ShowStatsStars} {beatmapInfo?.StarRating.FormatStarRating()}"),
                     t =>
                     {
-                        t.Font = OsuFont.GetFont(size: 11, weight: FontWeight.Bold);
+                        t.Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold);
                         t.Colour = colours.Yellow;
                     });
             }
@@ -421,7 +421,7 @@ namespace osu.Game.Overlays.BeatmapSet
                     {
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
-                        Font = OsuFont.GetFont(size: 12, weight: FontWeight.SemiBold, italics: true),
+                        Font = OsuFont.GetFont(size: 13, weight: FontWeight.SemiBold, italics: true),
                     },
                 };
             }

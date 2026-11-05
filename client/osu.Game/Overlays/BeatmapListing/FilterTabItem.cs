@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -42,7 +42,7 @@ namespace osu.Game.Overlays.BeatmapListing
             {
                 Text = new OsuSpriteText
                 {
-                    Font = OsuFont.GetFont(size: 13, weight: FontWeight.Regular),
+                    Font = OsuFont.GetFont(size: 14, weight: FontWeight.Regular),
                     Text = LabelFor(Value)
                 },
                 new HoverSounds(HoverSampleSet.TabSelect)

@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using osu.Framework.Allocation;
@@ -111,7 +111,13 @@ namespace osu.Game.Audio
                     Logger.Log($"A {nameof(PreviewTrack)} was created without a containing {nameof(IPreviewTrackOwner)}. An owner should be added for correct behaviour.");
             }
 
-            protected override Track GetTrack() => trackManager.Get($"https://b.ppy.sh/preview/{beatmapSetInfo.OnlineID}.mp3");
+            protected override Track GetTrack()
+            {
+                string url = (beatmapSetInfo as osu.Game.Online.API.Requests.Responses.APIBeatmapSet)?.Preview ?? string.Empty;
+                if (string.IsNullOrEmpty(url)) url = $"https://b.ppy.sh/preview/{beatmapSetInfo.OnlineID}.mp3";
+                if (url.StartsWith("//", System.StringComparison.Ordinal)) url = "https:" + url;
+                return trackManager.Get(url);
+            }
         }
     }
 }
