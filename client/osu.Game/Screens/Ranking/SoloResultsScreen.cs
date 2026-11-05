@@ -37,6 +37,8 @@ namespace osu.Game.Screens.Ranking
 
         public bool ShowLocalScoreRanks { get; init; }
 
+        public Action? OnExitAction { get; init; }
+
         private bool canShowLocalScoreRanks;
         private RitsuResultRanksToast? localScoreRanksToast;
 
@@ -82,6 +84,10 @@ namespace osu.Game.Screens.Ranking
                 return true;
 
             hideLocalScoreRanks();
+
+            if (e.Next == e.Destination)
+                OnExitAction?.Invoke();
+
             return false;
         }
 

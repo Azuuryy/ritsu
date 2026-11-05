@@ -1023,6 +1023,19 @@ namespace osu.Game
         /// </summary>
         public void PresentScore(IScoreInfo score, ScorePresentType presentType = ScorePresentType.Results)
         {
+            presentScore(score, presentType, false);
+        }
+
+        /// <summary>
+        /// Present a local profile score and return to its beatmap.
+        /// </summary>
+        public void PresentScoreFromLocalProfile(IScoreInfo score)
+        {
+            presentScore(score, ScorePresentType.Results, true);
+        }
+
+        private void presentScore(IScoreInfo score, ScorePresentType presentType, bool fromLocalProfile)
+        {
             Logger.Log($"Beginning {nameof(PresentScore)} with score {score}");
 
             Score databasedScore;
@@ -1042,7 +1055,10 @@ namespace osu.Game
                 return;
             }
 
-            if (databasedScore == null) return;
+            if (databasedScore == null)
+            {
+                return;
+            }
 
             Dependencies.Get<Offline.RitsuProfileManager>()?.ApplyProfileNameToDetachedScore(databasedScore.ScoreInfo);
 
@@ -1065,10 +1081,16 @@ namespace osu.Game
             // `OnlinePlayScreen` is excluded because when resuming back to it,
             // `RoomSubScreen` changes the global beatmap to the next playlist item on resume,
             // which may not match the score, and thus crash.
+            Type[] profileReturnScreens = fromLocalProfile
+                                          && ScreenStack.CurrentScreen is IOsuScreen currentScreen
+                                          && !currentScreen.DisallowExternalBeatmapRulesetChanges
+                ? new[] { currentScreen.GetType() }
+                : Array.Empty<Type>();
+
             IEnumerable<Type> validScreens =
                 Beatmap.Value.BeatmapInfo.Equals(databasedBeatmap) && Ruleset.Value.Equals(databasedScore.ScoreInfo.Ruleset)
-                    ? new[] { typeof(SongSelect), typeof(DailyChallenge) }
-                    : Array.Empty<Type>();
+                    ? new[] { typeof(SongSelect), typeof(DailyChallenge) }.Concat(profileReturnScreens)
+                    : fromLocalProfile ? new[] { typeof(SongSelect) }.Concat(profileReturnScreens) : Array.Empty<Type>();
 
             PerformFromScreen(screen =>
             {
@@ -1106,7 +1128,20 @@ namespace osu.Game
                         break;
 
                     case ScorePresentType.Results:
-                        screen.Push(new SoloResultsScreen(databasedScore.ScoreInfo));
+                        screen.Push(new SoloResultsScreen(databasedScore.ScoreInfo)
+                        {
+                            OnExitAction = fromLocalProfile ? () => Scheduler.AddDelayed(() =>
+                            {
+                                var beatmap = BeatmapManager.QueryBeatmap(b => b.ID == databasedBeatmap.ID);
+                                if (beatmap == null)
+                                    return;
+
+                                if (!Ruleset.Value.Equals(databasedScore.ScoreInfo.Ruleset))
+                                    Ruleset.Value = databasedScore.ScoreInfo.Ruleset;
+
+                                Beatmap.Value = BeatmapManager.GetWorkingBeatmap(beatmap, true);
+                            }, 0) : null,
+                        });
                         break;
                 }
             }, validScreens: validScreens);

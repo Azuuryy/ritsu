@@ -13,6 +13,7 @@ using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Localisation;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
+using osu.Game.Graphics.Cursor;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
@@ -105,7 +106,12 @@ namespace osu.Game.Overlays.Profile
         {
             items.Clear();
             foreach (var score in scores.Take(shown))
-                items.Add(new RitsuProfileScore(score));
+                items.Add(new OsuContextMenuContainer
+                {
+                    RelativeSizeAxes = Axes.X,
+                    Height = 48,
+                    Child = new RitsuProfileScore(score),
+                });
             SetCount(scores.Count);
             missing.Alpha = scores.Count == 0 ? 1 : 0;
             more.Alpha = shown < scores.Count ? 1 : 0;
@@ -148,7 +154,14 @@ namespace osu.Game.Overlays.Profile
             string title = score.BeatmapInfo?.Metadata?.Title ?? score.BeatmapHash;
             string artist = score.BeatmapInfo?.Metadata?.Artist ?? string.Empty;
             string difficulty = score.BeatmapInfo?.DifficultyName ?? "Unknown";
-            Action = () => { overlay?.Hide(); game?.PresentScore(score); };
+            Action = () =>
+            {
+                if (game == null)
+                    return;
+
+                overlay?.Hide();
+                game.PresentScoreFromLocalProfile(score);
+            };
 
             Child = new ProfileItemContainer
             {
