@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -53,7 +53,9 @@ namespace osu.Game.Overlays
             : base(OverlayColourScheme.Blue, requiresSignIn: !Offline.RitsuOffline.Enabled)
         {
             if (Offline.RitsuOffline.Enabled)
-                filterControl.Alpha = 0;
+            {
+                filterControl.HideForCatalogue();
+            }
         }
 
         [BackgroundDependencyLoader]
@@ -91,20 +93,7 @@ namespace osu.Game.Overlays
 
             if (Offline.RitsuOffline.Enabled)
             {
-                panelTarget.Child = new FillFlowContainer
-                {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FillDirection.Vertical,
-                    Padding = new MarginPadding { Vertical = 40 },
-                    Spacing = new Vector2(0, 12),
-                    Children = new Drawable[]
-                    {
-                        new OsuSpriteText { Text = "Beatmap catalogue", Font = OsuFont.GetFont(size: 24, weight: FontWeight.SemiBold) },
-                        new OsuSpriteText { Text = "Online search and downloads are unavailable in offline mode.", Font = OsuFont.GetFont(size: 16) },
-                        new OsuSpriteText { Text = "Play imported beatmaps from Play > Solo.", Font = OsuFont.GetFont(size: 16) },
-                    },
-                };
+                panelTarget.Child = new RitsuBeatmapCatalogue();
             }
 
             filterControl.TypingStarted = onTypingStarted;
@@ -292,6 +281,12 @@ namespace osu.Game.Overlays
                 foundContent.AddRange(cards);
                 Loading.Hide();
             }, (cancellationToken = new CancellationTokenSource()).Token);
+        }
+
+        protected override void PopOut()
+        {
+            previewTrackManager.StopAnyPlaying(this);
+            base.PopOut();
         }
 
         protected override void Dispose(bool isDisposing)
