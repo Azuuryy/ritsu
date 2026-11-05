@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
@@ -174,6 +174,8 @@ namespace osu.Game.Overlays.BeatmapListing
             generalFilter.Ruleset.BindTo(Ruleset);
         }
 
+        public void SetToriiOptions(bool visible) => generalFilter.SetToriiOptions(visible);
+
         public void TakeFocus() => textBox.TakeFocus();
 
         private partial class BeatmapSearchTextBox : BasicSearchTextBox
@@ -188,6 +190,8 @@ namespace osu.Game.Overlays.BeatmapListing
             public BeatmapSearchTextBox()
             {
                 PlaceholderText = BeatmapsStrings.ListingSearchPrompt;
+                FontSize = 20;
+                Height = 40;
             }
 
             protected override bool OnKeyDown(KeyDownEvent e)

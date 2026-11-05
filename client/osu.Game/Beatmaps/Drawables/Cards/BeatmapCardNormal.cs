@@ -32,6 +32,8 @@ namespace osu.Game.Beatmaps.Drawables.Cards
         [Cached]
         private readonly BeatmapCardContent content;
 
+        private readonly bool readOnly;
+
         private BeatmapCardThumbnail thumbnail = null!;
         private CollapsibleButtonContainer buttonContainer = null!;
 
@@ -43,9 +45,13 @@ namespace osu.Game.Beatmaps.Drawables.Cards
         [Resolved]
         private OverlayColourProvider colourProvider { get; set; } = null!;
 
-        public BeatmapCardNormal(APIBeatmapSet beatmapSet, bool allowExpansion = true)
+        [Resolved]
+        private OsuGame? catalogueGame { get; set; }
+
+        public BeatmapCardNormal(APIBeatmapSet beatmapSet, bool allowExpansion = true, bool readOnly = false)
             : base(beatmapSet, allowExpansion)
         {
+            this.readOnly = readOnly;
             content = new BeatmapCardContent(HEIGHT);
 
             Action = DefaultAction;
@@ -68,7 +74,7 @@ namespace osu.Game.Beatmaps.Drawables.Cards
                     RelativeSizeAxes = Axes.Both,
                     Children = new Drawable[]
                     {
-                        thumbnail = new BeatmapCardThumbnail(BeatmapSet, BeatmapSet)
+                        thumbnail = new BeatmapCardThumbnail(BeatmapSet, BeatmapSet, enablePreview: !readOnly && !(BeatmapSet.IsLocal && string.IsNullOrEmpty(BeatmapSet.Preview)))
                         {
                             Name = @"Left (icon) area",
                             Size = new Vector2(HEIGHT),
@@ -319,6 +325,18 @@ namespace osu.Game.Beatmaps.Drawables.Cards
                 yield return dateStatistic;
         }
 
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+            foreach (var button in buttonContainer.Buttons)
+                if (button is osu.Game.Beatmaps.Drawables.Cards.Buttons.FavouriteButton && Offline.RitsuOffline.Enabled) button.Enabled.Value = false;
+            if (!readOnly) return;
+            buttonContainer.ButtonsExpandedWidth = 0;
+            buttonContainer.ButtonsCollapsedWidth = 0;
+            foreach (var button in buttonContainer.Buttons)
+                button.Enabled.Value = false;
+        }
+
         protected override void UpdateState()
         {
             base.UpdateState();
@@ -335,7 +353,15 @@ namespace osu.Game.Beatmaps.Drawables.Cards
         {
             get
             {
+                if (readOnly) return System.Array.Empty<MenuItem>();
+
                 var items = base.ContextMenuItems.ToList();
+                if (Offline.RitsuOffline.Enabled)
+                {
+                    if (!BeatmapSet.IsLocal)
+                        items.Add(new OsuMenuItem("Copy osu! beatmap link", MenuItemType.Standard, () => catalogueGame?.CopyToClipboard($"https://osu.ppy.sh/beatmapsets/{BeatmapSet.OnlineID}")));
+                    items.Add(new OsuMenuItem("Copy Torii beatmap link", MenuItemType.Standard, () => catalogueGame?.CopyToClipboard($"https://lazer.shikkesora.com/beatmapsets/{BeatmapSet.OnlineID}")));
+                }
 
                 foreach (var button in buttonContainer.Buttons)
                 {

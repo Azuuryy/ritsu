@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -28,7 +28,7 @@ namespace osu.Game.Overlays.BeatmapSet.Buttons
 {
     public partial class HeaderDownloadButton : CompositeDrawable, IHasTooltip
     {
-        private const int text_size = 12;
+        private const int text_size = 14;
 
         private readonly bool noVideo;
 
@@ -48,7 +48,7 @@ namespace osu.Game.Overlays.BeatmapSet.Buttons
             this.beatmapSet = beatmapSet;
             this.noVideo = noVideo;
 
-            Width = 120;
+            Width = 132;
             RelativeSizeAxes = Axes.Y;
         }
 
@@ -167,7 +167,7 @@ namespace osu.Game.Overlays.BeatmapSet.Buttons
             }, true);
         }
 
-        private void userChanged(ValueChangedEvent<APIUser> e) => button.Enabled.Value = !(e.NewValue is GuestUser);
+        private void userChanged(ValueChangedEvent<APIUser> e) => button.Enabled.Value = Offline.RitsuOffline.Enabled || !(e.NewValue is GuestUser);
 
         private void enabledChanged(ValueChangedEvent<bool> e) => this.FadeColour(e.NewValue ? Color4.White : Color4.Gray, 200, Easing.OutQuint);
 

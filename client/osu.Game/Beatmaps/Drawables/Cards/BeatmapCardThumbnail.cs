@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using osu.Framework.Allocation;
@@ -27,6 +27,7 @@ namespace osu.Game.Beatmaps.Drawables.Cards
         private readonly Box background;
         private readonly Container foreground;
         private readonly PlayButton playButton;
+        private readonly bool enablePreview;
         private readonly CircularProgress progress;
         private readonly Container content;
 
@@ -35,8 +36,9 @@ namespace osu.Game.Beatmaps.Drawables.Cards
         [Resolved]
         private OverlayColourProvider colourProvider { get; set; } = null!;
 
-        public BeatmapCardThumbnail(IBeatmapSetInfo beatmapSetInfo, IBeatmapSetOnlineInfo onlineInfo, bool keepLoaded = false)
+        public BeatmapCardThumbnail(IBeatmapSetInfo beatmapSetInfo, IBeatmapSetOnlineInfo onlineInfo, bool keepLoaded = false, bool enablePreview = true)
         {
+            this.enablePreview = enablePreview;
             InternalChildren = new Drawable[]
             {
                 new UpdateableOnlineBeatmapSetCover(BeatmapSetCoverType.List, keepLoaded ? 0 : 500, keepLoaded ? double.MaxValue : 1000)
@@ -99,7 +101,7 @@ namespace osu.Game.Beatmaps.Drawables.Cards
         {
             bool shouldDim = Dimmed.Value || playButton.Playing.Value;
 
-            playButton.FadeTo(shouldDim ? 1 : 0, BeatmapCard.TRANSITION_DURATION, Easing.OutQuint);
+            playButton.FadeTo(enablePreview && shouldDim ? 1 : 0, BeatmapCard.TRANSITION_DURATION, Easing.OutQuint);
             background.FadeColour(colourProvider.Background6.Opacity(shouldDim ? 0.6f : 0f), BeatmapCard.TRANSITION_DURATION, Easing.OutQuint);
         }
     }

@@ -25,6 +25,7 @@ using osu.Game.Rulesets.Osu;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 using osu.Game.Screens.Select;
+using osu.Game.Screens.Play.Leaderboards;
 using osu.Game.Tests.Resources;
 using osu.Game.Users;
 
@@ -125,6 +126,50 @@ namespace osu.Game.Tests.Visual.SongSelect
             });
 
             AddStep("Clear all scores", () => scoreManager.Delete());
+        }
+
+        [Test]
+        public void TestRapidLocalScopeChanges()
+        {
+            BeatmapInfo beatmapInfo = null!;
+            LeaderboardSortMode originalSorting = LeaderboardSortMode.Score;
+
+            AddStep("prepare local ranking score", () =>
+            {
+                beatmapManager.Import(TestResources.GetQuickTestBeatmapForImport()).WaitSafely();
+                beatmapInfo = beatmapManager.GetAllUsableBeatmapSets().First().Beatmaps.First();
+                Beatmap.Value = beatmapManager.GetWorkingBeatmap(beatmapInfo);
+
+                scoreManager.Delete();
+                importRandomScore(beatmapInfo);
+
+                var header = beatmapDetailsArea.ChildrenOfType<BeatmapDetailsArea.Header>().Single();
+                originalSorting = header.Sorting.Value;
+                ((Bindable<BeatmapDetailsArea.Header.Selection>)header.Type).Value = BeatmapDetailsArea.Header.Selection.Ranking;
+                ((Bindable<BeatmapLeaderboardScope>)header.Scope).Value = BeatmapLeaderboardScope.LocalAll;
+                ((Bindable<LeaderboardSortMode>)header.Sorting).Value = LeaderboardSortMode.Accuracy;
+            });
+
+            AddUntilStep("wait for all-profile score", () => beatmapDetailsArea.ChildrenOfType<BeatmapLeaderboardScore>().Count(), () => Is.EqualTo(1));
+
+            AddStep("switch local ranking scopes repeatedly", () =>
+            {
+                var header = beatmapDetailsArea.ChildrenOfType<BeatmapDetailsArea.Header>().Single();
+
+                for (int i = 0; i < 30; i++)
+                    ((Bindable<BeatmapLeaderboardScope>)header.Scope).Value = i % 2 == 0 ? BeatmapLeaderboardScope.Local : BeatmapLeaderboardScope.LocalAll;
+            });
+
+            AddAssert("returns to all profiles scope", () => beatmapDetailsArea.ChildrenOfType<BeatmapDetailsArea.Header>().Single().Scope.Value == BeatmapLeaderboardScope.LocalAll);
+            AddUntilStep("wait for score after returning to all profiles", () => beatmapDetailsArea.ChildrenOfType<BeatmapLeaderboardScore>().Count(), () => Is.EqualTo(1));
+            AddAssert("score is displayed after returning to all profiles", () => beatmapDetailsArea.ChildrenOfType<BeatmapLeaderboardScore>().Count() == 1);
+            AddAssert("local sorting preference remains active", () => beatmapDetailsArea.ChildrenOfType<BeatmapDetailsArea.Header>().Single().Sorting.Value == LeaderboardSortMode.Accuracy);
+
+            AddStep("restore sorting and clear scores", () =>
+            {
+                ((Bindable<LeaderboardSortMode>)beatmapDetailsArea.ChildrenOfType<BeatmapDetailsArea.Header>().Single().Sorting).Value = originalSorting;
+                scoreManager.Delete();
+            });
         }
 
         private void importRandomScore(BeatmapInfo beatmapInfo)

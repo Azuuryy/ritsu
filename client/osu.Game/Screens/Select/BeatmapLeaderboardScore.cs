@@ -30,6 +30,7 @@ using osu.Game.Localisation;
 using osu.Game.Online;
 using osu.Game.Online.API;
 using osu.Game.Online.Leaderboards;
+using osu.Game.Offline;
 using osu.Game.Overlays;
 using osu.Game.Resources.Localisation.Web;
 using osu.Game.Rulesets.Mods;
@@ -75,6 +76,9 @@ namespace osu.Game.Screens.Select
 
         [Resolved]
         private ScoreManager scoreManager { get; set; } = null!;
+
+        [Resolved(CanBeNull = true)]
+        private RitsuProfileManager? ritsuProfiles { get; set; }
 
         [Resolved]
         private OsuConfigManager config { get; set; } = null!;
@@ -672,6 +676,13 @@ namespace osu.Game.Screens.Select
 
                 if (copyableMods.Length > 0)
                     items.Add(new OsuMenuItem(SongSelectStrings.UseTheseMods, MenuItemType.Highlighted, () => SelectedMods.Value = copyableMods));
+
+                if (ritsuProfiles?.BelongsToActiveProfile(Score.ID) == true)
+                {
+                    bool included = ritsuProfiles.IsScoreIncludedInPP(Score.ID);
+                    items.Add(new OsuMenuItem(included ? "Exclude this score from profile PP" : "Include this score in profile PP", MenuItemType.Standard,
+                        () => ritsuProfiles.SetScoreIncludedInPP(Score.ID, !included)));
+                }
 
                 if (Score.OnlineID > 0)
                     items.Add(new OsuMenuItem(CommonStrings.CopyLink, MenuItemType.Standard, () => game?.CopyToClipboard($@"{api.Endpoints.WebsiteUrl}/scores/{Score.OnlineID}")));

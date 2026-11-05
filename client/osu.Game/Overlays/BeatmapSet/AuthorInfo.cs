@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -23,7 +23,7 @@ namespace osu.Game.Overlays.BeatmapSet
 {
     public partial class AuthorInfo : Container
     {
-        private const float height = 50;
+        private const float height = 58;
 
         private UpdateableAvatar avatar;
         private FillFlowContainer fields;
@@ -117,12 +117,12 @@ namespace osu.Game.Overlays.BeatmapSet
                     new OsuSpriteText
                     {
                         Text = $"{first} ",
-                        Font = OsuFont.GetFont(size: 11)
+                        Font = OsuFont.GetFont(size: 13)
                     },
                     new OsuSpriteText
                     {
                         Text = second,
-                        Font = secondFont.With(size: 11)
+                        Font = secondFont.With(size: 13)
                     },
                 };
             }
@@ -137,11 +137,11 @@ namespace osu.Game.Overlays.BeatmapSet
                     new OsuSpriteText
                     {
                         Text = $"{first} ",
-                        Font = OsuFont.GetFont(size: 13)
+                        Font = OsuFont.GetFont(size: 14)
                     },
                     new DrawableDate(second)
                     {
-                        Font = secondFont.With(size: 13)
+                        Font = secondFont.With(size: 14)
                     }
                 };
             }
@@ -155,12 +155,12 @@ namespace osu.Game.Overlays.BeatmapSet
                 {
                     new LinkFlowContainer(s =>
                     {
-                        s.Font = OsuFont.GetFont(size: 11);
+                        s.Font = OsuFont.GetFont(size: 13);
                     }).With(d =>
                     {
                         d.AutoSizeAxes = Axes.Both;
                         d.AddText($"{first} ");
-                        d.AddUserLink(second, s => s.Font = secondFont.With(size: 11));
+                        d.AddUserLink(second, s => s.Font = secondFont.With(size: 13));
                     }),
                 };
             }

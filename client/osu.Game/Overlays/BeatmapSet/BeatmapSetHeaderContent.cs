@@ -120,44 +120,57 @@ namespace osu.Game.Overlays.BeatmapSet
                                     },
                                     title = new MetadataFlowContainer(s =>
                                     {
-                                        s.Font = OsuFont.GetFont(size: 30, weight: FontWeight.SemiBold, italics: true);
+                                        s.Font = OsuFont.GetFont(size: 32, weight: FontWeight.SemiBold, italics: true);
                                     })
                                     {
                                         Margin = new MarginPadding { Top = 15 },
                                     },
                                     artist = new MetadataFlowContainer(s =>
                                     {
-                                        s.Font = OsuFont.GetFont(size: 20, weight: FontWeight.Medium, italics: true);
+                                        s.Font = OsuFont.GetFont(size: 22, weight: FontWeight.Medium, italics: true);
                                     })
                                     {
                                         Margin = new MarginPadding { Bottom = 20 },
                                     },
-                                    new Container
+                                    new GridContainer
                                     {
                                         RelativeSizeAxes = Axes.X,
                                         AutoSizeAxes = Axes.Y,
-                                        Child = author = new AuthorInfo(),
+                                        ColumnDimensions = new[] { new Dimension(GridSizeMode.Absolute, 320), new Dimension() },
+                                        RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
+                                        Content = new[] { new Drawable[]
+                                        {
+                                            new Container
+                                            {
+                                                RelativeSizeAxes = Axes.X,
+                                                Height = 60,
+                                                Child = author = new AuthorInfo(),
+                                            },
+                                            new Container
+                                            {
+                                                RelativeSizeAxes = Axes.X,
+                                                Height = 60,
+                                                Children = new Drawable[]
+                                                {
+                                                    favouriteButton = new FavouriteButton
+                                                    {
+                                                        BeatmapSet = { BindTarget = BeatmapSet }
+                                                    },
+                                                    downloadButtonsContainer = new FillFlowContainer
+                                                    {
+                                                        Anchor = Anchor.CentreLeft,
+                                                        Origin = Anchor.CentreLeft,
+                                                        RelativeSizeAxes = Axes.X,
+                                                        Height = 50,
+                                                        Direction = FillDirection.Horizontal,
+                                                        Padding = new MarginPadding { Left = Offline.RitsuOffline.Enabled ? 0 : buttons_height + buttons_spacing },
+                                                        Spacing = new Vector2(8),
+                                                    },
+                                                },
+                                            },
+                                        } },
                                     },
                                     beatmapAvailability = new BeatmapAvailability(),
-                                    new Container
-                                    {
-                                        RelativeSizeAxes = Axes.X,
-                                        Height = buttons_height,
-                                        Margin = new MarginPadding { Top = 10 },
-                                        Children = new Drawable[]
-                                        {
-                                            favouriteButton = new FavouriteButton
-                                            {
-                                                BeatmapSet = { BindTarget = BeatmapSet }
-                                            },
-                                            downloadButtonsContainer = new FillFlowContainer
-                                            {
-                                                RelativeSizeAxes = Axes.Both,
-                                                Padding = new MarginPadding { Left = buttons_height + buttons_spacing },
-                                                Spacing = new Vector2(buttons_spacing),
-                                            },
-                                        }
-                                    },
                                 },
                             },
                         }
@@ -214,7 +227,7 @@ namespace osu.Game.Overlays.BeatmapSet
                                 }
                             },
 
-                            Details = new Details(),
+                            Details = new Details { Scale = new Vector2(1.08f), Width = BeatmapSetOverlay.RIGHT_WIDTH / 1.08f },
                         },
                     },
                 }
@@ -342,7 +355,7 @@ namespace osu.Game.Overlays.BeatmapSet
                     onlineStatusPill.FadeIn(500, Easing.OutQuint);
 
                     downloadButtonsContainer.FadeIn(transition_duration);
-                    favouriteButton.FadeIn(transition_duration);
+                    if (!Offline.RitsuOffline.Enabled) favouriteButton.FadeIn(transition_duration);
 
                     updateDownloadButtons();
                 }

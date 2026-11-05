@@ -3,7 +3,7 @@
 
 ## 0 — Torii offline foundation ✅ Done
 
-Current deliverable: a portable Windows x64 client with an isolated instance, optional linking to an osu!lazer folder or local storage, local file imports, local play and editors, and no connected services. Linking uses the shared data directly; osu!stable detection and imports remain local. Torii's names and appearance are retained. Torii remains the primary upstream; every update must identify the three dependency revisions and pass the checks again.
+Current deliverable: a portable Windows x64 client with an isolated instance, optional linking to an osu!lazer folder or local storage, local file imports, local play and editors, and no required connected services. An optional online beatmap catalogue is being introduced separately; local play remains available offline. Linking uses the shared data directly; osu!stable detection and imports remain local. Torii's names and appearance are retained. Torii remains the primary upstream; every update must identify the three dependency revisions and pass the checks again.
 
 ## 1 — Integrate Modosu ✅ Done
 
@@ -40,7 +40,7 @@ Decide which parts of Torii's visual identity remain and which become Ritsu. Bef
 
 ## 6 — Optional services
 
-Evaluate updates, sharing creations, osu! OAuth, and a community server independently. Also study map search without player sign-in and decide separately whether downloading maps should be offered. Compare the official API and its OAuth requirements with public mirrors, their features, and availability before integration. OAuth can link an identity and authorized data; it does not validate scores for official leaderboards. Local play must remain usable without these services.
+Evaluate updates, sharing creations, osu! OAuth, and a community server independently. The current beatmap catalogue uses Torii only, with search, covers, audio previews and downloads through the existing importer. Public browsing does not require OAuth. Direct osu! access and a future Ritsu service remain possible later additions; a Ritsu server would depend on funding and is not implemented. OAuth does not validate local scores for official leaderboards. Local play remains available without these services.
 
 Announcing releases in Discord is prepared in `.github/workflows/github-releases-to-discord.yml.disabled`. It is an external communication, so it stays inactive until that is explicitly in scope; enabling it is described in [README.md](README.md#release-announcements-on-discord).
 

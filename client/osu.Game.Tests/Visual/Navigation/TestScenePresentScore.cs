@@ -144,6 +144,67 @@ namespace osu.Game.Tests.Visual.Navigation
             presentAndConfirm(secondImport, type);
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void TestFromLocalProfileReturnsToSelectedBeatmap(bool scoreOnDifferentBeatmap)
+        {
+            AddStep("enter song select", () => Game.ChildrenOfType<ButtonSystem>().Single().OnSolo?.Invoke());
+            AddUntilStep("song select is current", () => Game.ScreenStack.CurrentScreen is SoloSongSelect songSelect && songSelect.CarouselItemsPresented);
+
+            BeatmapInfo previousBeatmap = null!;
+            BeatmapInfo scoreBeatmap = null!;
+            AddStep("choose score beatmap", () =>
+            {
+                previousBeatmap = beatmap.Beatmaps.First();
+                scoreBeatmap = scoreOnDifferentBeatmap ? beatmap.Beatmaps.Last() : previousBeatmap;
+            });
+
+            Func<ScoreInfo> score = importScore(8, getBeatmap: () => scoreBeatmap);
+            AddStep("select original beatmap", () => Game.Beatmap.Value = Game.BeatmapManager.GetWorkingBeatmap(previousBeatmap, true));
+            AddUntilStep("original beatmap selected", () => Game.Beatmap.Value.BeatmapInfo.ID == previousBeatmap.ID);
+            AddUntilStep("carousel selection synchronized", () => ((SoloSongSelect)Game.ScreenStack.CurrentScreen).ChildrenOfType<BeatmapCarousel>().Single().CurrentBeatmap?.ID == previousBeatmap.ID);
+            AddStep("present local profile score", () => Game.PresentScoreFromLocalProfile(score()));
+            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.Score?.ID == score().ID);
+            AddAssert("score results stay above song select", () => Game.ScreenStack.CurrentScreen.GetParentScreen() is SoloSongSelect);
+
+            AddStep("back from score", () => Game.ScreenStack.CurrentScreen.Exit());
+            AddUntilStep("return to song select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
+            AddUntilStep("score beatmap selected", () => Game.Beatmap.Value.BeatmapInfo.ID == scoreBeatmap.ID);
+            AddUntilStep("carousel selection restored", () => ((SoloSongSelect)Game.ScreenStack.CurrentScreen).ChildrenOfType<BeatmapCarousel>().Single().CurrentBeatmap?.ID == scoreBeatmap.ID);
+        }
+
+        [Test]
+        public void TestFromSongSelectSameBeatmapReturnsToSongSelect()
+        {
+            AddStep("enter song select", () => Game.ChildrenOfType<ButtonSystem>().Single().OnSolo?.Invoke());
+            AddUntilStep("song select is current", () => Game.ScreenStack.CurrentScreen is SoloSongSelect songSelect && songSelect.CarouselItemsPresented);
+
+            Func<ScoreInfo> score = importScore(9);
+            AddStep("select score beatmap", () => Game.Beatmap.Value = Game.BeatmapManager.GetWorkingBeatmap(score().BeatmapInfo, true));
+            AddUntilStep("score beatmap selected", () => Game.Beatmap.Value.BeatmapInfo.ID == score().BeatmapInfo.ID);
+            AddStep("present score", () => Game.PresentScore(score()));
+            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.Score?.ID == score().ID);
+            AddStep("back from score", () => Game.ScreenStack.CurrentScreen.Exit());
+            AddUntilStep("return to song select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
+            AddUntilStep("selected beatmap restored", () => Game.Beatmap.Value.BeatmapInfo.ID == score().BeatmapInfo.ID);
+            AddUntilStep("carousel selection restored", () => ((SoloSongSelect)Game.ScreenStack.CurrentScreen).ChildrenOfType<BeatmapCarousel>().Single().CurrentBeatmap?.ID == score().BeatmapInfo.ID);
+        }
+
+        [Test]
+        public void TestFromSongSelectDifferentBeatmapStillReturnsToMenu()
+        {
+            AddStep("enter song select", () => Game.ChildrenOfType<ButtonSystem>().Single().OnSolo?.Invoke());
+            AddUntilStep("song select is current", () => Game.ScreenStack.CurrentScreen is SoloSongSelect songSelect && songSelect.CarouselItemsPresented);
+
+            Func<ScoreInfo> score = importScore(10, scoreBeatmap: beatmap.Beatmaps.Last());
+            AddStep("select another beatmap", () => Game.Beatmap.Value = Game.BeatmapManager.GetWorkingBeatmap(beatmap.Beatmaps.First(), true));
+            AddUntilStep("selected beatmap is current", () => Game.Beatmap.Value.BeatmapInfo.ID == beatmap.Beatmaps.First().ID);
+            AddStep("present score", () => Game.PresentScore(score()));
+            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.Score?.ID == score().ID);
+            AddStep("back from score", () => Game.ScreenStack.CurrentScreen.Exit());
+            AddUntilStep("return to main menu", () => Game.ScreenStack.CurrentScreen is MainMenu);
+        }
+
         [Test]
         public void TestPresentTwoImportsWithSameOnlineIDButDifferentHashes([Values] ScorePresentType type)
         {
@@ -191,7 +252,7 @@ namespace osu.Game.Tests.Visual.Navigation
             AddUntilStep("wait for menu", () => Game.ScreenStack.CurrentScreen is MainMenu);
         }
 
-        private Func<ScoreInfo> importScore(int i, RulesetInfo? ruleset = null, string? hash = null)
+        private Func<ScoreInfo> importScore(int i, RulesetInfo? ruleset = null, string? hash = null, BeatmapInfo? scoreBeatmap = null, Func<BeatmapInfo>? getBeatmap = null)
         {
             ScoreInfo? imported = null;
             AddStep($"import score {i}", () =>
@@ -200,7 +261,7 @@ namespace osu.Game.Tests.Visual.Navigation
                 {
                     Hash = hash ?? Guid.NewGuid().ToString(),
                     OnlineID = i,
-                    BeatmapInfo = beatmap.Beatmaps.First(),
+                    BeatmapInfo = getBeatmap?.Invoke() ?? scoreBeatmap ?? beatmap.Beatmaps.First(),
                     Ruleset = ruleset ?? new OsuRuleset().RulesetInfo,
                     User = new GuestUser(),
                 })!.Value;

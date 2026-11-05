@@ -205,6 +205,13 @@ namespace osu.Game.Overlays.BeatmapListing
             apiUser.BindValueChanged(_ => queueUpdateSearch());
         }
 
+        public void HideForCatalogue()
+        {
+            Alpha = 0;
+            AutoSizeAxes = Axes.None;
+            Height = 0;
+        }
+
         public void TakeFocus() => searchControl.TakeFocus();
 
         /// <summary>

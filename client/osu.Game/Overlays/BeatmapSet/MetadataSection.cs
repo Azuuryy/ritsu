@@ -71,7 +71,7 @@ namespace osu.Game.Overlays.BeatmapSet
                         Child = new OsuSpriteText
                         {
                             Text = type.GetLocalisableDescription(),
-                            Font = OsuFont.GetFont(weight: FontWeight.Bold, size: 14),
+                            Font = OsuFont.GetFont(weight: FontWeight.Bold, size: 15),
                         },
                     },
                 },
@@ -96,7 +96,7 @@ namespace osu.Game.Overlays.BeatmapSet
 
         private void setTextFlowAsync(T metadata)
         {
-            LoadComponentAsync(new LinkFlowContainer(s => s.Font = s.Font.With(size: 14))
+            LoadComponentAsync(new LinkFlowContainer(s => s.Font = s.Font.With(size: 15))
             {
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,

@@ -38,3 +38,13 @@ The client blocks framework requests before transport, does not instantiate an a
 - The automated flow validates the local pipeline with NF and misses; it is not a latency benchmark or skill test.
 - The pinned base emits inherited build and dependency warnings. This milestone is not a general security certification.
 - Interactive control was stopped with Escape after the reference launch. Later checks use automated scenarios and engine captures without window control.
+
+
+## Optional Torii catalogue — 2026-11-04
+
+Debug compilation, Bootstrap, catalogue transport checks and existing offline checks passed. An isolated game session displayed live catalogue covers, loaded and played a native audio preview, and downloaded and imported Kenji Ninuma - DISCO★PRINCE through Torii into a separate test library. This does not attest playback of every provider's preview or compatibility with every archive. Torii-exclusive maps without a preview URL have no audio-preview button. The catalogue intentionally uses the network; the offline checks concern the other disabled online services and local-play path.
+
+
+## Catalogue layout and details — 2026-11-04
+
+An isolated game session verified centred and enlarged cards, context-menu entries for osu! and Torii links, loading of the native detail page from Torii, selection of a valid ruleset and difficulty, and both native download variants on a beatmap with video. This check verified the two choices in the UI; it did not download both variants of that video map. Existing download/import validation is recorded above.

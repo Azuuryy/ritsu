@@ -28,20 +28,40 @@ namespace osu.Game.Overlays.BeatmapListing
     {
         public readonly IBindable<RulesetInfo> Ruleset = new Bindable<RulesetInfo>();
 
+        private GeneralFilter? generalFilter;
+        private bool showToriiOptions = true;
+
         public BeatmapSearchGeneralFilterRow()
             : base(BeatmapsStrings.ListingSearchFiltersGeneral)
         {
         }
 
-        protected override MultipleSelectionFilter CreateMultipleSelectionFilter() => new GeneralFilter
+        protected override MultipleSelectionFilter CreateMultipleSelectionFilter() => generalFilter = new GeneralFilter
         {
             Ruleset = { BindTarget = Ruleset }
         };
 
+        public void SetToriiOptions(bool visible)
+        {
+            showToriiOptions = visible;
+            if (generalFilter?.IsLoaded == true) generalFilter.SetToriiOptions(visible);
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+            generalFilter?.SetToriiOptions(showToriiOptions);
+        }
         private partial class GeneralFilter : MultipleSelectionFilter
         {
             public readonly IBindable<RulesetInfo> Ruleset = new Bindable<RulesetInfo>();
 
+            public void SetToriiOptions(bool visible)
+            {
+                foreach (var item in Children)
+                    if (item.Value == SearchGeneral.ToriiExclusive || item.Value == SearchGeneral.AiGenerated)
+                        item.Alpha = visible ? 1 : 0;
+            }
             protected override MultipleSelectionFilterTabItem CreateTabItem(SearchGeneral value)
             {
                 switch (value)

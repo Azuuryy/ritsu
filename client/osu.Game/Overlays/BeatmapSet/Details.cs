@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -111,7 +111,7 @@ namespace osu.Game.Overlays.BeatmapSet
         private void updateDisplay()
         {
             Ratings.Ratings = BeatmapSet?.Ratings;
-            ratingBox.Alpha = BeatmapSet?.Status > 0 ? 1 : 0;
+            ratingBox.Alpha = !Offline.RitsuOffline.Enabled && BeatmapSet?.Status > 0 ? 1 : 0;
             advanced.Ruleset.Value = rulesets.GetRuleset(beatmapInfo?.Ruleset.OnlineID ?? 0);
         }
 

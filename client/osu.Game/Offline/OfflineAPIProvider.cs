@@ -48,11 +48,12 @@ namespace osu.Game.Offline
         public SessionVerificationMethod? SessionVerificationMethod => null;
         public INotificationsClient NotificationsClient { get; } = new OfflineNotificationsClient();
 
-        public void Queue(APIRequest request) => reject(request);
-        public void Perform(APIRequest request) => reject(request);
+        public void Queue(APIRequest request) => _ = PerformAsync(request);
+        public void Perform(APIRequest request) => Queue(request);
 
         public Task PerformAsync(APIRequest request)
         {
+            if (request is DownloadBeatmapSetRequest download) return download.PerformCatalogueAsync(this);
             reject(request);
             // IAPIProvider reports request failure via APIRequest.Failure, including
             // callers that intentionally do not await this dispatch task.

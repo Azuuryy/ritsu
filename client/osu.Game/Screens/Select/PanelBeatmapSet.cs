@@ -257,14 +257,6 @@ namespace osu.Game.Screens.Select
 
                 List<MenuItem> items = new List<MenuItem>();
 
-                if (ritsuProfiles != null && beatmapSet.Beatmaps.FirstOrDefault() is BeatmapInfo ppSourceBeatmap)
-                {
-                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, ppSourceBeatmap.ID, beatmapSet.ID);
-                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap set's scores from PP" : "Include this beatmap set's scores in PP", MenuItemType.Standard,
-                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(ritsuProfiles.ActiveProfileId, ppSourceBeatmap.ID, !included, beatmapSet.ID)));
-                    items.Add(new OsuMenuItemSpacer());
-                }
-
                 if (Expanded.Value)
                 {
                     if (songSelect is SoloSongSelect soloSongSelect)
@@ -280,6 +272,15 @@ namespace osu.Game.Screens.Select
                 else
                 {
                     items.Add(new OsuMenuItem(WebCommonStrings.ButtonsExpand.ToSentence(), MenuItemType.Highlighted, () => TriggerClick()));
+                    items.Add(new OsuMenuItemSpacer());
+                }
+
+                if (ritsuProfiles != null)
+                {
+                    Guid profileId = ritsuProfiles.ActiveProfileId;
+                    bool included = ritsuProfiles.AreBeatmapSetScoresIncludedInPP(profileId, beatmapSet.ID);
+                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap set's scores from profile PP" : "Include this beatmap set's scores in profile PP", MenuItemType.Standard,
+                        () => ritsuProfiles.SetBeatmapSetScoresIncludedInPP(profileId, beatmapSet.ID, !included)));
                     items.Add(new OsuMenuItemSpacer());
                 }
 
