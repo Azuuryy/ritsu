@@ -1,6 +1,7 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using System.Linq;
 using NUnit.Framework;
 using osu.Framework.Allocation;
@@ -196,6 +197,24 @@ namespace osu.Game.Tests.Visual.SongSelect
                     BeatmapMD5Hashes = { beatmapManager.GetAllUsableBeatmapSets().First().Beatmaps[0].MD5Hash }
                 },
             })));
+        }
+
+        [Test]
+        public void TestUndoCollectionRemoval()
+        {
+            Guid id = Guid.NewGuid();
+            string hash = string.Empty;
+            AddStep("add collection", () =>
+            {
+                hash = beatmapManager.GetAllUsableBeatmapSets().First().Beatmaps[0].MD5Hash;
+                Realm.Write(r => r.Add(new BeatmapCollection("Undo test") { ID = id }).BeatmapMD5Hashes.Add(hash));
+            });
+            AddAssert("initial membership", () => Realm.Run(r => r.Find<BeatmapCollection>(id)?.BeatmapMD5Hashes.SingleOrDefault()), () => Is.EqualTo(hash));
+            AddStep("remove the collection", () => dialog.DeleteCollection(id));
+            AddAssert("collection removed", () => Realm.Run(r => r.Find<BeatmapCollection>(id) == null));
+            AddStep("undo removal", () => dialog.UndoRemoval());
+            AddAssert("collection and original membership restored", () =>
+                Realm.Run(r => r.Find<BeatmapCollection>(id)?.BeatmapMD5Hashes.SingleOrDefault()), () => Is.EqualTo(hash));
         }
 
         [Test]

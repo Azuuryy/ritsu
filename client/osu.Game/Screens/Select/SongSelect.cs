@@ -137,6 +137,17 @@ namespace osu.Game.Screens.Select
 
         protected FilterControl FilterControl { get; private set; } = null!;
 
+        internal FilterControl RitsuFilters => FilterControl;
+
+        internal void SelectQueuedBeatmap(BeatmapInfo difficulty)
+        {
+            ((IHandlePresentBeatmap)this).PresentBeatmap(beatmaps.GetWorkingBeatmap(difficulty), difficulty.Ruleset);
+            var criteria = FilterControl.CreateCriteria();
+            if (difficulty.BeatmapSet != null && (criteria.SmartCollectionCriteria != null || criteria.UsesPerformanceFilter
+                                                 || !BeatmapCarouselFilterMatching.CheckCriteriaMatch(difficulty, criteria)))
+                ScopeToBeatmapSet(difficulty.BeatmapSet);
+        }
+
         private BeatmapTitleWedge titleWedge = null!;
         private BeatmapDetailsArea detailsArea = null!;
         private FillFlowContainer wedgesContainer = null!;
@@ -414,13 +425,7 @@ namespace osu.Game.Screens.Select
                     TargetDrawSize = new Vector2(1366, 768),
                     Strategy = DrawSizePreservationStrategy.Minimum,
                     Alpha = 0,
-                    Child = new LegacySongSelectTop
-                    {
-                        Anchor = Anchor.TopLeft,
-                        Origin = Anchor.TopLeft,
-                        RelativeSizeAxes = Axes.Both,
-                        FilterControl = FilterControl,
-                    },
+                    Child = createLegacySongSelectTop(),
                 },
                 // Torii: stable-style bottom-left ranking panel (Local Ranking dropdown + scores)
                 // for the legacy UI, in the same 1366x768 scaled space. Hidden by default.
@@ -538,6 +543,16 @@ namespace osu.Game.Screens.Select
             Schedule(rebuildLegacyChrome);
         }
 
+        private PopoverContainer createLegacySongSelectTop() => new PopoverContainer
+        {
+            RelativeSizeAxes = Axes.Both,
+            Child = new LegacySongSelectTop
+            {
+                RelativeSizeAxes = Axes.Both,
+                FilterControl = FilterControl,
+            },
+        };
+
         /// <summary>
         /// torii: reconstruye el chrome legacy como si entraramos de cero. el toggle solo hacia fade de
         /// los contenedores creados una vez en load(), pero sus hijos resuelven las texturas de skin
@@ -558,13 +573,7 @@ namespace osu.Game.Screens.Select
 
             try
             {
-                topContainer.Child = new LegacySongSelectTop
-                {
-                    Anchor = Anchor.TopLeft,
-                    Origin = Anchor.TopLeft,
-                    RelativeSizeAxes = Axes.Both,
-                    FilterControl = FilterControl,
-                };
+                topContainer.Child = createLegacySongSelectTop();
 
                 leaderboardContainer.Child = new OsuContextMenuContainer
                 {
@@ -1628,20 +1637,24 @@ namespace osu.Game.Screens.Select
 
             yield return new OsuMenuItemSpacer();
 
+            if (game is OsuGame osuGame && Offline.RitsuOffline.Enabled)
+            {
+                yield return new OsuMenuItem("Add to play queue", MenuItemType.Standard, () => osuGame.QueueRitsuBeatmap(beatmap));
+                if (beatmap.Equals(Beatmap.Value.BeatmapInfo))
+                    yield return new OsuMenuItem("Set target BPM", MenuItemType.Standard, osuGame.ShowRitsuTargetBpm);
+            }
+
             foreach (var i in CreateCollectionMenuActions(beatmap))
                 yield return i;
         }
 
         protected IEnumerable<OsuMenuItem> CreateCollectionMenuActions(BeatmapInfo beatmap)
         {
-            var collectionItems = realm.Realm.All<BeatmapCollection>()
-                                       .OrderBy(c => c.Name)
-                                       .AsEnumerable()
-                                       .Select(c => new CollectionToggleMenuItem(c.ToLive(realm), beatmap)).Cast<OsuMenuItem>().ToList();
-
-            collectionItems.Add(new OsuMenuItem(CommonStrings.Manage, MenuItemType.Standard, () => manageCollectionsDialog?.Show()));
-
-            yield return new OsuMenuItem(CommonStrings.Collections) { Items = collectionItems };
+            yield return new OsuMenuItem(CommonStrings.Collections)
+            {
+                Items = RitsuCollectionMenu.Create(realm, manageCollectionsDialog, beatmap, Dependencies.Get<Offline.RitsuLibrary>(),
+                    Dependencies.Get<Offline.RitsuProfileManager>(), game: game as OsuGame),
+            };
         }
 
         public void ManageCollections() => collectionsDialog?.Show();

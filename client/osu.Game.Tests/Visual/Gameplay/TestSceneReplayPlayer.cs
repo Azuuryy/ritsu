@@ -33,6 +33,14 @@ namespace osu.Game.Tests.Visual.Gameplay
         }
 
         [Test]
+        public void TestStartAtLinkedTimestamp()
+        {
+            loadPlayerWithBeatmap(initialTime: 4000);
+            AddUntilStep("replay seek applied", () => Player.GameplayClockContainer.CurrentTime >= 4000);
+            AddAssert("replay is at linked passage", () => Player.GameplayClockContainer.CurrentTime, () => Is.InRange(4000, 4600));
+        }
+
+        [Test]
         public void TestPauseViaSpace()
         {
             loadPlayerWithBeatmap();
@@ -241,18 +249,18 @@ namespace osu.Game.Tests.Visual.Gameplay
             AddAssert("rate changed", () => lastRate != Player.GameplayClockContainer.Rate);
         }
 
-        private void loadPlayerWithBeatmap(IBeatmap? beatmap = null)
+        private void loadPlayerWithBeatmap(IBeatmap? beatmap = null, double? initialTime = null)
         {
             AddStep("create player", () =>
             {
-                CreatePlayer(new OsuRuleset(), beatmap);
+                CreatePlayer(new OsuRuleset(), beatmap, initialTime);
             });
 
             AddStep("Load player", () => LoadScreen(Player));
             AddUntilStep("player loaded", () => Player.IsLoaded);
         }
 
-        protected void CreatePlayer(Ruleset ruleset, IBeatmap? beatmap = null)
+        protected void CreatePlayer(Ruleset ruleset, IBeatmap? beatmap = null, double? initialTime = null)
         {
             Beatmap.Value = beatmap != null
                 ? CreateWorkingBeatmap(beatmap)
@@ -260,7 +268,7 @@ namespace osu.Game.Tests.Visual.Gameplay
 
             SelectedMods.Value = new[] { ruleset.GetAutoplayMod() };
 
-            Player = new TestReplayPlayer(false);
+            Player = new TestReplayPlayer(false) { InitialTime = initialTime };
         }
     }
 }

@@ -2,6 +2,8 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
@@ -15,6 +17,8 @@ using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Localisation;
+using osu.Game.Offline;
+using osu.Game.Overlays.Dialog;
 using osu.Game.Overlays;
 using osu.Game.Resources.Localisation.Web;
 using osuTK;
@@ -33,6 +37,127 @@ namespace osu.Game.Collections
 
         private BasicSearchTextBox searchTextBox = null!;
         private DrawableCollectionList list = null!;
+        private Action? undo;
+
+        [Resolved]
+        private RealmAccess realm { get; set; } = null!;
+
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private IDialogOverlay? dialogs { get; set; }
+
+        internal void RemoveMembers(Guid collectionId, Guid? subgroupId, IEnumerable<string> hashes)
+        {
+            var requested = hashes.ToHashSet();
+            if (subgroupId != null)
+            {
+                var subgroup = library?.Subgroups.FirstOrDefault(s => s.Id == subgroupId && s.CollectionId == collectionId);
+                if (subgroup == null)
+                    return;
+
+                var removed = subgroup.Hashes.Where(requested.Contains).ToArray();
+                if (removed.Length == 0)
+                    return;
+                library!.SaveSubgroup(subgroup with { Hashes = subgroup.Hashes.Where(h => !requested.Contains(h)).ToArray() });
+                undo = () => restoreSubgroupMembers(subgroup.Id, removed);
+                return;
+            }
+
+            var removedFromCollection = realm.Write(r =>
+            {
+                var collection = r.Find<BeatmapCollection>(collectionId);
+                if (collection == null)
+                    return Array.Empty<string>();
+
+                var removed = collection.BeatmapMD5Hashes.Where(requested.Contains).ToArray();
+                foreach (string hash in removed)
+                    collection.BeatmapMD5Hashes.Remove(hash);
+                if (removed.Length > 0)
+                    collection.LastModified = DateTimeOffset.UtcNow;
+                return removed;
+            });
+
+            if (removedFromCollection.Length == 0)
+                return;
+
+            var removedSet = removedFromCollection.ToHashSet();
+            var subgroupMembers = library?.Subgroups.Where(s => s.CollectionId == collectionId)
+                                          .Select(s => (s.Id, Hashes: s.Hashes.Where(removedSet.Contains).ToArray()))
+                                          .Where(s => s.Hashes.Length > 0).ToArray();
+
+            try
+            {
+                if (subgroupMembers is { Length: > 0 })
+                    library!.RemoveSubgroupMembers(collectionId, removedSet);
+            }
+            catch
+            {
+                RitsuCollectionMenu.Add(realm, collectionId, removedFromCollection);
+                throw;
+            }
+
+            undo = () =>
+            {
+                if (RitsuCollectionMenu.Add(realm, collectionId, removedFromCollection) && subgroupMembers != null)
+                {
+                    foreach (var (id, members) in subgroupMembers)
+                        restoreSubgroupMembers(id, members);
+                }
+            };
+        }
+
+        private void restoreSubgroupMembers(Guid id, IEnumerable<string> hashes)
+        {
+            var subgroup = library?.Subgroups.FirstOrDefault(s => s.Id == id);
+            if (subgroup != null)
+                library!.SaveSubgroup(subgroup with { Hashes = subgroup.Hashes.Union(hashes).ToArray() });
+        }
+
+        internal void DeleteSubgroup(Guid id)
+        {
+            var subgroup = library?.Subgroups.FirstOrDefault(s => s.Id == id);
+            if (subgroup == null)
+                return;
+            library!.DeleteSubgroup(id);
+            undo = () => library.SaveSubgroup(subgroup);
+        }
+
+        internal void DeleteCollection(Guid id)
+        {
+            var snapshot = realm.Write(r =>
+            {
+                var collection = r.Find<BeatmapCollection>(id);
+                if (collection == null)
+                    return null;
+
+                var copy = new DeletedCollection(collection.Name, collection.LastModified, collection.BeatmapMD5Hashes.ToArray());
+                r.Remove(collection);
+                return copy;
+            });
+
+            if (snapshot == null)
+                return;
+
+            undo = () => realm.Write(r =>
+            {
+                if (r.Find<BeatmapCollection>(id) != null)
+                    return;
+
+                var restored = r.Add(new BeatmapCollection(snapshot.Name) { ID = id, LastModified = snapshot.LastModified });
+                foreach (string hash in snapshot.Hashes)
+                    restored.BeatmapMD5Hashes.Add(hash);
+            });
+        }
+
+        private sealed record DeletedCollection(string Name, DateTimeOffset LastModified, string[] Hashes);
+
+        internal void UndoRemoval()
+        {
+            undo?.Invoke();
+            undo = null;
+        }
 
         [Resolved]
         private MusicController? musicController { get; set; }
@@ -87,6 +212,30 @@ namespace osu.Game.Collections
                                             Text = CollectionsStrings.ManageCollectionsTitle,
                                             Font = OsuFont.GetFont(size: 30),
                                             Padding = new MarginPadding { Vertical = 10 },
+                                        },
+                                        new IconButton
+                                        {
+                                            Anchor = Anchor.CentreLeft,
+                                            Origin = Anchor.CentreLeft,
+                                            X = 10,
+                                            Alpha = library == null ? 0 : 1,
+                                            Icon = FontAwesome.Solid.Edit,
+                                            TooltipText = "Edit collection contents",
+                                            Action = () =>
+                                            {
+                                                if (library != null)
+                                                    dialogs?.Push(new RitsuCollectionEditor(this, library));
+                                            },
+                                        },
+                                        new IconButton
+                                        {
+                                            Anchor = Anchor.CentreLeft,
+                                            Origin = Anchor.CentreLeft,
+                                            X = 43,
+                                            Alpha = library == null ? 0 : 1,
+                                            Icon = FontAwesome.Solid.Undo,
+                                            TooltipText = "Undo last removal",
+                                            Action = UndoRemoval,
                                         },
                                         new IconButton
                                         {

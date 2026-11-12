@@ -122,7 +122,7 @@ namespace osu.Game.Screens.Ranking
             });
 
             if (screen.Score?.BeatmapInfo != null)
-                buttons.Add(new CollectionButton(screen.Score.BeatmapInfo));
+                buttons.Add(new CollectionButton(screen.Score.BeatmapInfo) { Score = screen.Score });
 
             if (screen.Score?.BeatmapInfo?.BeatmapSet != null && screen.Score.BeatmapInfo.BeatmapSet.OnlineID > 0)
                 buttons.Add(new FavouriteButton(screen.Score.BeatmapInfo.BeatmapSet));

@@ -868,7 +868,12 @@ namespace osu.Game.Screens.Select
             performanceSession = null;
             performanceRefresh?.Cancel();
             performanceRefresh = null;
-            if (Criteria != null) Criteria.PerformanceSession = null;
+            if (Criteria != null)
+            {
+                Criteria.PerformanceSession = null;
+                if (Criteria.SmartCollectionCriteria != null)
+                    Criteria.SmartCollectionCriteria.PerformanceSession = null;
+            }
             PerformanceProgressChanged?.Invoke();
         }
 
@@ -907,9 +912,11 @@ namespace osu.Game.Screens.Select
             performanceRefresh?.Cancel();
             performanceRefresh = null;
             performanceSession = null;
-            if (difficultyCache != null && (criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability || criteria.Group == GroupMode.PerformancePoints100 || criteria.UserPerformance.HasFilter))
-                performanceSession = new PerfectPerformanceSession(difficultyCache, criteria.Ruleset, criteria.Mods, performanceChanged, criteria.CalculateMapPerformance);
+            if (difficultyCache != null && (criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability || criteria.Group == GroupMode.PerformancePoints100 || criteria.UsesPerformanceFilter))
+                performanceSession = new PerfectPerformanceSession(difficultyCache, criteria.Ruleset, criteria.Mods, performanceChanged, criteria.CalculateMapPerformance || criteria.SmartCollectionCriteria?.CalculateMapPerformance == true);
             criteria.PerformanceSession = performanceSession;
+            if (criteria.SmartCollectionCriteria != null)
+                criteria.SmartCollectionCriteria.PerformanceSession = performanceSession;
             Criteria = criteria;
             PerformanceProgressChanged?.Invoke();
 

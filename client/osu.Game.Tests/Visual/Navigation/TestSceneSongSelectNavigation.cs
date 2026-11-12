@@ -7,16 +7,22 @@ using NUnit.Framework;
 using osu.Framework.Allocation;
 using osu.Framework.Extensions;
 using osu.Framework.Extensions.TypeExtensions;
+using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Testing;
 using osu.Game.Beatmaps;
+using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Online.Leaderboards;
+using osu.Game.Offline;
 using osu.Game.Overlays;
+using osu.Game.Overlays.Dialog;
 using osu.Game.Overlays.Mods;
+using osu.Game.Overlays.ToriiBriefing;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets.Osu;
 using osu.Game.Rulesets.Osu.Mods;
 using osu.Game.Screens;
 using osu.Game.Screens.Edit;
@@ -33,6 +39,102 @@ namespace osu.Game.Tests.Visual.Navigation
 {
     public partial class TestSceneSongSelectNavigation : OsuGameTestScene
     {
+        [Test]
+        public void TestRitsuPaletteQueueAndSessionPreset()
+        {
+            string mapHash = string.Empty;
+            string presetName = $"Practice {Guid.NewGuid():N}";
+            var select = () => (SoloSongSelect)Game.ScreenStack.CurrentScreen;
+            var dialog = () => Game.Dependencies.Get<IDialogOverlay>().CurrentDialog;
+            AddUntilStep("wait for dialog overlay", () => Game.Dependencies.Get<IDialogOverlay>() is { } overlay && ((osu.Framework.Graphics.Drawable)overlay).IsLoaded);
+            AddStep("dismiss the welcome overlay", () => Game.ChildrenOfType<ToriiBriefingOverlay>().FirstOrDefault()?.Hide());
+            AddStep("queue an imported difficulty", () =>
+            {
+                var manager = Game.Dependencies.Get<BeatmapManager>();
+                var imported = manager.Import(new ImportTask(TestResources.GetQuickTestBeatmapForImport())).GetResultSafely();
+                var beatmap = manager.GetAllUsableBeatmapSets().Single(s => s.ID == imported.ID).Beatmaps[0];
+                mapHash = beatmap.MD5Hash;
+                Game.QueueRitsuBeatmap(beatmap);
+            });
+
+            openPalette();
+            runCommand("/queue next");
+            AddUntilStep("next difficulty selected in Song Select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect && Game.Beatmap.Value.BeatmapInfo.MD5Hash == mapHash);
+            AddStep("set initial search", () => select().RitsuFilters.Search("length<2m"));
+
+            openPalette();
+            runCommand("/session save");
+            AddUntilStep("preset name dialog loaded", () => dialog() is RitsuInputDialog { IsLoaded: true });
+            AddStep("name and save session", () =>
+            {
+                var input = dialog().ChildrenOfType<OsuTextBox>().Single();
+                InputManager.MoveMouseTo(input);
+                InputManager.Click(MouseButton.Left);
+                input.Text = presetName;
+                InputManager.Key(Key.Enter);
+            });
+            AddUntilStep("session saved", () => Game.Dependencies.Get<RitsuLibrary>().Presets.Any(p => p.Name == presetName));
+            AddStep("change search", () => select().RitsuFilters.Search("stars>7"));
+
+            openPalette();
+            runCommand(presetName);
+            AddUntilStep("starting search restored", () => select().RitsuFilters.SearchQuery.Value == "length<2m");
+
+            void openPalette()
+            {
+                AddUntilStep("wait for any previous dialog to close", () => dialog() == null);
+                AddStep("press Ctrl+Shift+P", () =>
+                {
+                    InputManager.PressKey(Key.ControlLeft);
+                    InputManager.PressKey(Key.ShiftLeft);
+                    InputManager.Key(Key.P);
+                    InputManager.ReleaseKey(Key.ShiftLeft);
+                    InputManager.ReleaseKey(Key.ControlLeft);
+                });
+                AddUntilStep("palette open", () => dialog() is RitsuCommandPalette { IsLoaded: true });
+            }
+
+            void runCommand(string query)
+            {
+                AddStep($"run {query}", () =>
+                {
+                    var search = dialog().ChildrenOfType<OsuTextBox>().Single();
+                    InputManager.MoveMouseTo(search);
+                    InputManager.Click(MouseButton.Left);
+                    search.Text = query;
+                    InputManager.Key(Key.Enter);
+                });
+            }
+        }
+
+        [Test]
+        public void TestRitsuTargetBpmUsesSelectedTimingSection()
+        {
+            var map = new Beatmap();
+            map.ControlPointInfo.Add(0, new TimingControlPoint { BeatLength = 500 });
+            map.ControlPointInfo.Add(1000, new TimingControlPoint { BeatLength = 60000.0 / 180 });
+            Mod[]? applied = null;
+            RitsuTargetBpmDialog dialog = null!;
+
+            AddUntilStep("wait for dialog overlay", () => Game.Dependencies.Get<IDialogOverlay>() is { } overlay && ((osu.Framework.Graphics.Drawable)overlay).IsLoaded);
+            AddStep("open target BPM for a variable-tempo map", () =>
+            {
+                Game.ChildrenOfType<ToriiBriefingOverlay>().FirstOrDefault()?.Hide();
+                Game.Dependencies.Get<IDialogOverlay>().Push(dialog = new RitsuTargetBpmDialog(map, new OsuRuleset(), Array.Empty<Mod>(), mods => applied = mods));
+            });
+            AddUntilStep("wait for target BPM dialog", () => dialog.IsLoaded);
+            AddStep("choose the 180 BPM timing section", () =>
+            {
+                dialog.ChildrenOfType<Menu.DrawableMenuItem>().Single(item => item.Item.Text.Value.ToString().Contains("180 BPM", StringComparison.Ordinal)).Item.Action.Value?.Invoke();
+            });
+            AddStep("enter and apply 240 BPM", () =>
+            {
+                dialog.ChildrenOfType<OsuTextBox>().Single(box => box.PlaceholderText.ToString() == "Target BPM").Text = "240";
+                dialog.Buttons.OfType<PopupDialogOkButton>().Single().TriggerClick();
+            });
+            AddAssert("rate uses selected timing section", () => applied?.OfType<ModRateAdjust>().Single().SpeedChange.Value, () => Is.EqualTo(1.33).Within(0.001));
+        }
+
         [Test]
         public void TestRetryFromResults()
         {
@@ -154,6 +256,52 @@ namespace osu.Game.Tests.Visual.Navigation
 
             AddUntilStep("wait for track playing", () => Game.MusicController.IsPlaying);
             AddAssert("Ensure time wasn't reset to preview point", () => Game.MusicController.CurrentTrack.CurrentTime < beatmap().BeatmapInfo.Metadata.PreviewTime);
+        }
+
+        [Test]
+        public void TestRandomV2PreviewSeedReproducesPlayableBeatmap()
+        {
+            int? seed = null;
+            BeatmapInfo difficulty = null!;
+            osuTK.Vector2[] positions = Array.Empty<osuTK.Vector2>();
+            PushAndConfirm(() => new PreviewSongSelect());
+            AddStep("import and select a beatmap", () =>
+            {
+                Game.ChildrenOfType<ToriiBriefingOverlay>().FirstOrDefault()?.Hide();
+                var manager = Game.Dependencies.Get<BeatmapManager>();
+                var imported = manager.Import(new ImportTask(TestResources.GetQuickTestBeatmapForImport())).GetResultSafely();
+                difficulty = manager.GetAllUsableBeatmapSets().Single(set => set.ID == imported.ID).Beatmaps.First(map => map.Ruleset.OnlineID == 0);
+                Game.Beatmap.Value = manager.GetWorkingBeatmap(difficulty);
+            });
+            AddUntilStep("wait for selection", () => !Game.Beatmap.IsDefault);
+            AddStep("open seeded mod preview", () =>
+            {
+                Game.SelectedMods.Value = new[] { new OsuModRandomV2() };
+                ((SoloSongSelect)Game.ScreenStack.CurrentScreen).StartModPreview(new OsuModAutoplay());
+            });
+            waitForScreen<ReplayPlayer>();
+            AddUntilStep("wait for seed control", () => this.ChildrenOfType<osu.Game.Rulesets.Osu.UI.RandomV2Settings>().Any());
+            AddStep("keep the preview seed", () =>
+            {
+                var preview = (ReplayPlayer)Game.ScreenStack.CurrentScreen;
+                difficulty = preview.Beatmap.Value.BeatmapInfo;
+                seed = preview.GameplayState.Mods.OfType<OsuModRandomV2>().Single().Seed.Value;
+                positions = preview.GameplayState.Beatmap.HitObjects.OfType<osu.Game.Rulesets.Osu.Objects.OsuHitObject>().Select(o => o.Position).ToArray();
+                this.ChildrenOfType<osu.Game.Rulesets.Osu.UI.RandomV2Settings>().Single()
+                    .ChildrenOfType<osu.Game.Overlays.Settings.SettingsButton>().Single().Action?.Invoke();
+            });
+            pushEscape();
+            waitForScreen<SoloSongSelect>();
+            AddAssert("seed retained on selection", () => Game.SelectedMods.Value.OfType<OsuModRandomV2>().Single().Seed.Value, () => Is.EqualTo(seed).And.Not.Null);
+            AddStep("play the previewed difficulty", () => ((PreviewSongSelect)Game.ScreenStack.CurrentScreen).Play(difficulty));
+            waitForScreen<SoloPlayer>();
+            AddAssert("play uses preview positions", () => ((SoloPlayer)Game.ScreenStack.CurrentScreen).GameplayState.Beatmap.HitObjects
+                .OfType<osu.Game.Rulesets.Osu.Objects.OsuHitObject>().Select(o => o.Position).ToArray(), () => Is.EqualTo(positions));
+        }
+
+        private partial class PreviewSongSelect : SoloSongSelect
+        {
+            public void Play(BeatmapInfo difficulty) => SelectAndRun(difficulty, OnStart);
         }
 
         [Test]

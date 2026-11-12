@@ -11,6 +11,8 @@ using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Localisation;
+using osu.Game.Collections;
+using osu.Game.Database;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Cursor;
@@ -35,6 +37,7 @@ namespace osu.Game.Overlays.Profile
 
         private readonly RitsuScoreSubsection recent;
         private readonly RitsuScoreSubsection best;
+        private readonly RitsuScoreSubsection marked;
         private readonly OsuSpriteText status;
 
         public RitsuLocalScoresSection()
@@ -44,6 +47,7 @@ namespace osu.Game.Overlays.Profile
                 status = new OsuSpriteText { RelativeSizeAxes = Axes.X, Font = OsuFont.GetFont(size: 14), Alpha = 0 },
                 recent = new RitsuScoreSubsection(User, UsersStrings.ShowExtraRecentActivityTitle),
                 best = new RitsuScoreSubsection(User, UsersStrings.ShowExtraTopRanksBestTitle),
+                marked = new RitsuScoreSubsection(User, "Marked for analysis"),
             };
         }
 
@@ -51,6 +55,12 @@ namespace osu.Game.Overlays.Profile
         {
             status.Text = message ?? string.Empty;
             status.Alpha = message == null ? 0 : 1;
+        }
+
+        public void SetMarkedScores(IReadOnlyList<ScoreInfo> markedScores)
+        {
+            marked.SetScores(markedScores);
+            marked.Alpha = markedScores.Count > 0 ? 1 : 0;
         }
 
         public void SetScores(IReadOnlyList<ScoreInfo> recentScores, IReadOnlyList<ScoreInfo> bestScores)
@@ -133,6 +143,15 @@ namespace osu.Game.Overlays.Profile
         [Resolved(canBeNull: true)]
         private RitsuProfileManager? profiles { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved]
+        private RealmAccess realm { get; set; } = null!;
+
+        [Resolved(canBeNull: true)]
+        private ManageCollectionsDialog? collections { get; set; }
+
         public RitsuProfileScore(ScoreInfo score)
         {
             this.score = score;
@@ -142,11 +161,23 @@ namespace osu.Game.Overlays.Profile
 
         public LocalisableString TooltipText => "Right-click to include or exclude this score from profile PP.";
 
-        public MenuItem[] ContextMenuItems => profiles == null ? Array.Empty<MenuItem>() : new[]
+        public MenuItem[] ContextMenuItems
         {
-            new MenuItem(profiles.IsScoreIncludedInPP(score.ID) ? "Exclude this score from PP" : "Include this score in PP", () =>
-                profiles.SetScoreIncludedInPP(score.ID, !profiles.IsScoreIncludedInPP(score.ID))),
-        };
+            get
+            {
+                var items = new List<MenuItem>();
+                if (profiles != null)
+                {
+                    items.Add(new MenuItem(profiles.IsScoreIncludedInPP(score.ID) ? "Exclude this score from PP" : "Include this score in PP", () =>
+                        profiles.SetScoreIncludedInPP(score.ID, !profiles.IsScoreIncludedInPP(score.ID))));
+                }
+
+                if (library != null && score.BeatmapInfo is { } beatmap)
+                    items.Add(new OsuMenuItem("Collections") { Items = RitsuCollectionMenu.Create(realm, collections, beatmap, library, profiles, score) });
+
+                return items.ToArray();
+            }
+        }
 
         [BackgroundDependencyLoader]
         private void load(OverlayColourProvider colours, OsuColour osuColours)

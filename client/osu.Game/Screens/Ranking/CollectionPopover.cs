@@ -1,7 +1,6 @@
 ﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Input.Events;
@@ -10,13 +9,24 @@ using osu.Game.Collections;
 using osu.Game.Database;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
-using osu.Game.Localisation;
+using osu.Game.Offline;
+using osu.Game.Scoring;
 
 namespace osu.Game.Screens.Ranking
 {
     public partial class CollectionPopover : OsuPopover
     {
         private readonly BeatmapInfo beatmapInfo;
+        private readonly ScoreInfo? score;
+
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private RitsuProfileManager? profiles { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private OsuGame? game { get; set; }
 
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
@@ -24,10 +34,11 @@ namespace osu.Game.Screens.Ranking
         [Resolved]
         private ManageCollectionsDialog? manageCollectionsDialog { get; set; }
 
-        public CollectionPopover(BeatmapInfo beatmapInfo)
+        public CollectionPopover(BeatmapInfo beatmapInfo, ScoreInfo? score = null)
             : base(false)
         {
             this.beatmapInfo = beatmapInfo;
+            this.score = score;
 
             Body.CornerRadius = 4;
         }
@@ -39,7 +50,7 @@ namespace osu.Game.Screens.Ranking
             {
                 new OsuMenu(Direction.Vertical, true)
                 {
-                    Items = items,
+                    Items = RitsuCollectionMenu.Create(realm, manageCollectionsDialog, beatmapInfo, library, profiles, score, game),
                     MaxHeight = 375,
                 },
             };
@@ -51,19 +62,5 @@ namespace osu.Game.Screens.Ranking
             Hide();
         }
 
-        private OsuMenuItem[] items
-        {
-            get
-            {
-                var collectionItems = realm.Realm.All<BeatmapCollection>()
-                                           .OrderBy(c => c.Name)
-                                           .AsEnumerable()
-                                           .Select(c => new CollectionToggleMenuItem(c.ToLive(realm), beatmapInfo)).Cast<OsuMenuItem>().ToList();
-
-                collectionItems.Add(new OsuMenuItem(CommonStrings.Manage, MenuItemType.Standard, () => manageCollectionsDialog?.Show()));
-
-                return collectionItems.ToArray();
-            }
-        }
     }
 }
