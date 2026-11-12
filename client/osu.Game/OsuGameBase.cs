@@ -338,6 +338,11 @@ namespace osu.Game
 
             var ritsuProfiles = new Offline.RitsuProfileManager(Storage, realm);
             dependencies.Cache(ritsuProfiles);
+            if (Offline.RitsuOffline.Enabled)
+            {
+                var libraryStorage = Storage is OsuStorage osuStorage ? Host.GetStorage(osuStorage.DefaultStoragePath) : Storage;
+                dependencies.Cache(new Offline.RitsuLibrary(libraryStorage));
+            }
             if (API is Offline.OfflineAPIProvider offlineProfilesApi)
             {
                 largeStore.AddTextureSource(Host.CreateTextureLoaderStore(new StorageBackedResourceStore(ritsuProfiles.AvatarStorage)));
