@@ -139,6 +139,8 @@ namespace osu.Game.Rulesets.Osu.UI
             var osuBeatmap = (OsuBeatmap?)beatmap;
 
             RegisterPool<HitCircle, DrawableHitCircle>(20, 100);
+            if (osuBeatmap?.HitObjects.Any(o => o is DecoyCircle) == true)
+                RegisterPool<DecoyCircle, DrawableDecoyCircle>(4, 16);
 
             // handle edge cases where a beatmap has a slider with many repeats.
             int maxRepeatsOnOneSlider = 0;

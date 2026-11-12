@@ -44,6 +44,8 @@ namespace osu.Game.Configuration
         /// </remarks>
         public Type? SettingControlType { get; set; }
 
+        public bool HideInSettings { get; set; }
+
         public SettingSourceAttribute(Type declaringType, string label, string? description = null)
         {
             Label = getLocalisableStringFromMember(label) ?? string.Empty;
@@ -113,6 +115,9 @@ namespace osu.Game.Configuration
         {
             foreach (var (attr, property) in obj.GetOrderedSettingsSourceProperties())
             {
+                if (attr.HideInSettings)
+                    continue;
+
                 object value = property.GetValue(obj)!;
 
                 if (attr.SettingControlType != null)

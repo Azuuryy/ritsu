@@ -88,7 +88,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
 
             var difficulty = score.BeatmapInfo!.Difficulty.Clone();
 
-            score.Mods.OfType<IApplicableToDifficulty>().ForEach(m => m.ApplyToDifficulty(difficulty));
+            IApplicableToDifficulty.InApplicationOrder(score.Mods).ForEach(m => m.ApplyToDifficulty(difficulty));
 
             clockRate = ModUtils.CalculateRateWithMods(score.Mods);
 
@@ -128,7 +128,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
                 speedEstimatedSliderBreaks = calculateEstimatedSliderBreaks(osuAttributes.SpeedTopWeightedSliderFactor, osuAttributes);
             }
 
-            double multiplier = PERFORMANCE_BASE_MULTIPLIER;
+            double multiplier = PERFORMANCE_BASE_MULTIPLIER * (1 + osuAttributes.DecoyPerformanceBonus);
 
             if (score.Mods.Any(m => m is OsuModNoFail))
                 multiplier *= Math.Max(0.90, 1.0 - 0.02 * effectiveMissCount);

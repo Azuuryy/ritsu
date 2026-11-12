@@ -206,6 +206,17 @@ namespace osu.Game.Graphics
         public static IconUsage ModWindDown => get(OsuIconMapping.ModWindDown);
         public static IconUsage ModWindUp => get(OsuIconMapping.ModWindUp);
 
+        public static IconUsage ModStreamline => get(OsuIconMapping.ModStreamline);
+        public static IconUsage ModNoSliding => get(OsuIconMapping.ModNoSliding);
+        public static IconUsage ModDecoyCircles => get(OsuIconMapping.ModDecoyCircles);
+        public static IconUsage ModDirectionalFlicks => get(OsuIconMapping.ModDirectionalFlicks);
+        public static IconUsage ModReversedSliders => get(OsuIconMapping.ModReversedSliders);
+        public static IconUsage ModOneEye => get(OsuIconMapping.ModOneEye);
+        public static IconUsage ModSpacingAdjust => get(OsuIconMapping.ModSpacingAdjust);
+        public static IconUsage ModSpacingOvertime => get(OsuIconMapping.ModSpacingOvertime);
+        public static IconUsage ModCircleGeneration => get(OsuIconMapping.ModCircleGeneration);
+        public static IconUsage ModMissChallenge => get(OsuIconMapping.ModMissChallenge);
+
         private static IconUsage get(OsuIconMapping glyph) => new IconUsage((char)glyph, FONT_NAME);
 
         private enum OsuIconMapping
@@ -733,6 +744,36 @@ namespace osu.Game.Graphics
 
             [Description(@"Mods/mod-wind-up")]
             ModWindUp,
+
+            [Description(@"Mods/ritsu-streamline")]
+            ModStreamline,
+
+            [Description(@"Mods/ritsu-no-sliding")]
+            ModNoSliding,
+
+            [Description(@"Mods/ritsu-decoy-circles")]
+            ModDecoyCircles,
+
+            [Description(@"Mods/ritsu-directional-flicks")]
+            ModDirectionalFlicks,
+
+            [Description(@"Mods/ritsu-reversed-sliders")]
+            ModReversedSliders,
+
+            [Description(@"Mods/ritsu-one-eye")]
+            ModOneEye,
+
+            [Description(@"Mods/ritsu-spacing-adjust")]
+            ModSpacingAdjust,
+
+            [Description(@"Mods/ritsu-spacing-overtime")]
+            ModSpacingOvertime,
+
+            [Description(@"Mods/ritsu-circle-generation")]
+            ModCircleGeneration,
+
+            [Description(@"Mods/ritsu-miss-challenge")]
+            ModMissChallenge,
         }
 
         public class OsuIconStore : ITextureStore, ITexturedGlyphLookupStore

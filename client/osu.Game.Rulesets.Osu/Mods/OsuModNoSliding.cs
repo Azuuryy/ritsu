@@ -1,6 +1,8 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using osu.Game.Graphics;
+using osu.Framework.Graphics.Sprites;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,8 +24,11 @@ using osuTK;
 
 namespace osu.Game.Rulesets.Osu.Mods
 {
-    public class OsuModNoSliding : Mod, IApplicableAfterBeatmapConversion, IModosuMod
+    public class OsuModNoSliding : Mod, IApplicableAfterBeatmapConversion, IModosuMod, IBeatmapVariant
     {
+        [SettingSource("Transformation version", HideInSettings = true)]
+        public BindableInt TransformationVersion { get; } = new BindableInt();
+
         public override bool Ranked => false;
         public override bool AlwaysValidForSubmission => false;
         public override bool ValidForMultiplayer => false;
@@ -33,17 +38,47 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public override string Name => "No Sliding";
 
+        public override IconUsage? Icon => OsuIcon.ModNoSliding;
         public override string Acronym => "NL";
 
 
-        public override LocalisableString Description => @"Convert all sliders to streams.";
+        public override LocalisableString Description => @"Turn sliders into circles.";
 
-        public override ModType Type => ModType.Conversion;
+        public override ModType Type => ModType.DifficultyIncrease;
 
         public override Type[] IncompatibleMods => new[]
         {
             typeof(OsuModTargetPractice),
             typeof(OsuModStrictTracking),
+        };
+
+        public enum SliderTarget
+        {
+            All,
+            Short,
+            Long,
+            Repeats
+        }
+
+        public enum SliderConversion
+        {
+            Streams,
+            HeadOnly,
+            HeadAndTail
+        }
+
+        [SettingSource("Sliders to convert")]
+        public Bindable<SliderTarget> Target { get; } = new Bindable<SliderTarget>(SliderTarget.All);
+
+        [SettingSource("Conversion")]
+        public Bindable<SliderConversion> Conversion { get; } = new Bindable<SliderConversion>(SliderConversion.Streams);
+
+        [SettingSource("Short slider threshold (ms)")]
+        public BindableDouble ShortSliderThreshold { get; } = new BindableDouble(400)
+        {
+            MinValue = 50,
+            MaxValue = 5000,
+            Precision = 10
         };
 
         [SettingSource("Beat divisor")]
@@ -77,6 +112,43 @@ namespace osu.Game.Rulesets.Osu.Mods
 
                 var point = beatmap.ControlPointInfo.TimingPointAt(s.StartTime);
                 s.ApplyDefaults(beatmap.ControlPointInfo, beatmap.Difficulty);
+
+                bool selected = Target.Value switch
+                {
+                    SliderTarget.Short => s.Duration <= ShortSliderThreshold.Value,
+                    SliderTarget.Long => s.Duration > ShortSliderThreshold.Value,
+                    SliderTarget.Repeats => s.RepeatCount > 0,
+                    _ => true
+                };
+
+                if (!selected)
+                {
+                    newObjects.Add(s);
+                    continue;
+                }
+
+                if (Conversion.Value != SliderConversion.Streams)
+                {
+                    newObjects.Add(new HitCircle
+                    {
+                        StartTime = s.StartTime,
+                        Position = s.Position,
+                        NewCombo = s.NewCombo,
+                        Samples = s.HeadCircle.Samples.Select(sample => sample.With()).ToList()
+                    });
+
+                    if (Conversion.Value == SliderConversion.HeadAndTail && s.GetEndTime() > s.StartTime)
+                    {
+                        newObjects.Add(new HitCircle
+                        {
+                            StartTime = s.GetEndTime(),
+                            Position = s.EndPosition,
+                            Samples = s.TailSamples.Select(sample => sample.With()).ToList()
+                        });
+                    }
+
+                    continue;
+                }
 
                 if (FastPartsSlowingDown.Value && point.BeatLength < minAllowedBeatLength)
                 {
@@ -131,11 +203,13 @@ namespace osu.Game.Rulesets.Osu.Mods
 
             newObjects.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
 
-            for (int i = newObjects.Count - 1; i > 0; i--)
+            if (Target.Value == SliderTarget.All && Conversion.Value == SliderConversion.Streams)
             {
-                // filtering out circles closer than 1ms
-                if (Precision.AlmostEquals(newObjects[i].StartTime, newObjects[i - 1].StartTime, 1d))
-                    newObjects.RemoveAt(i);
+                for (int i = newObjects.Count - 1; i > 0; i--)
+                {
+                    if (Precision.AlmostEquals(newObjects[i].StartTime, newObjects[i - 1].StartTime, 1d))
+                        newObjects.RemoveAt(i);
+                }
             }
 
             osuBeatmap.HitObjects = newObjects;

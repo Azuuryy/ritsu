@@ -17,6 +17,8 @@ namespace osu.Game.Overlays.Mods
         /// </summary>
         public Mod Mod { get; }
 
+        public bool CanActivate => Mod is not IWorkInProgressMod;
+
         /// <summary>
         /// Whether the mod is currently selected.
         /// </summary>

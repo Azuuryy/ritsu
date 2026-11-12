@@ -1,6 +1,8 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using osu.Game.Graphics;
+using osu.Framework.Graphics.Sprites;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -31,6 +33,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         public override bool ValidForMultiplayerAsFreeMod => false;
 
         public override string Name => "Circle Generation";
+        public override IconUsage? Icon => OsuIcon.ModCircleGeneration;
         public override string Acronym => "CG";
         public override ModType Type => ModType.Conversion;
         public override LocalisableString Description => "Generate hit circles in a square pattern.";

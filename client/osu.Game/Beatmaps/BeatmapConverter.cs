@@ -22,6 +22,7 @@ namespace osu.Game.Beatmaps
         where T : HitObject
     {
         private event Action<HitObject, IEnumerable<HitObject>> objectConverted;
+        private bool detachNativeObjects;
 
         event Action<HitObject, IEnumerable<HitObject>> IBeatmapConverter.ObjectConverted
         {
@@ -41,7 +42,9 @@ namespace osu.Game.Beatmaps
         /// </summary>
         public abstract bool CanConvert();
 
-        public IBeatmap Convert(CancellationToken cancellationToken = default)
+        public IBeatmap Convert(CancellationToken cancellationToken = default) => Convert(cancellationToken, false);
+
+        public IBeatmap Convert(CancellationToken cancellationToken, bool detachNativeObjects)
         {
             // We always operate on a clone of the original beatmap, to not modify it game-wide
             var original = Beatmap.Clone();
@@ -55,7 +58,15 @@ namespace osu.Game.Beatmaps
             original.Breaks = new SortedList<BreakPeriod>(Comparer<BreakPeriod>.Default);
             original.Breaks.AddRange(Beatmap.Breaks);
 
-            return ConvertBeatmap(original, cancellationToken);
+            this.detachNativeObjects = detachNativeObjects;
+            try
+            {
+                return ConvertBeatmap(original, cancellationToken);
+            }
+            finally
+            {
+                this.detachNativeObjects = false;
+            }
         }
 
         /// <summary>
@@ -97,7 +108,7 @@ namespace osu.Game.Beatmaps
 
             foreach (var obj in hitObjects)
             {
-                if (obj is T tObj)
+                if (obj is T tObj && !detachNativeObjects)
                 {
                     result.Add(tObj);
                     continue;

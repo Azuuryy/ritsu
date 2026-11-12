@@ -266,11 +266,10 @@ namespace osu.Game.Overlays.Mods
             // Search for an exact acronym or name match, or otherwise default to the first visible mod.
             ModState? matchingMod =
                 visibleMods.FirstOrDefault(m => m.Mod.Acronym.Equals(SearchTerm, StringComparison.OrdinalIgnoreCase) || m.Mod.Name.Equals(SearchTerm, StringComparison.OrdinalIgnoreCase))
-                ?? visibleMods.FirstOrDefault();
-            var preselectedMod = matchingMod;
+                ?? visibleMods.FirstOrDefault(m => m.CanActivate);
 
             foreach (var mod in AllAvailableMods)
-                mod.Preselected.Value = mod == preselectedMod && SearchTextBox.Current.Value.Length > 0;
+                mod.Preselected.Value = mod == matchingMod && mod.CanActivate && SearchTextBox.Current.Value.Length > 0;
         }
 
         private void clearPreselection()
@@ -387,8 +386,12 @@ namespace osu.Game.Overlays.Mods
 
             foreach (var modState in AllAvailableMods)
             {
-                anyCustomisableModActive |= modState.Active.Value && modState.Mod.GetSettingsSourceProperties().Any();
-                anyModPendingConfiguration |= modState.PendingConfiguration;
+                if (modState.Active.Value && modState.Mod.GetSettingsSourceProperties().Any(setting => !setting.Item1.HideInSettings))
+                {
+                    anyCustomisableModActive = true;
+                    anyModPendingConfiguration |= modState.PendingConfiguration;
+                }
+
                 modState.PendingConfiguration = false;
             }
 

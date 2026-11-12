@@ -289,6 +289,9 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
 
                             return null;
 
+                        case OsuSkinComponents.DecoyCircle:
+                            return null;
+
                         default:
                             throw new UnsupportedSkinComponentException(lookup);
                     }

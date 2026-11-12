@@ -127,7 +127,10 @@ namespace osu.Game.Rulesets.Osu.Skinning.Argon
         {
             base.LoadComplete();
 
-            indexInCurrentCombo.BindValueChanged(index => number.Text = (index.NewValue + 1).ToString(), true);
+            if (drawableObject is DrawableDecoyCircle)
+                number.Text = string.Empty;
+            else
+                indexInCurrentCombo.BindValueChanged(index => number.Text = (index.NewValue + 1).ToString(), true);
 
             accentColour.BindValueChanged(colour =>
             {

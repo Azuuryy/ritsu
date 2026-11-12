@@ -33,8 +33,11 @@ namespace osu.Game.Rulesets.Osu.Mods
     /// <summary>
     /// Mod that randomises the positions of the <see cref="HitObject"/>s
     /// </summary>
-    public partial class OsuModRandomV2 : ModRandom, IApplicableToBeatmap, IModosuMod
+    public partial class OsuModRandomV2 : ModRandom, IApplicableToBeatmap, IModosuMod, IBeatmapVariant, IRetrySeededMod
     {
+        [SettingSource("Transformation version", HideInSettings = true)]
+        public BindableInt TransformationVersion { get; } = new BindableInt();
+
         public override bool Ranked => false;
         public override bool AlwaysValidForSubmission => false;
         public override bool ValidForMultiplayer => false;
@@ -112,8 +115,10 @@ namespace osu.Game.Rulesets.Osu.Mods
             { AngleEnum.Ninety, 1.57079f } // 90 degrees in radians
         };
 
-        // 3. Angle: Visible when CustomAngle is true
-        [SettingSource("Angle", "Angle selector", SettingControlType = typeof(AngleEnumSetting))]
+        [SettingSource("Patterns", "Choose any number of patterns. RandomV2 mixes them automatically. Clear the selection to edit the base angle.", SettingControlType = typeof(PatternSetting))]
+        public Bindable<int> PatternMask { get; } = new BindableInt();
+
+        [SettingSource("Angle without patterns", "Sets the base layout used for transitions and phrases that cannot fit a pattern.", SettingControlType = typeof(AngleEnumSetting))]
         public Bindable<AngleEnum> Angle { get; } = new Bindable<AngleEnum>
         {
             Default = AngleEnum.Star,
@@ -241,6 +246,16 @@ namespace osu.Game.Rulesets.Osu.Mods
             }
 
             osuBeatmap.HitObjects = ModosuHitObjectGenerationUtils.RepositionHitObjects(positionInfos,ExtendPlayArea.Value,InfinitePlayArea.Value);
+
+            if (CustomAngle.Value)
+            {
+                int version = TransformationVersion.Value == 0 ? DefaultTransformationVersion : TransformationVersion.Value;
+                if (version == 2)
+                    applyAdvancedPatterns(osuBeatmap, positionInfos);
+                else if (PatternMask.Value != 0)
+                    applyPatterns(osuBeatmap, positionInfos);
+            }
+
             // var updatedPositionInfos = ModosuHitObjectGenerationUtils.GeneratePositionInfos(osuBeatmap.HitObjects);
             // var count = 0;
             // var totalDistanceDifferece =  0f;
@@ -498,21 +513,6 @@ namespace osu.Game.Rulesets.Osu.Mods
             }
         }
 
-        public partial class AngleEnumSetting : SettingsEnumDropdown<AngleEnum>
-        {
-            protected override void LoadComplete()
-            {
-                base.LoadComplete();
-                if (SettingSourceObject is OsuModRandomV2 mod)
-                {
-                    mod.CustomAngle.BindValueChanged(val =>
-                    {
-                        if (val.NewValue) Show(); else Hide();
-                    }, true);
-                }
-            }
-        }
-
     public partial class PlayAutoplayButton : SettingsItem<bool>
     {
         private PlayButton playButton = null!;
@@ -583,33 +583,8 @@ namespace osu.Game.Rulesets.Osu.Mods
 
                     if (mod != null)
                     {
-                        var autoplay = new OsuModAutoplay();
-                        screenRunner.PerformFromScreen(screen =>
-                        {
-                            var modsProp = screen.GetType().GetProperty("Mods");
-                            if (modsProp == null) return;
-
-                            var modsList = modsProp.GetValue(screen);
-                            var valueProp = modsList?.GetType().GetProperty("Value");
-                            var currentMods = valueProp?.GetValue(modsList) as IReadOnlyList<Mod> ?? Array.Empty<Mod>();
-
-                            // Save original mods (without autoplay), matching SoloSongSelect.OnStart behaviour
-                            var savedMods = currentMods.Select(m => m.DeepClone()).ToArray();
-
-                            // Add autoplay mod (remove existing autoplay first)
-                            var newMods = currentMods.Where(m => !(m is ModAutoplay)).Concat(new[] { autoplay }).ToArray();
-                            valueProp?.SetValue(modsList, newMods);
-
-                            // Start the game via OnStart — this will save modsAtGameplayStart
-                            // (which now includes autoplay). We fix this by restoring savedMods
-                            // after OnStart runs, so revertMods will restore the correct mods.
-                            var onStart = screen.GetType().GetMethod("OnStart", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                            onStart?.Invoke(screen, null);
-
-                            // Overwrite modsAtGameplayStart so revertMods restores original mods (without autoplay)
-                            var modsAtStartProp = screen.GetType().GetField("modsAtGameplayStart", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                            modsAtStartProp?.SetValue(screen, savedMods);
-                        }, new[] { typeof(SoloSongSelect) });
+                        screenRunner.PerformFromScreen(screen => ((SoloSongSelect)screen).StartModPreview(new OsuModAutoplay()),
+                            new[] { typeof(SoloSongSelect) });
                     }
                 };
             }

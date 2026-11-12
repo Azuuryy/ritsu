@@ -12,6 +12,7 @@ using osu.Framework.Platform;
 using osu.Framework.Threading;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
+using osu.Game.Overlays.Settings;
 using osu.Game.Replays;
 using osu.Game.Rulesets.Osu.Mods;
 using osu.Game.Rulesets.Mods;
@@ -25,14 +26,14 @@ namespace osu.Game.Rulesets.Osu.UI
         private readonly IBeatmap beatmap;
         private readonly IReadOnlyList<Mod> mods;
         private readonly Func<Replay?> replayFunc;
-        private readonly Bindable<IReadOnlyList<Mod>> songSelectMods;
+        private readonly IReadOnlyList<Mod> songSelectMods;
         private ScheduledDelegate? pendingReprocess;
         private readonly List<(object bindable, Delegate handler)> boundHandlers = new List<(object, Delegate)>();
 
         [Resolved]
         private GameHost host { get; set; } = null!;
 
-        public RandomV2Settings(OsuModRandomV2 mod, IBeatmap beatmap, IReadOnlyList<Mod> mods, Func<Replay?> replayFunc, Bindable<IReadOnlyList<Mod>> songSelectMods)
+        public RandomV2Settings(OsuModRandomV2 mod, IBeatmap beatmap, IReadOnlyList<Mod> mods, Func<Replay?> replayFunc, IReadOnlyList<Mod> songSelectMods, BindableBool trajectoryVisible)
             : base("RandomV2 Settings")
         {
             this.mod = mod;
@@ -41,6 +42,21 @@ namespace osu.Game.Rulesets.Osu.UI
             this.replayFunc = replayFunc;
             this.songSelectMods = songSelectMods;
 
+            Add(new SettingsCheckbox { LabelText = "Numbered trajectory", Current = trajectoryVisible });
+            if (mod.Seed.Value is int seed)
+            {
+                Add(new SettingsButton
+                {
+                    Text = $"Use this seed ({seed})",
+                    Action = () =>
+                    {
+                        copySettingsToSongSelectMods();
+                        if (songSelectMods.OfType<OsuModRandomV2>().FirstOrDefault() is { } selected)
+                            selected.Seed.Value = seed;
+                    },
+                });
+            }
+
             var excludedProperties = new HashSet<string> { "Seed" };
             foreach (var (attr, prop) in mod.GetSettingsSourceProperties())
             {
@@ -48,7 +64,7 @@ namespace osu.Game.Rulesets.Osu.UI
                 if (bindable == null)
                     continue;
 
-                if (excludedProperties.Contains(prop.Name))
+                if (attr.HideInSettings || excludedProperties.Contains(prop.Name))
                     continue;
 
                 BindToReprocess(bindable);
@@ -110,6 +126,7 @@ namespace osu.Game.Rulesets.Osu.UI
 
             pendingReprocess = Scheduler.AddDelayed(() =>
             {
+                mod.TransformationVersion.Value = mod.DefaultTransformationVersion;
                 mod.ApplyToBeatmap(beatmap);
 
                 // Copy settings back to song-select mods so BeatmapDifficultyCache's ModSettingChangeTracker picks up the change
@@ -132,14 +149,14 @@ namespace osu.Game.Rulesets.Osu.UI
 
         private void copySettingsToSongSelectMods()
         {
-            var currentMods = songSelectMods.Value;
-            var targetMod = currentMods.OfType<OsuModRandomV2>().FirstOrDefault();
+            var targetMod = songSelectMods.OfType<OsuModRandomV2>().FirstOrDefault();
             if (targetMod == null || targetMod == mod)
                 return;
 
-            foreach (var (_, prop) in mod.GetSettingsSourceProperties())
+            targetMod.TransformationVersion.Value = 0;
+            foreach (var (attr, prop) in mod.GetSettingsSourceProperties())
             {
-                if (prop.Name == nameof(ModRandom.Seed))
+                if (attr.HideInSettings || prop.Name == nameof(ModRandom.Seed))
                     continue;
 
                 var sourceBindable = prop.GetValue(mod);

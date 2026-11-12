@@ -45,6 +45,7 @@ namespace osu.Game.Screens.Play
 
         public Action? OnResume { get; init; }
         public Action? OnRetry { get; init; }
+        public Action? OnRetryNewSeed { get; init; }
         public Action? OnQuit { get; init; }
 
         // ─── Torii: confirm-on-long-attempts gating ──────────────────────────
@@ -194,7 +195,10 @@ namespace osu.Game.Screens.Play
             // long_attempt_threshold_ms. Continue/Save Replay are explicitly
             // not confirmable — there's nothing to lose by clicking them.
             if (OnRetry != null)
-                AddButton(GameplayMenuOverlayStrings.Retry, colours.YellowDark, () => OnRetry.Invoke(), confirmable: true);
+                AddButton(OnRetryNewSeed == null ? GameplayMenuOverlayStrings.Retry : "Retry same seed", colours.YellowDark, () => OnRetry.Invoke(), confirmable: true);
+
+            if (OnRetryNewSeed != null)
+                AddButton("New seed", colours.YellowDark, () => OnRetryNewSeed.Invoke(), confirmable: true);
 
             if (OnQuit != null)
                 AddButton(GameplayMenuOverlayStrings.Quit, new Color4(170, 27, 39, 255), () => OnQuit.Invoke(), confirmable: true);

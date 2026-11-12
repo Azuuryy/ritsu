@@ -30,6 +30,7 @@ namespace osu.Game.Rulesets.Osu.Replays
 
         protected Replay Replay;
         protected List<ReplayFrame> Frames => Replay.Frames;
+        public double FrameRate { get; set; } = 60;
         private readonly IReadOnlyList<IApplicableToRate> timeAffectingMods;
 
         protected OsuAutoGeneratorBase(IBeatmap beatmap, IReadOnlyList<Mod> mods)
@@ -78,7 +79,7 @@ namespace osu.Game.Rulesets.Osu.Replays
         /// </summary>
         /// <param name="time">The time of the previous frame.</param>
         protected double GetFrameDelay(double time)
-            => ApplyModsToRate(time, 1000.0 / 60);
+            => ApplyModsToRate(time, 1000.0 / FrameRate);
 
         private class ReplayFrameComparer : IComparer<ReplayFrame>
         {

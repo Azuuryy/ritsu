@@ -281,6 +281,12 @@ namespace osu.Game.Beatmaps
             if (rulesetInstance == null)
                 throw new RulesetLoadException("Creating ruleset instance failed when attempting to create playable beatmap.");
 
+            foreach (var mod in mods)
+            {
+                if (mod is IBeatmapVariant variant && (variant.TransformationVersion.Value < 0 || variant.TransformationVersion.Value > variant.LatestTransformationVersion))
+                    throw new UnsupportedBeatmapVariantException(mod, variant.TransformationVersion.Value);
+            }
+
             IBeatmapConverter converter = CreateBeatmapConverter(Beatmap, rulesetInstance);
 
             // Check if the beatmap can be converted
@@ -295,7 +301,7 @@ namespace osu.Game.Beatmaps
             }
 
             // Convert
-            IBeatmap converted = converter.Convert(token);
+            IBeatmap converted = converter.Convert(token, mods.Any(mod => mod is IBeatmapVariant));
 
             // Apply conversion mods to the result
             foreach (var mod in mods.OfType<IApplicableAfterBeatmapConversion>())
@@ -305,13 +311,10 @@ namespace osu.Game.Beatmaps
             }
 
             // Apply difficulty mods
-            if (mods.Any(m => m is IApplicableToDifficulty))
+            foreach (var mod in IApplicableToDifficulty.InApplicationOrder(mods))
             {
-                foreach (var mod in mods.OfType<IApplicableToDifficulty>())
-                {
-                    token.ThrowIfCancellationRequested();
-                    mod.ApplyToDifficulty(converted.Difficulty);
-                }
+                token.ThrowIfCancellationRequested();
+                mod.ApplyToDifficulty(converted.Difficulty);
             }
 
             var processor = rulesetInstance.CreateBeatmapProcessor(converted);

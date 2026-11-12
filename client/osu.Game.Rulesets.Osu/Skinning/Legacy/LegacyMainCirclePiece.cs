@@ -417,7 +417,7 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
                 CircleSprite.KiaiGlowColour = LegacyColourCompatibility.DisallowZeroAlpha(kiaiTintColour);
             }, true);
 
-            if (hasNumber)
+            if (hasNumber && drawableObject is not DrawableDecoyCircle)
                 indexInCurrentCombo.BindValueChanged(index => hitCircleText.Text = (index.NewValue + 1).ToString(), true);
 
             // Torii: swap to the per-combo variant texture for the active slot.

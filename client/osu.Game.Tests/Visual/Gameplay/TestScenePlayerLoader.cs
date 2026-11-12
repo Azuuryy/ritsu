@@ -399,6 +399,40 @@ namespace osu.Game.Tests.Visual.Gameplay
         }
 
         [Test]
+        public void TestRandomV2RetrySeedsStayInsidePlayerLoader()
+        {
+            var selected = new OsuModRandomV2();
+            SoloPlayer solo = null;
+            int? firstSeed = null;
+            AddStep("load seeded solo player", () =>
+            {
+                SelectedMods.Value = new[] { selected };
+                prepareBeatmap();
+                LoadScreen(loader = new TestPlayerLoader(() => solo = new SoloPlayer()));
+            });
+            AddUntilStep("wait for first attempt", () => solo?.IsCurrentScreen() == true);
+            AddStep("quick retry", () =>
+            {
+                firstSeed = solo.GameplayState.Mods.OfType<OsuModRandomV2>().Single().Seed.Value;
+                var previous = solo;
+                solo = null;
+                previous.Restart(true);
+            });
+            AddUntilStep("wait for retry", () => solo?.IsCurrentScreen() == true);
+            AddAssert("seed held", () => solo.GameplayState.Mods.OfType<OsuModRandomV2>().Single().Seed.Value, () => Is.EqualTo(firstSeed).And.Not.Null);
+            AddStep("retry with new seed", () =>
+            {
+                var previous = solo;
+                solo = null;
+                previous.ChildrenOfType<PauseOverlay>().Single().OnRetryNewSeed!.Invoke();
+            });
+            AddUntilStep("wait for new attempt", () => solo?.IsCurrentScreen() == true);
+            AddAssert("new seed differs", () => solo.GameplayState.Mods.OfType<OsuModRandomV2>().Single().Seed.Value, () => Is.Not.EqualTo(firstSeed).And.Not.Null);
+            AddAssert("song select seed untouched", () => selected.Seed.Value, () => Is.Null);
+            AddAssert("version stored on score", () => solo.Score.ScoreInfo.Mods.OfType<OsuModRandomV2>().Single().TransformationVersion.Value, () => Is.EqualTo(1));
+        }
+
+        [Test]
         public void TestLeaderboardForciblyRefetchedOnRestart([Values] bool quickRestart)
         {
             AddStep("load player", () => resetPlayer(true));

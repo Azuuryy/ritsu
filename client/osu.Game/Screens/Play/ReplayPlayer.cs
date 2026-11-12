@@ -35,6 +35,15 @@ namespace osu.Game.Screens.Play
     {
         public const double BASE_SEEK_AMOUNT = 1000;
 
+        internal double? InitialTime { get; init; }
+
+        public override void OnEntering(ScreenTransitionEvent e)
+        {
+            base.OnEntering(e);
+            if (InitialTime is double time && LoadedBeatmapSuccessfully)
+                Schedule(() => Seek(Math.Max(0, time)));
+        }
+
         private readonly Func<IBeatmap, IReadOnlyList<Mod>, Score> createScore;
 
         [Cached(typeof(IGameplayLeaderboardProvider))]
@@ -54,6 +63,8 @@ namespace osu.Game.Screens.Play
         private PlaybackSettings? playbackSettings;
 
         public ReplayOverlay ReplayOverlay { get; private set; } = null!;
+
+        public IReadOnlyList<Mod>? ModPreviewSettings { get; init; }
 
         protected override bool CheckModsAllowFailure()
         {
