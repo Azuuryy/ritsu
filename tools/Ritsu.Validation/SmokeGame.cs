@@ -5,9 +5,12 @@ using osu.Framework.Platform;
 using osu.Framework.Screens;
 using osu.Game;
 using osu.Game.Configuration;
+using osu.Game.IO;
 using osu.Game.Overlays;
 using osu.Game.Overlays.SkinEditor;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Osu.Mods;
+using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Scoring;
 using osu.Game.Screens.Edit;
 using osu.Game.Screens.Menu;
@@ -18,10 +21,13 @@ using SixLabors.ImageSharp;
 
 internal partial class SmokeGame : OsuGame
 {
+    private const int variant_seed = 3817;
+
     private readonly string fixtures;
     private readonly string evidence;
     private readonly NetworkAudit audit;
     private readonly bool reopen;
+    private readonly bool linked;
     private readonly Stopwatch elapsed = Stopwatch.StartNew();
     private readonly List<string> checks = new();
     private Task pending = Task.CompletedTask;
@@ -31,19 +37,32 @@ internal partial class SmokeGame : OsuGame
     private bool complete;
     private double nextAction;
 
-    public SmokeGame(string fixtures, string evidence, NetworkAudit audit, bool reopen = false)
+    public SmokeGame(string fixtures, string evidence, NetworkAudit audit, bool reopen = false, bool linked = false)
     {
         this.fixtures = fixtures;
         this.evidence = evidence;
         this.audit = audit;
         this.reopen = reopen;
+        this.linked = linked;
         Directory.CreateDirectory(evidence);
     }
 
     public override void SetHost(GameHost host)
     {
         // A test run must not reuse the baseline host's imported library.
-        Storage = host.GetStorage(Path.Combine(evidence, "profile"));
+        var profileStorage = host.GetStorage(Path.Combine(evidence, "profile"));
+        Storage = profileStorage;
+        if (linked)
+        {
+            string linkedPath = Path.Combine(evidence, "linked-library");
+            Directory.CreateDirectory(linkedPath);
+            using (var linkedConfig = new OsuConfigManager(host.GetStorage(linkedPath)))
+                linkedConfig.SetValue(OsuSetting.ShowFirstRunSetup, false);
+            using (var config = new StorageConfigManager(profileStorage))
+                config.SetValue(StorageConfig.FullPath, linkedPath);
+            Storage = new OsuStorage(host, profileStorage);
+        }
+
         base.SetHost(host);
         LocalConfig.SetValue(OsuSetting.ShowFirstRunSetup, false);
         LocalConfig.SetValue(OsuSetting.ShowToriiWelcome, false);
@@ -64,11 +83,15 @@ internal partial class SmokeGame : OsuGame
                     if (ScreenStack?.CurrentScreen is not MainMenu menu || !menu.IsLoaded) return;
                     if (elapsed.Elapsed.TotalSeconds < 10) return;
                     Check(!API.IsLoggedIn, "menu available without an account");
+                    if (linked)
+                        Check(Path.GetFullPath(Storage.GetFullPath(".")).TrimEnd(Path.DirectorySeparatorChar)
+                              == Path.Combine(evidence, "linked-library"), "uses the isolated linked library in place");
                     if (reopen)
                     {
                         var persistedInfo = ScoreManager.Query(s => s.Hash != "") ?? throw new Exception("Score missing after restart");
                         savedScore = ScoreManager.GetScore(persistedInfo) ?? throw new Exception("Replay missing after restart");
                         Check(savedScore.Replay?.Frames.Count > 0, "score and replay persisted across process restart");
+                        checkVariantScore(savedScore.ScoreInfo);
                         Beatmap.Value = BeatmapManager.GetWorkingBeatmap(persistedInfo.BeatmapInfo!);
                         Ruleset.Value = persistedInfo.Ruleset;
                         SelectedMods.Value = persistedInfo.Mods;
@@ -103,7 +126,17 @@ internal partial class SmokeGame : OsuGame
                     stage++;
                     break;
                 case 4:
-                    SelectedMods.Value = new[] { new OsuModNoFail() };
+                    SelectedMods.Value = new Mod[]
+                    {
+                        new OsuModNoFail(),
+                        new OsuModRandomV2
+                        {
+                            Seed = { Value = variant_seed },
+                            CustomAngle = { Value = true },
+                            SeparatePatterns = { Value = true },
+                            JumpPatterns = { Value = 1 << 11 },
+                        },
+                    };
                     player = new BackgroundSoloPlayer();
                     ScreenStack.Push(new BackgroundPlayerLoader(() => player));
                     stage++;
@@ -111,15 +144,18 @@ internal partial class SmokeGame : OsuGame
                     break;
                 case 5:
                     if (ScreenStack.CurrentScreen is not Player p || !p.LoadedBeatmapSuccessfully) return;
-                    Check(true, "normal solo gameplay loaded (NF, no synthetic input)");
+                    Check(true, "solo RandomV2 gameplay loaded (NF, no synthetic input)");
+                    File.WriteAllText(Path.Combine(evidence, "variant-positions.json"), variantPositions(p));
                     pending = Capture("03-gameplay");
                     stage++;
                     break;
                 case 6:
                     if (ScreenStack.CurrentScreen is not ResultsScreen results || !results.IsLoaded) return;
-                    var scoreInfo = ScoreManager.Query(s => s.Hash != "") ?? throw new Exception("Local score was not saved");
+                    var scoreInfo = ScoreManager.Query(s => s.Hash != "");
+                    if (scoreInfo == null) return;
                     savedScore = ScoreManager.GetScore(scoreInfo) ?? throw new Exception("Saved replay was not readable");
                     Check(savedScore.Replay != null && savedScore.Replay.Frames.Count > 0, "normal score and recorded replay saved");
+                    checkVariantScore(savedScore.ScoreInfo);
                     stage = 18;
                     nextAction = Time.Current + 1800;
                     break;
@@ -139,13 +175,18 @@ internal partial class SmokeGame : OsuGame
                     break;
                 case 17:
                     Check(true, "exported OSR re-import completed");
-                    PerformFromScreen(screen => screen.Push(new BackgroundPlayerLoader(() => new BackgroundReplayPlayer(savedScore!))), new[] { typeof(SoloSongSelect) });
+                    PerformFromScreen(screen =>
+                    {
+                        SelectedMods.Value = savedScore!.ScoreInfo.Mods;
+                        screen.Push(new BackgroundPlayerLoader(() => new BackgroundReplayPlayer(savedScore)));
+                    }, new[] { typeof(SoloSongSelect) });
                     stage = 9;
                     nextAction = Time.Current + 5000;
                     break;
                 case 9:
                     if (ScreenStack.CurrentScreen is not ReplayPlayer replay || !replay.LoadedBeatmapSuccessfully) return;
                     Check(true, "saved replay playback loaded");
+                    checkVariantPositions(replay);
                     pending = Capture("05-replay");
                     stage++;
                     break;
@@ -196,6 +237,7 @@ internal partial class SmokeGame : OsuGame
                 case 31:
                     if (ScreenStack.CurrentScreen is not ReplayPlayer restarted || !restarted.LoadedBeatmapSuccessfully) return;
                     Check(true, "replay playback loaded after process restart");
+                    checkVariantPositions(restarted);
                     pending = Capture("09-replay-after-restart");
                     stage = 32;
                     nextAction = Time.Current + 1800;
@@ -211,6 +253,19 @@ internal partial class SmokeGame : OsuGame
             Finish(exception.ToString());
         }
     }
+
+    private void checkVariantScore(ScoreInfo score)
+    {
+        var variant = score.Mods.OfType<OsuModRandomV2>().Single();
+        Check(variant.Seed.Value == variant_seed && variant.TransformationVersion.Value == 2 && variant.SeparatePatterns.Value && variant.JumpPatterns.Value == 1 << 11,
+            "score retained RandomV2 seed, settings and transformation version");
+    }
+
+    private void checkVariantPositions(Player player) =>
+        Check(variantPositions(player) == File.ReadAllText(Path.Combine(evidence, "variant-positions.json")), "replay reconstructed the playable variant positions");
+
+    private static string variantPositions(Player player) => JsonSerializer.Serialize(player.GameplayState.Beatmap.HitObjects.OfType<OsuHitObject>()
+        .Select(obj => new { obj.StartTime, obj.Position.X, obj.Position.Y, EndX = obj.EndPosition.X, EndY = obj.EndPosition.Y }));
 
     private void Check(bool condition, string message)
     {
@@ -237,9 +292,10 @@ internal partial class SmokeGame : OsuGame
 
     private partial class BackgroundPlayerLoader : PlayerLoader
     {
+        protected override bool ReadyForGameplay => true;
+
         public BackgroundPlayerLoader(Func<Player> createPlayer) : base(createPlayer)
         {
-            WindowShouldBeActiveForGameplayStart = false;
         }
     }
 

@@ -51,10 +51,12 @@ using DesktopGameHost host = Host.GetSuitableDesktopHost("ritsu-validation", new
     PortableInstallation = true,
     FriendlyGameName = "Torii — isolated Ritsu validation",
 });
-if (args.Length == 3 && args[0] is "--smoke" or "--reopen")
+if (args.Length == 3 && args[0] is "--smoke" or "--reopen" or "--linked-smoke" or "--linked-reopen")
 {
     using var smokeAudit = new NetworkAudit();
-    host.Run(new SmokeGame(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), smokeAudit, args[0] == "--reopen"));
+    bool linked = args[0].StartsWith("--linked-", StringComparison.Ordinal);
+    bool reopen = args[0].EndsWith("reopen", StringComparison.Ordinal);
+    host.Run(new SmokeGame(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), smokeAudit, reopen, linked));
     return;
 }
 

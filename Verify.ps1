@@ -1,4 +1,4 @@
-param([switch]$IncludeGameScenarios)
+param([switch]$IncludeGameScenarios, [switch]$LinkedLibrary)
 $ErrorActionPreference = 'Stop'
 $ritsuCache = Join-Path $PSScriptRoot '.cache'
 $ritsuEvidence = Join-Path $ritsuCache ('verification-' + [guid]::NewGuid().ToString('N'))
@@ -20,7 +20,9 @@ New-Item -ItemType Directory -Force $ritsuEvidence | Out-Null
 & python (Join-Path $PSScriptRoot 'tools/Create-Fixtures.py')
 if ($LASTEXITCODE -ne 0) { throw 'Fixture generation failed. Python 3 is required for graphical verification.' }
 @('WindowMode = Windowed','WindowedSize = 1280x720','VolumeUniversal = 0','InactiveVolume = 0') | Set-Content -LiteralPath (Join-Path $ritsuTestDirectory 'framework.ini')
-foreach ($ritsuScenario in @('--smoke','--reopen')) {
+$ritsuScenarioPrefix = if ($LinkedLibrary) { '--linked-' } else { '--' }
+foreach ($ritsuScenarioName in @('smoke','reopen')) {
+    $ritsuScenario = $ritsuScenarioPrefix + $ritsuScenarioName
     $ritsuLabel = $ritsuScenario.TrimStart('-')
     $ritsuArguments = @($ritsuScenario, ('"' + $ritsuFixtures + '"'), ('"' + $ritsuEvidence + '"'))
     $ritsuProcess = Start-Process -FilePath $ritsuExecutable -ArgumentList $ritsuArguments -WorkingDirectory $ritsuTestDirectory -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $ritsuEvidence "$ritsuLabel.log") -RedirectStandardError (Join-Path $ritsuEvidence "$ritsuLabel-errors.log")
