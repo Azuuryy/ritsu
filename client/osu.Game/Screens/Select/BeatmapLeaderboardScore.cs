@@ -16,6 +16,8 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.Database;
+using osu.Game.Collections;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Drawables;
 using osu.Game.Configuration;
@@ -79,6 +81,15 @@ namespace osu.Game.Screens.Select
 
         [Resolved(CanBeNull = true)]
         private RitsuProfileManager? ritsuProfiles { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private ManageCollectionsDialog? collections { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private RealmAccess? collectionRealm { get; set; }
 
         [Resolved]
         private OsuConfigManager config { get; set; } = null!;
@@ -677,12 +688,19 @@ namespace osu.Game.Screens.Select
                 if (copyableMods.Length > 0)
                     items.Add(new OsuMenuItem(SongSelectStrings.UseTheseMods, MenuItemType.Highlighted, () => SelectedMods.Value = copyableMods));
 
+                var transfer = RitsuScoreTransferMenu.Create(ritsuProfiles, dialogOverlay, Score.ID);
+                if (transfer != null)
+                    items.Add(transfer);
+
                 if (ritsuProfiles?.BelongsToActiveProfile(Score.ID) == true)
                 {
                     bool included = ritsuProfiles.IsScoreIncludedInPP(Score.ID);
                     items.Add(new OsuMenuItem(included ? "Exclude this score from profile PP" : "Include this score in profile PP", MenuItemType.Standard,
                         () => ritsuProfiles.SetScoreIncludedInPP(Score.ID, !included)));
                 }
+
+                if (library != null && collectionRealm != null && Score.BeatmapInfo is { } beatmap)
+                    items.Add(new OsuMenuItem(CommonStrings.Collections) { Items = RitsuCollectionMenu.Create(collectionRealm, collections, beatmap, library, ritsuProfiles, Score, game) });
 
                 if (Score.OnlineID > 0)
                     items.Add(new OsuMenuItem(CommonStrings.CopyLink, MenuItemType.Standard, () => game?.CopyToClipboard($@"{api.Endpoints.WebsiteUrl}/scores/{Score.OnlineID}")));

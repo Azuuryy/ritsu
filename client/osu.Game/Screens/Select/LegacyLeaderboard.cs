@@ -169,6 +169,7 @@ namespace osu.Game.Screens.Select
                     Items = osu.Game.Offline.RitsuOffline.Enabled
                         ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
                         : Enum.GetValues<BeatmapLeaderboardScope>(),
+                    RitsuOrderKey = osu.Game.Offline.RitsuMenuOrdering.Scope,
                     ItemText = scope => scope == BeatmapLeaderboardScope.Local ? "Current profile" : scope == BeatmapLeaderboardScope.LocalAll ? "All profiles" : $@"{scope} Ranking",
                     Current = { BindTarget = Scope },
                 },
@@ -581,6 +582,10 @@ namespace osu.Game.Screens.Select
 
                     if (copyableMods.Length > 0 && selectedMods != null)
                         items.Add(new OsuMenuItem(SongSelectStrings.UseTheseMods, MenuItemType.Highlighted, () => selectedMods.Value = copyableMods));
+
+                    var transfer = RitsuScoreTransferMenu.Create(ritsuProfiles, dialogOverlay, score.ID);
+                    if (transfer != null)
+                        items.Add(transfer);
 
                     if (ritsuProfiles?.BelongsToActiveProfile(score.ID) == true)
                     {

@@ -261,6 +261,39 @@ namespace osu.Game.Offline
             Changed?.Invoke();
         }
 
+        public Guid? GetScoreProfileId(Guid scoreId)
+        {
+            lock (sync)
+                return data.Scores.TryGetValue(scoreId, out var metadata) ? metadata.ProfileId : null;
+        }
+
+        public bool TransferScore(Guid scoreId, Guid sourceProfileId, Guid targetProfileId)
+        {
+            if (!realm.Run(r => r.Find<ScoreInfo>(scoreId) is { DeletePending: false }))
+                return false;
+
+            lock (sync)
+            {
+                if (sourceProfileId == targetProfileId || data.Profiles.All(p => p.Id != targetProfileId)
+                    || !data.Scores.TryGetValue(scoreId, out var metadata) || metadata.ProfileId != sourceProfileId)
+                    return false;
+
+                metadata.ProfileId = targetProfileId;
+                try
+                {
+                    save();
+                }
+                catch
+                {
+                    metadata.ProfileId = sourceProfileId;
+                    throw;
+                }
+            }
+
+            Changed?.Invoke();
+            return true;
+        }
+
         public void SetScoreIncludedInPP(Guid scoreId, bool include)
         {
             lock (sync)
@@ -378,6 +411,7 @@ namespace osu.Game.Offline
 
         private Guid[] getBeatmapIdsInSet(Guid beatmapSetId) => realm.Run(r => r.All<BeatmapInfo>()
             .Filter($"{nameof(BeatmapInfo.BeatmapSet)}.{nameof(BeatmapSetInfo.ID)} == $0", beatmapSetId)
+            .AsEnumerable()
             .Select(beatmap => beatmap.ID).ToArray());
 
         private bool isScoreIncludedInPP(RitsuProfile profile, ScoreInfo score)

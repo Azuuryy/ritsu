@@ -3,11 +3,14 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using osu.Framework.Platform;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
 using NUnit.Framework;
 using osu.Game.Offline;
+using osu.Game.Overlays;
+using osu.Game.Overlays.Dialog;
 using osu.Game.Scoring;
 using osu.Game.Users;
 using SixLabors.ImageSharp;
@@ -53,6 +56,59 @@ namespace osu.Game.Tests.Offline
             Assert.That(score.User.LocalFlagFileName, Is.EqualTo(savedFirst.FlagFileName));
             reloaded.SetCountry(first, CountryCode.CA);
             Assert.That(reloaded.GetProfiles().Single(p => p.Id == first).FlagFileName, Is.Null);
+        }
+
+        [Test]
+        public Task TestTransferScoreBetweenProfiles() => Task.Run(() =>
+        {
+            var storage = new NativeStorage(Path.Combine(Environment.CurrentDirectory, ".cache", "transfer-test-" + Guid.NewGuid().ToString("N")));
+            using var realm = new RealmAccess(storage, "scores");
+            var profiles = new RitsuProfileManager(storage, realm);
+            Guid source = profiles.ActiveProfileId;
+            profiles.AddProfile("Destination");
+            Guid target = profiles.ActiveProfileId;
+            var ruleset = CreateRuleset();
+            var set = CreateBeatmapSet(ruleset);
+            var score = new ScoreInfo(set.Beatmaps[0], ruleset) { TotalScore = 100, PP = 150 };
+            Guid scoreId = score.ID;
+            realm.Write(r =>
+            {
+                r.Add(set);
+                r.Add(score);
+            });
+            profiles.AssociateNewScore(scoreId, source, "osu", 42, "[]");
+            profiles.SetScoreIncludedInPP(scoreId, false);
+            int changes = 0;
+            profiles.Changed += () => changes++;
+
+            var dialogs = new TransferTestDialogOverlay();
+            Assert.That(RitsuScoreTransferMenu.Create(profiles, dialogs, Guid.NewGuid()), Is.Null);
+            var menu = RitsuScoreTransferMenu.Create(profiles, dialogs, scoreId);
+            Assert.That(menu, Is.Not.Null);
+            Assert.That(menu!.Items.Select(item => item.Text.Value.ToString()), Is.EqualTo(new[] { "Destination" }));
+            menu.Items.Single().Action.Value!();
+            Assert.That(dialogs.CurrentDialog, Is.InstanceOf<ConfirmDialog>());
+
+            Assert.That(profiles.TransferScore(scoreId, source, source), Is.False);
+            Assert.That(profiles.TransferScore(scoreId, source, Guid.NewGuid()), Is.False);
+            Assert.That(profiles.TransferScore(Guid.NewGuid(), source, target), Is.False);
+            Assert.That(profiles.TransferScore(scoreId, source, target), Is.True);
+            Assert.That(profiles.TransferScore(scoreId, source, target), Is.False);
+            Assert.That(changes, Is.EqualTo(1));
+            Assert.That(profiles.GetScores(source, "osu"), Is.Empty);
+            Assert.That(profiles.GetScores(target, "osu").Select(s => s.ID), Is.EqualTo(new[] { scoreId }));
+            Assert.That(profiles.IsScoreIncludedInPP(scoreId), Is.False);
+
+            var reloaded = new RitsuProfileManager(storage, realm);
+            Assert.That(reloaded.GetScoreProfileId(scoreId), Is.EqualTo(target));
+            Assert.That(reloaded.IsScoreIncludedInPP(scoreId), Is.False);
+            Assert.That(realm.Run(r => r.Find<ScoreInfo>(scoreId)?.TotalScore), Is.EqualTo(100));
+        });
+
+        private sealed class TransferTestDialogOverlay : IDialogOverlay
+        {
+            public PopupDialog? CurrentDialog { get; private set; }
+            public void Push(PopupDialog dialog) => CurrentDialog = dialog;
         }
 
         [Test]
@@ -114,6 +170,27 @@ namespace osu.Game.Tests.Offline
                 Assert.That(profiles.GetResultRanks(unassociatedId, mapId, "osu"), Is.Null);
                 Assert.That(profiles.GetBestScores(firstProfile, "osu").Select(s => s.ID), Is.EqualTo(new[] { otherBestId, currentId }));
             }
+        }
+
+        [Test]
+        public void TestBeatmapSetPPStatusUsesLocalDifficulties()
+        {
+            var storage = new NativeStorage(Path.Combine(Environment.CurrentDirectory, ".cache", "profile-set-status-test-" + Guid.NewGuid().ToString("N")));
+            using var realm = new RealmAccess(storage, "scores");
+            var profiles = new RitsuProfileManager(storage, realm);
+            Guid profileId = profiles.ActiveProfileId;
+            var set = CreateBeatmapSet(CreateRuleset());
+            Guid setId = set.ID;
+            Guid beatmapId = set.Beatmaps[0].ID;
+            realm.Write(r => r.Add(set));
+
+            Assert.That(profiles.AreBeatmapSetScoresIncludedInPP(profileId, setId), Is.True);
+
+            profiles.SetBeatmapScoresIncludedInPP(profileId, beatmapId, false, setId);
+            Assert.That(profiles.AreBeatmapSetScoresIncludedInPP(profileId, setId), Is.False);
+
+            profiles.SetBeatmapSetScoresIncludedInPP(profileId, setId, true);
+            Assert.That(profiles.AreBeatmapSetScoresIncludedInPP(profileId, setId), Is.True);
         }
 
         [Test]
