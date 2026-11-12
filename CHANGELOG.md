@@ -4,6 +4,34 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
+## [0.5.0] - 2026-11-12
+
+### Added
+
+- Song Select search history, favourites and named pinned searches are available from the search bar, with a slanted popover aligned to the bar and a clear action beside recent searches. Pinned searches restore their filters, collection, sort and group; right-click one to rename it, replace its settings or create a smart collection.
+- Filter suggestions appear at the search cursor with **Ctrl+Left Alt** and can be chosen with the arrow keys, Tab or the mouse.
+- Pin entries and reorder the sort, group, ranking scope and collection menus, using manual, alphabetical or most-used order.
+- A shared collection menu in Song Select, profile scores and results supports search, multi-selection, user-created subgroups and undo for removal. Scores can be marked for analysis and appear in the active profile's score page.
+- Smart collections refresh from a saved search. The `pbmisses` and `playedthisweek` filters use the active profile's personal bests and play history, with weeks starting on Monday in local time.
+- A command palette (**Ctrl+Shift+P**) offers `/recent`, `/mods`, `/queue`, `/session` and `/bpm` actions, alongside a session play queue and session presets that restore mods, speed, skin, HUD settings and the starting search.
+- Per-difficulty private memos can link a local replay at a timestamp. A target BPM dialog applies a playback rate from a chosen timing section on maps with changing tempo.
+- Transfer a local score to another profile from either leaderboard; PP inclusion follows the score and the destination profile's beatmap exclusions still apply.
+- osu!standard beatmap variants: Streamline (formerly Half-Stream), No Sliding, Reversed Sliders, One Eye, Decoy Circles and the work-in-progress Directional Flicks. Echo, Swing and Phrase Mirror are no longer selectable but remain readable for existing replays.
+- RandomV2 custom angle offers 15 optional patterns, separate jump, stream and burst selections, mirrored responses and progressive spacing. A numbered trajectory is available in the Autoplay preview, and pause or fail offers **Retry same seed** and **New seed**.
+- Variant scores and OSR exports store their settings, transformation version and seed. Unsupported versions are rejected with a notification.
+- Decoy Circles uses the skin's circle with a centered white cross, and its local difficulty and PP bonus scale with the number of placed decoys.
+- No Sliding and Spacing Adjust can target short, long or repeating sliders, including streams, head-only taps, head-and-tail taps and a maximum jump distance.
+
+### Changed
+
+- A beatmap set's PP inclusion state is resolved from its local difficulties.
+
+### Fixed
+
+- A replay opened from a difficulty memo starts at the linked timestamp, and an unavailable replay or beatmap is reported in a notification.
+
+The library, variant and profile changes still require the manual in-game checks listed in [VALIDATION.md](VALIDATION.md). Compatibility of the variant mods, scores and replays with other clients has not been verified.
+
 ## [0.4.0] - 2026-11-05
 
 ### Added
