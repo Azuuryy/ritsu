@@ -14,6 +14,7 @@ using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
 using osu.Framework.Localisation;
 using osu.Game.Configuration;
+using osu.Game.Offline;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Screens.Select.Filter;
@@ -113,6 +114,7 @@ namespace osu.Game.Screens.Select
                     AccentColour = group_colour,
                     Width = dropdown_width,
                     Items = Enum.GetValues<GroupMode>(),
+                    RitsuOrderKey = RitsuMenuOrdering.Group,
                     Current = { BindTarget = groupBindable },
                 },
                 // label Sort + dropdown (stable: x = WidthScaled-130).
@@ -126,6 +128,7 @@ namespace osu.Game.Screens.Select
                     AccentColour = sort_colour,
                     Width = dropdown_width,
                     Items = Enum.GetValues<SortMode>(),
+                    RitsuOrderKey = RitsuMenuOrdering.Sort,
                     Current = { BindTarget = sortBindable },
                 },
                 // tabs de grouping (arriba a la derecha). van DETRAS de la decoracion (Depth 2.5 > 2) asi
@@ -146,8 +149,21 @@ namespace osu.Game.Screens.Select
                     Origin = Anchor.TopRight,
                     Margin = new MarginPadding { Top = 82, Right = 14 },
                     Current = { BindTarget = FilterControl.SearchQuery },
+                    FilterControl = FilterControl,
                 },
             };
+
+            if (RitsuOffline.Enabled)
+            {
+                AddInternal(new CollectionDropdown
+                {
+                    Anchor = Anchor.TopRight,
+                    Origin = Anchor.TopRight,
+                    Position = new Vector2(-343, 82),
+                    Width = 163,
+                    Depth = -1,
+                });
+            }
 
             rebuildTopLayers();
         }

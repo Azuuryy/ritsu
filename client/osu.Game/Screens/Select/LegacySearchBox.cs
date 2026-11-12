@@ -1,15 +1,19 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Offline;
 using osuTK;
 using osuTK.Graphics;
 using osuTK.Input;
@@ -23,14 +27,19 @@ namespace osu.Game.Screens.Select
     /// two-way con el filter query compartido asi escribir filtra el carousel igual que la busqueda
     /// moderna (que esta oculta).
     /// </summary>
-    public partial class LegacySearchBox : CompositeDrawable
+    public partial class LegacySearchBox : CompositeDrawable, IHasPopover
     {
         public Bindable<string> Current { get; } = new Bindable<string>();
+
+        internal FilterControl FilterControl { get; init; } = null!;
+
+        public Popover GetPopover() => FilterControl.CreateSearchHistoryPopover(this);
 
         [BackgroundDependencyLoader]
         private void load()
         {
             AutoSizeAxes = Axes.Both;
+            var historyControls = FilterControl.CreateSearchHistoryControls(this);
 
             InternalChild = new Container
             {
@@ -69,7 +78,10 @@ namespace osu.Game.Screens.Select
                                 Width = 200,
                                 Height = 24,
                                 Current = { BindTarget = Current },
+                                SearchClicked = historyControls.ShowHistory,
+                                CompletionControls = historyControls,
                             },
+                            historyControls,
                         },
                     },
                 },
@@ -78,9 +90,19 @@ namespace osu.Game.Screens.Select
 
         private partial class SearchTextBox : FocusedTextBox
         {
-            // las flechas izquierda/derecha quedan libres para el carousel (grupo anterior/siguiente),
-            // como en stable; el caret no las necesita con busquedas cortas.
             public override bool HandleLeftRightArrows => false;
+
+            public SearchHistoryControls CompletionControls { get; init; } = null!;
+
+            public Action? SearchClicked { get; init; }
+
+            protected override bool OnClick(ClickEvent e)
+            {
+                if (e.Button == MouseButton.Left)
+                    SearchClicked?.Invoke();
+
+                return base.OnClick(e);
+            }
 
             public SearchTextBox()
             {
@@ -99,6 +121,24 @@ namespace osu.Game.Screens.Select
 
             protected override bool OnKeyDown(KeyDownEvent e)
             {
+                if (CompletionControls.HandleSuggestionKey(e))
+                    return true;
+
+                if (RitsuOffline.Enabled && HasFocus && !e.Repeat && ((e.Key == Key.AltLeft && e.ControlPressed)
+                        || (e.Key is Key.ControlLeft or Key.ControlRight && e.CurrentState.Keyboard.Keys.IsPressed(Key.AltLeft))))
+                {
+                    MoveCursorBy(0);
+                    ExpandSelectionBy(Text.Length);
+                    int caret = Text.Length - SelectedText.Length;
+                    MoveCursorBy(caret - Text.Length);
+                    CompletionControls.Complete(Text, caret, completion =>
+                    {
+                        Text = completion.Query;
+                        MoveCursorBy(completion.Caret - Text.Length);
+                    });
+                    return true;
+                }
+
                 // NO consumimos Enter: FocusedTextBox vendria a commitearlo y se lo comeria, y entonces
                 // GlobalAction.Select (empezar el mapa) nunca dispara. lo dejamos pasar, igual que
                 // FocusedTextBox ya hace con Escape para GlobalAction.Back. la busqueda filtra live por el

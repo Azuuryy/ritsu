@@ -70,6 +70,13 @@ namespace osu.Game.Screens.Select
                 case "length":
                     return tryUpdateLengthRange(criteria, op, value);
 
+                case "pbmisses":
+                    return TryUpdateCriteriaRange(ref criteria.PersonalBestMisses, op, value, tryParseInt);
+                case "playedthisweek":
+                    if (op is not (Operator.Equal or Operator.NotEqual) || !tryParseBool(value, out bool playedThisWeek))
+                        return false;
+                    criteria.PlayedThisWeek = op == Operator.Equal ? playedThisWeek : !playedThisWeek;
+                    return true;
                 case "lastplayed":
                     return tryUpdateDateAgoRange(ref criteria.LastPlayed, op, value);
 

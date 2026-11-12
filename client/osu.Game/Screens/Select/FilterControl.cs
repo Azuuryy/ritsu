@@ -29,10 +29,14 @@ using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Input.Bindings;
 using osu.Game.Localisation;
+using osu.Game.Offline;
+using osu.Game.Overlays;
+using osu.Game.Overlays.Notifications;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
+using osu.Game.Scoring;
 using osu.Game.Screens.Select.Filter;
 using osu.Game.Utils;
 using osuTK;
@@ -50,6 +54,7 @@ namespace osu.Game.Screens.Select
         public IBindable<BeatmapSetInfo?> ScopedBeatmapSet { get; } = new Bindable<BeatmapSetInfo?>();
 
         private SongSelectSearchTextBox searchTextBox = null!;
+        private SearchHistoryControls searchHistoryControls = null!;
         private ShearedToggleButton showConvertedBeatmapsButton = null!;
         private DifficultyRangeSlider difficultyRangeSlider = null!;
         private PerformanceRangeSlider performanceRangeSlider = null!;
@@ -100,6 +105,22 @@ namespace osu.Game.Screens.Select
         private IDisposable? collectionsSubscription;
         private ModSettingChangeTracker? modSettingChangeTracker;
         private ScheduledDelegate? debouncedModSettingsChange;
+        private ScheduledDelegate? sliderDebounce;
+        private bool restoringSearch;
+        private IDisposable? scoreSubscription;
+        private ScheduledDelegate? weekCheck;
+        private DateTimeOffset weekStart;
+        private (Guid Profile, string Ruleset, DateTimeOffset Week)? historyKey;
+        private Lazy<RitsuPlayHistory>? playHistory;
+
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private RitsuProfileManager? profiles { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private INotificationOverlay? notifications { get; set; }
 
         [BackgroundDependencyLoader]
         private void load(IAPIProvider api)
@@ -140,16 +161,28 @@ namespace osu.Game.Screens.Select
                             Spacing = new Vector2(0f, 5f),
                             Children = new Drawable[]
                             {
-                                new Container
+                                new GridContainer
                                 {
                                     RelativeSizeAxes = Axes.X,
                                     AutoSizeAxes = Axes.Y,
                                     Shear = -OsuGame.SHEAR,
-                                    Child = searchTextBox = new SongSelectSearchTextBox
+                                    RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
+                                    ColumnDimensions = new[] { new Dimension(), new Dimension(GridSizeMode.Absolute, SearchHistoryControls.WIDTH) },
+                                    Content = new[]
                                     {
-                                        RelativeSizeAxes = Axes.X,
-                                        HoldFocus = true,
-                                        ScopedBeatmapSet = { BindTarget = ScopedBeatmapSet },
+                                        new Drawable[]
+                                        {
+                                            searchTextBox = new SongSelectSearchTextBox
+                                            {
+                                                RelativeSizeAxes = Axes.X,
+                                                HoldFocus = true,
+                                                ScopedBeatmapSet = { BindTarget = ScopedBeatmapSet },
+                                                SearchClicked = () => searchHistoryControls.ShowHistory(),
+                                                CreatePopover = CreateSearchHistoryPopover,
+                                                CompletionControls = () => searchHistoryControls,
+                                            },
+                                            searchHistoryControls = CreateSearchHistoryControls(searchTextBox),
+                                        },
                                     },
                                 },
                                 new GridContainer
@@ -248,12 +281,14 @@ namespace osu.Game.Screens.Select
                                             {
                                                 RelativeSizeAxes = Axes.X,
                                                 Items = Enum.GetValues<SortMode>(),
+                                                RitsuOrderKey = RitsuMenuOrdering.Sort,
                                                 MiddleClickAction = () => { reverseSort = !reverseSort; sortDropdown.SetReversedSortIndicator(reverseSort, SongSelectStrings.Sort); updateCriteria(clearScopedSet: false); },
                                             },
                                             Empty(),
                                             groupDropdown = new GroupModeDropdown(SongSelectStrings.Group)
                                             {
                                                 RelativeSizeAxes = Axes.X,
+                                                RitsuOrderKey = RitsuMenuOrdering.Group,
                                                 MiddleClickAction = () => { reverseGroup = !reverseGroup; groupDropdown.SetReversedSortIndicator(reverseGroup, SongSelectStrings.Group); updateCriteria(); },
                                             },
                                             Empty(),
@@ -319,12 +354,14 @@ namespace osu.Game.Screens.Select
 
             searchTextBox.Current.BindValueChanged(_ => updateCriteria());
 
-            ScheduledDelegate? sliderDebounce = null;
 
             // For slider dragging (where input events can arrive very often), even creating criteria can have
             // overhead, especially when a collection is selected (see ToImmutableHashSet() call).
             void debouncedUpdateCriteria()
             {
+                if (restoringSearch)
+                    return;
+
                 sliderDebounce?.Cancel();
                 sliderDebounce = Scheduler.AddDelayed(() => updateCriteria(), 50);
             }
@@ -342,9 +379,23 @@ namespace osu.Game.Screens.Select
             configCollectionFilter.BindValueChanged(_ => updateCriteria());
             collectionsSubscription = realm.RegisterForNotifications(r => r.All<BeatmapCollection>(), (_, changeSet) =>
             {
-                if (changeSet != null && groupDropdown.Current.Value.Value == GroupMode.Collections)
-                    updateCriteria();
+                if (changeSet != null && (groupDropdown.Current.Value.Value == GroupMode.Collections || configCollectionFilter.Value.Length > 0))
+                    updateCriteria(clearScopedSet: false);
             });
+
+            if (library != null)
+                library.Changed += libraryChanged;
+            if (library != null && profiles != null)
+            {
+                profiles.Changed += historyChanged;
+                scoreSubscription = realm.RegisterForNotifications(r => r.All<ScoreInfo>(), (_, changes) =>
+                {
+                    if (changes != null)
+                        historyChanged();
+                });
+                weekStart = RitsuPlayHistory.StartOfWeek(DateTimeOffset.Now, TimeZoneInfo.Local);
+                weekCheck = Scheduler.AddDelayed(checkWeek, 30000, true);
+            }
 
             localUser.BindValueChanged(_ => updateCriteria());
             localUserFavouriteBeatmapSets.BindCollectionChanged((_, _) => updateCriteria());
@@ -357,12 +408,14 @@ namespace osu.Game.Screens.Select
         /// Whether the current sorting, grouping or star rating filters use mod-adjusted star ratings.
         /// When beatmaps are grouped by set, difficulties within each set are also ordered by mod-adjusted star rating.
         /// </summary>
-        private bool performanceCriteriaActive => !minimumPerformance.IsDefault || !maximumPerformance.IsDefault || currentCriteria.Sort == SortMode.Farmability || currentCriteria.Sort == SortMode.PerformancePoints || currentCriteria.Group == GroupMode.PerformancePoints100;
+        private bool performanceCriteriaActive => currentCriteria.UsesPerformanceFilter || currentCriteria.Sort == SortMode.Farmability || currentCriteria.Sort == SortMode.PerformancePoints || currentCriteria.Group == GroupMode.PerformancePoints100;
 
         private bool difficultyCriteriaActive => currentCriteria.Sort == SortMode.Difficulty
                                                  || currentCriteria.Group == GroupMode.Difficulty
                                                  || currentCriteria.StarDifficulty.HasFilter
                                                  || currentCriteria.UserStarDifficulty.HasFilter
+                                                 || currentCriteria.SmartCollectionCriteria?.StarDifficulty.HasFilter == true
+                                                 || currentCriteria.SmartCollectionCriteria?.UserStarDifficulty.HasFilter == true
                                                  || BeatmapCarouselFilterGrouping.ShouldGroupBeatmapsTogether(currentCriteria);
 
         private static bool difficultyModsChanged(IReadOnlyList<Mod> oldMods, IReadOnlyList<Mod> newMods) =>
@@ -384,10 +437,44 @@ namespace osu.Game.Screens.Select
             };
         }
 
+        private void libraryChanged() => Scheduler.AddOnce(refreshCollectionCriteria);
+
+        private void refreshCollectionCriteria()
+        {
+            if (configCollectionFilter.Value.Length > 0)
+                updateCriteria(clearScopedSet: false);
+        }
+
+        private void historyChanged() => Scheduler.AddOnce(refreshHistoryCriteria);
+
+        private void refreshHistoryCriteria()
+        {
+            historyKey = null;
+            if (currentCriteria.UsesProfileHistory || currentCriteria.SmartCollectionCriteria?.UsesProfileHistory == true)
+                updateCriteria(clearScopedSet: false);
+        }
+
+        private void checkWeek()
+        {
+            var currentWeek = RitsuPlayHistory.StartOfWeek(DateTimeOffset.Now, TimeZoneInfo.Local);
+            if (currentWeek == weekStart)
+                return;
+
+            weekStart = currentWeek;
+            refreshHistoryCriteria();
+        }
+
         protected override void Dispose(bool isDisposing)
         {
             base.Dispose(isDisposing);
             collectionsSubscription?.Dispose();
+            scoreSubscription?.Dispose();
+            weekCheck?.Cancel();
+            sliderDebounce?.Cancel();
+            if (library != null)
+                library.Changed -= libraryChanged;
+            if (profiles != null)
+                profiles.Changed -= historyChanged;
             modSettingChangeTracker?.Dispose();
             debouncedModSettingsChange?.Cancel();
         }
@@ -397,54 +484,100 @@ namespace osu.Game.Screens.Select
         /// </summary>
         public FilterCriteria CreateCriteria()
         {
-            string query = searchTextBox.Current.Value;
-            bool isValidUser = localUser.Value.Id > 1;
+            var state = CaptureSearch();
+            var rulesetInfo = ruleset.Value;
+            var currentMods = mods.Value.Select(m => m.DeepClone()).ToArray();
+            Lazy<RitsuPlayHistory>? history = getPlayHistory(rulesetInfo.ShortName);
+            var smartCollection = library?.SmartCollections.FirstOrDefault(c => c.Id.ToString() == state.Collection);
+            var criteria = createCriteria(state, rulesetInfo, currentMods, history);
+            criteria.SelectedBeatmapSet = ScopedBeatmapSet.Value;
 
-            IEnumerable<string>? collectionBeatmapMD5Hashes = null;
-
-            if (Guid.TryParse(configCollectionFilter.Value, out var collectionId))
-                collectionBeatmapMD5Hashes = realm.Run(r => r.Find<BeatmapCollection>(collectionId)?.BeatmapMD5Hashes.ToImmutableHashSet());
-
-            var criteria = new FilterCriteria
+            if (smartCollection != null)
             {
-                SelectedBeatmapSet = ScopedBeatmapSet.Value,
-                Sort = sortDropdown.Current.Value,
-                ReverseSort = reverseSort,
-                ReverseGroup = reverseGroup,
-                PerformanceGroupInterval = performanceIntervalDropdown.Current.Value,
-                CalculateMapPerformance = performanceCalculationToggle.Active.Value,
-                Group = groupDropdown.Current.Value?.Value ?? GroupMode.None,
-                AllowConvertedBeatmaps = showConvertedBeatmapsButton.Active.Value,
-                Ruleset = ruleset.Value,
-                // Filtering runs on a background thread, so mods are copied to keep their settings fixed for the whole operation.
-                Mods = mods.Value.Select(m => m.DeepClone()).ToArray(),
-                CollectionBeatmapMD5Hashes = collectionBeatmapMD5Hashes,
-                LocalUserId = isValidUser ? localUser.Value.Id : null,
-                LocalUserUsername = isValidUser ? localUser.Value.Username : null,
-            };
-
-            if (!difficultyRangeSlider.LowerBound.IsDefault)
-                criteria.UserStarDifficulty.Min = difficultyRangeSlider.LowerBound.Value;
-
-            if (!difficultyRangeSlider.UpperBound.IsDefault)
-                criteria.UserStarDifficulty.Max = difficultyRangeSlider.UpperBound.Value;
-
-            if (!minimumPerformance.IsDefault)
-                criteria.UserPerformance.Min = minimumPerformance.Value;
-            if (!maximumPerformance.IsDefault)
-                criteria.UserPerformance.Max = maximumPerformance.Value;
-
-            criteria.RulesetCriteria = ruleset.Value.CreateInstance().CreateRulesetFilterCriteria();
-
-            FilterQueryParser.ApplyQueries(criteria, query);
+                var source = library!.Searches.FirstOrDefault(s => s.Id == smartCollection.SearchId);
+                if (source != null)
+                {
+                    criteria.CollectionBeatmapMD5Hashes = null;
+                    criteria.SmartCollectionCriteria = createCriteria(source.State, rulesetInfo, currentMods, history);
+                }
+            }
 
             ApplyRequiredCriteria?.Invoke(criteria);
-
             return criteria;
+        }
+
+        private Lazy<RitsuPlayHistory>? getPlayHistory(string mode)
+        {
+            if (profiles == null || library == null)
+                return null;
+
+            var now = DateTimeOffset.Now;
+            var key = (profiles.ActiveProfileId, mode, RitsuPlayHistory.StartOfWeek(now, TimeZoneInfo.Local));
+            if (historyKey != key)
+            {
+                var manager = profiles;
+                historyKey = key;
+                playHistory = new Lazy<RitsuPlayHistory>(() => new RitsuPlayHistory(manager.GetScores(key.ActiveProfileId, mode), now, TimeZoneInfo.Local));
+            }
+
+            return playHistory;
+        }
+
+        private FilterCriteria createCriteria(RitsuSearchState state, RulesetInfo rulesetInfo, IReadOnlyList<Mod> currentMods, Lazy<RitsuPlayHistory>? history)
+        {
+            bool isValidUser = localUser.Value.Id > 1;
+            var criteria = new FilterCriteria
+            {
+                Sort = state.Sort,
+                ReverseSort = state.ReverseSort,
+                ReverseGroup = state.ReverseGroup,
+                PerformanceGroupInterval = state.PPGroupInterval,
+                CalculateMapPerformance = state.CalculatePerformance,
+                Group = state.Group,
+                AllowConvertedBeatmaps = state.Converted,
+                Ruleset = rulesetInfo,
+                Mods = currentMods,
+                CollectionBeatmapMD5Hashes = getCollectionHashes(state.Collection),
+                LocalUserId = isValidUser ? localUser.Value.Id : null,
+                LocalUserUsername = isValidUser ? localUser.Value.Username : null,
+                RulesetCriteria = rulesetInfo.CreateInstance().CreateRulesetFilterCriteria(),
+                PlayHistory = history,
+            };
+
+            if (state.MinimumStars != difficultyRangeSlider.LowerBound.Default)
+                criteria.UserStarDifficulty.Min = state.MinimumStars;
+            if (state.MaximumStars != difficultyRangeSlider.UpperBound.Default)
+                criteria.UserStarDifficulty.Max = state.MaximumStars;
+            if (state.MinimumPP != minimumPerformance.Default)
+                criteria.UserPerformance.Min = state.MinimumPP;
+            if (state.MaximumPP != maximumPerformance.Default)
+                criteria.UserPerformance.Max = state.MaximumPP;
+
+            FilterQueryParser.ApplyQueries(criteria, state.Query);
+            return criteria;
+        }
+
+        private IEnumerable<string>? getCollectionHashes(string scope)
+        {
+            if (!Guid.TryParse(scope, out var id))
+                return null;
+
+            var subgroup = library?.Subgroups.FirstOrDefault(s => s.Id == id);
+            return realm.Run(r =>
+            {
+                var collection = r.Find<BeatmapCollection>(subgroup?.CollectionId ?? id);
+                if (collection == null)
+                    return ImmutableHashSet<string>.Empty;
+                return subgroup == null ? collection.BeatmapMD5Hashes.ToImmutableHashSet() :
+                    collection.BeatmapMD5Hashes.Intersect(subgroup.Hashes).ToImmutableHashSet();
+            });
         }
 
         private void updateCriteria(bool clearScopedSet = true)
         {
+            if (restoringSearch)
+                return;
+
             if (clearScopedSet && ScopedBeatmapSet.Value != null)
             {
                 songSelect?.UnscopeBeatmapSet();
@@ -490,6 +623,70 @@ namespace osu.Game.Screens.Select
         /// search box can bind two-way to the same source the modern filter uses.
         /// </summary>
         public Bindable<string> SearchQuery => searchTextBox.Current;
+
+        internal SearchHistoryControls CreateSearchHistoryControls(IHasPopover target) => new SearchHistoryControls(searchTextBox, target);
+
+        internal Popover CreateSearchHistoryPopover(Drawable bar) => new SearchHistoryControls.HistoryPopover(this, searchTextBox, bar);
+
+        internal RitsuSearchState CaptureSearch() => new RitsuSearchState(
+            SearchQuery.Value, configCollectionFilter.Value, difficultyRangeSlider.LowerBound.Value, difficultyRangeSlider.UpperBound.Value,
+            minimumPerformance.Value, maximumPerformance.Value, showConvertedBeatmapsButton.Active.Value, sortDropdown.Current.Value,
+            groupDropdown.Current.Value?.Value ?? GroupMode.None, reverseSort, reverseGroup, performanceIntervalDropdown.Current.Value,
+            performanceCalculationToggle.Active.Value);
+
+        internal bool HasCollection(string collection)
+        {
+            if (string.IsNullOrEmpty(collection))
+                return true;
+            if (!Guid.TryParse(collection, out var id))
+                return false;
+            if (library?.SmartCollections.Any(c => c.Id == id) == true)
+                return true;
+
+            var subgroup = library?.Subgroups.FirstOrDefault(s => s.Id == id);
+            return realm.Run(r => r.Find<BeatmapCollection>(subgroup?.CollectionId ?? id) != null);
+        }
+
+        internal void RestoreSearch(RitsuSearchState state)
+        {
+            bool collectionAvailable = HasCollection(state.Collection);
+            if (!collectionAvailable)
+                notifications?.Post(new SimpleNotification { Text = "The saved collection is unavailable. Choose another collection in Song Select." });
+
+            sliderDebounce?.Cancel();
+            restoringSearch = true;
+            try
+            {
+                if (ScopedBeatmapSet.Value != null)
+                    songSelect?.UnscopeBeatmapSet();
+
+                SearchQuery.Value = state.Query;
+                if (collectionAvailable)
+                    configCollectionFilter.Value = state.Collection;
+                difficultyRangeSlider.UpperBound.SetDefault();
+                difficultyRangeSlider.LowerBound.Value = state.MinimumStars;
+                difficultyRangeSlider.UpperBound.Value = state.MaximumStars;
+                maximumPerformance.SetDefault();
+                minimumPerformance.Value = state.MinimumPP;
+                maximumPerformance.Value = state.MaximumPP;
+                showConvertedBeatmapsButton.Active.Value = state.Converted;
+                sortDropdown.Current.Value = state.Sort;
+                config.SetValue(OsuSetting.SongSelectGroupMode, state.Group);
+                reverseSort = state.ReverseSort;
+                reverseGroup = state.ReverseGroup;
+                sortDropdown.SetReversedSortIndicator(reverseSort, SongSelectStrings.Sort);
+                groupDropdown.SetReversedSortIndicator(reverseGroup, SongSelectStrings.Group);
+                performanceIntervalDropdown.Current.Value = state.PPGroupInterval;
+                performanceCalculationToggle.Active.Value = state.CalculatePerformance;
+            }
+            finally
+            {
+                restoringSearch = false;
+            }
+
+            updateCriteria(clearScopedSet: false);
+        }
+
         protected override void PopIn()
         {
             this.MoveToX(0, SongSelect.ENTER_DURATION, Easing.OutQuint)
@@ -502,19 +699,29 @@ namespace osu.Game.Screens.Select
                 .FadeOut(SongSelect.ENTER_DURATION / 3, Easing.In);
         }
 
-        internal partial class SongSelectSearchTextBox : ShearedFilterTextBox, IHasContextMenu
+        internal partial class SongSelectSearchTextBox : ShearedFilterTextBox, IHasContextMenu, IHasPopover
         {
             public IBindable<BeatmapSetInfo?> ScopedBeatmapSet { get; } = new Bindable<BeatmapSetInfo?>();
 
             private const string history_file = "ritsu/search-history.json";
             private Storage storage = null!;
             private SearchHistory history = new SearchHistory();
+            private Scheduler historyScheduler = null!;
             private ScheduledDelegate? historyDelay;
+            private readonly Bindable<bool> currentIsFavourite = new Bindable<bool>();
+
+            internal Bindable<bool> CurrentIsFavourite => currentIsFavourite;
+            internal IReadOnlyList<string> Favourites => history.Favourites;
+            internal IReadOnlyList<string> Recent => history.Recent;
+            internal Action? SearchClicked { get; init; }
+            internal Func<Drawable, Popover>? CreatePopover { get; init; }
+            internal Func<SearchHistoryControls>? CompletionControls { get; init; }
 
             [BackgroundDependencyLoader]
-            private void load(Storage storage)
+            private void load(Storage storage, GameHost host)
             {
                 this.storage = storage;
+                historyScheduler = host.UpdateThread.Scheduler;
                 try
                 {
                     if (storage.Exists(history_file))
@@ -535,13 +742,15 @@ namespace osu.Game.Screens.Select
             protected override void LoadComplete()
             {
                 base.LoadComplete();
+                updateFavouriteState();
                 Current.BindValueChanged(value =>
                 {
+                    updateFavouriteState();
                     historyDelay?.Cancel();
                     string query = value.NewValue.Trim();
                     if (query.Length == 0)
                         return;
-                    historyDelay = Scheduler.AddDelayed(() =>
+                    historyDelay = historyScheduler.AddDelayed(() =>
                     {
                         history.Recent.RemoveAll(item => item == query);
                         history.Recent.Insert(0, query);
@@ -552,6 +761,14 @@ namespace osu.Game.Screens.Select
                 });
             }
 
+            protected override void Dispose(bool isDisposing)
+            {
+                historyDelay?.Cancel();
+                base.Dispose(isDisposing);
+            }
+
+            public Popover? GetPopover() => CreatePopover?.Invoke(this);
+
             public MenuItem[] ContextMenuItems
             {
                 get
@@ -560,26 +777,43 @@ namespace osu.Game.Screens.Select
                     var items = new List<MenuItem>();
                     if (query.Length > 0)
                     {
-                        bool saved = history.Favourites.Contains(query);
-                        items.Add(new OsuMenuItem(saved ? "Remove from favourites" : "Add to favourites", MenuItemType.Standard, () =>
-                        {
-                            if (saved) history.Favourites.Remove(query);
-                            else history.Favourites.Add(query);
-                            saveHistory();
-                        }));
+                        bool saved = currentIsFavourite.Value;
+                        items.Add(new OsuMenuItem(saved ? "Remove from favourites" : "Add to favourites", MenuItemType.Standard, ToggleCurrentFavourite));
                     }
                     if (history.Favourites.Count > 0)
                         items.Add(new OsuMenuItem("Favourites") { Items = history.Favourites.Select(value => new OsuMenuItem(value, MenuItemType.Standard, () => Current.Value = value)).ToArray() });
                     if (history.Recent.Count > 0)
                     {
                         items.Add(new OsuMenuItem("Recent searches") { Items = history.Recent.Select(value => new OsuMenuItem(value, MenuItemType.Standard, () => Current.Value = value)).ToArray() });
-                        items.Add(new OsuMenuItem("Clear history", MenuItemType.Destructive, () => { history.Recent.Clear(); saveHistory(); }));
+                        items.Add(new OsuMenuItem("Clear history", MenuItemType.Destructive, ClearHistory));
                     }
                     if (items.Count == 0)
                         items.Add(new OsuMenuItem("No saved searches") { Action = { Disabled = true } });
                     return items.ToArray();
                 }
             }
+
+            internal void ToggleCurrentFavourite()
+            {
+                string query = Current.Value.Trim();
+                if (query.Length == 0)
+                    return;
+
+                if (!history.Favourites.Remove(query))
+                    history.Favourites.Add(query);
+
+                updateFavouriteState();
+                saveHistory();
+            }
+
+            internal void ClearHistory()
+            {
+                historyDelay?.Cancel();
+                history.Recent.Clear();
+                saveHistory();
+            }
+
+            private void updateFavouriteState() => currentIsFavourite.Value = history.Favourites.Contains(Current.Value.Trim());
 
             private void saveHistory()
             {
@@ -604,13 +838,51 @@ namespace osu.Game.Screens.Select
             protected override InnerSearchTextBox CreateInnerTextBox() => new InnerTextBox
             {
                 ScopedBeatmapSet = { BindTarget = ScopedBeatmapSet },
+                SearchClicked = () => SearchClicked?.Invoke(),
+                CompletionControls = () => CompletionControls?.Invoke(),
             };
 
             private partial class InnerTextBox : InnerFilterTextBox
             {
                 public IBindable<BeatmapSetInfo?> ScopedBeatmapSet { get; } = new Bindable<BeatmapSetInfo?>();
 
+                public Action? SearchClicked { get; init; }
+
+                public Func<SearchHistoryControls?>? CompletionControls { get; init; }
+
                 public override bool HandleLeftRightArrows => false;
+
+                protected override bool OnKeyDown(KeyDownEvent e)
+                {
+                    var controls = CompletionControls?.Invoke();
+                    if (controls?.HandleSuggestionKey(e) == true)
+                        return true;
+
+                    if (controls != null && RitsuOffline.Enabled && HasFocus && !e.Repeat && ((e.Key == Key.AltLeft && e.ControlPressed)
+                        || (e.Key is Key.ControlLeft or Key.ControlRight && e.CurrentState.Keyboard.Keys.IsPressed(Key.AltLeft))))
+                    {
+                        MoveCursorBy(0);
+                        ExpandSelectionBy(Text.Length);
+                        int caret = Text.Length - SelectedText.Length;
+                        MoveCursorBy(caret - Text.Length);
+                        controls.Complete(Text, caret, completion =>
+                        {
+                            Text = completion.Query;
+                            MoveCursorBy(completion.Caret - Text.Length);
+                        });
+                        return true;
+                    }
+
+                    return base.OnKeyDown(e);
+                }
+
+                protected override bool OnClick(ClickEvent e)
+                {
+                    if (e.Button == MouseButton.Left)
+                        SearchClicked?.Invoke();
+
+                    return base.OnClick(e);
+                }
 
                 public override bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
                 {
