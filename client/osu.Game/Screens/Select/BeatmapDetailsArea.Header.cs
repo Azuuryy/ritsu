@@ -244,6 +244,7 @@ namespace osu.Game.Screens.Select
                 public ScopeDropdown()
                     : base(BeatmapLeaderboardWedgeStrings.Scope)
                 {
+                    RitsuOrderKey = osu.Game.Offline.RitsuMenuOrdering.Scope;
                     Items = osu.Game.Offline.RitsuOffline.Enabled
                         ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
                         : Enum.GetValues<BeatmapLeaderboardScope>();

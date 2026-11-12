@@ -12,9 +12,14 @@ using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
 using FrameworkMenu = osu.Framework.Graphics.UserInterface.Menu;
 using osu.Framework.Localisation;
+using osu.Framework.Input.Events;
+using osuTK.Input;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
+using osu.Game.Offline;
+using osu.Game.Overlays;
+using osu.Game.Overlays.Dialog;
 using osuTK;
 using osuTK.Graphics;
 
@@ -42,6 +47,23 @@ namespace osu.Game.Screens.Select
         /// <summary>override opcional para como se arma el texto de cada item (ej "Global Ranking").</summary>
         public Func<T, LocalisableString>? ItemText { get; init; }
 
+        internal string? RitsuOrderKey { get; init; }
+        private Action? configureRitsuOrder;
+
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private IDialogOverlay? dialogs { get; set; }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            if (library != null && RitsuOrderKey != null)
+                configureRitsuOrder = RitsuMenuOrdering.Bind(library, dialogs, this, Menu, RitsuOrderKey, item => GenerateItemText(item).ToString());
+        }
+
         protected override DropdownHeader CreateHeader() => new LegacyDropdownHeader();
 
         protected override DropdownMenu CreateMenu() => new LegacyDropdownMenu();
@@ -65,6 +87,15 @@ namespace osu.Game.Screens.Select
                 return e.GetLocalisableDescription();
 
             return base.GenerateItemText(item);
+        }
+
+        protected override bool OnMouseDown(MouseDownEvent e)
+        {
+            if (e.Button != MouseButton.Right || configureRitsuOrder == null)
+                return base.OnMouseDown(e);
+
+            configureRitsuOrder();
+            return true;
         }
 
         private partial class LegacyDropdownHeader : DropdownHeader
