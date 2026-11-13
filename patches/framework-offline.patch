@@ -1,3 +1,22 @@
+diff --git a/osu.Framework/Graphics/DrawNode.cs b/osu.Framework/Graphics/DrawNode.cs
+index 39ed09afc..a1a74a217 100644
+--- a/osu.Framework/Graphics/DrawNode.cs
++++ b/osu.Framework/Graphics/DrawNode.cs
+@@ -1,4 +1,4 @@
+-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
++// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+ // See the LICENCE file in the repository root for full licence text.
+ 
+ #nullable disable
+@@ -15,6 +15,8 @@ namespace osu.Framework.Graphics
+     /// </summary>
+     public class DrawNode : IDisposable
+     {
++        internal ulong ProfileProducedFrame { get; set; }
++
+         /// <summary>
+         /// Contains the linear transformation of this <see cref="DrawNode"/>.
+         /// </summary>
 diff --git a/osu.Framework/IO/Network/WebRequest.cs b/osu.Framework/IO/Network/WebRequest.cs
 index 4f530c3e1..866e2c4c8 100644
 --- a/osu.Framework/IO/Network/WebRequest.cs
@@ -65,3 +84,288 @@ index b816040e1..0c3238f1e 100644
              if (!url.CheckIsValidUrl())
                  throw new ArgumentException("The provided URL must be one of either http://, https:// or mailto: protocols.", nameof(url));
  
+diff --git a/osu.Framework/Platform/GameHost.cs b/osu.Framework/Platform/GameHost.cs
+index 37a84f4c9..2f25cbaba 100644
+--- a/osu.Framework/Platform/GameHost.cs
++++ b/osu.Framework/Platform/GameHost.cs
+@@ -484,7 +484,14 @@ protected virtual void UpdateFrame()
+             Root.UpdateSubTreeMasking();
+ 
+             using (var buffer = drawRoots.GetForWrite())
++            {
+                 buffer.Object = Root.GenerateDrawNodeSubtree(frameCount, buffer.Index, false);
++                if (buffer.Object != null)
++                    buffer.Object.ProfileProducedFrame = frameCount;
++            }
++
++            if (FrameProfileCapture.Active != null)
++                UpdateThread.Monitor.ProfileProducedFrame = frameCount;
+         }
+ 
+         private bool didRenderFrame;
+@@ -526,6 +533,8 @@ protected virtual void DrawFrame()
+                 return;
+ 
+             Debug.Assert(buffer.Object != null);
++            if (FrameProfileCapture.Active != null)
++                drawMonitor.ProfileProducedFrame = buffer.Object.ProfileProducedFrame;
+ 
+             try
+             {
+diff --git a/osu.Framework/Statistics/FrameProfileCapture.cs b/osu.Framework/Statistics/FrameProfileCapture.cs
+new file mode 100644
+index 000000000..a76ac9c85
+--- /dev/null
++++ b/osu.Framework/Statistics/FrameProfileCapture.cs
+@@ -0,0 +1,128 @@
++// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
++
++#nullable enable
++
++using System;
++using System.Diagnostics;
++using System.Threading;
++
++namespace osu.Framework.Statistics
++{
++    /// <summary>
++    /// An opt-in observer of completed game-thread frames and explicitly instrumented operations.
++    /// </summary>
++    public sealed class FrameProfileCapture : IDisposable
++    {
++        private static FrameProfileCapture? active;
++        private readonly FrameProfileFrame[] frames;
++        private readonly FrameProfileOperation[] operations;
++        private int frameCount;
++        private int operationCount;
++        private int writers;
++
++        internal static FrameProfileCapture? Active => Volatile.Read(ref active);
++
++        internal bool IncludeDetails { get; }
++
++        public bool IsActive => Active == this;
++
++        public long StartTimestamp { get; } = Stopwatch.GetTimestamp();
++
++        public FrameProfileCapture(int frameCapacity, int operationCapacity, bool includeDetails = true)
++        {
++            IncludeDetails = includeDetails;
++            frames = new FrameProfileFrame[frameCapacity];
++            operations = new FrameProfileOperation[operationCapacity];
++            if (Interlocked.CompareExchange(ref active, this, null) != null)
++                throw new InvalidOperationException("A frame capture is already running.");
++        }
++
++        public static Operation Measure(string name) => new Operation(Active is { IncludeDetails: true } capture ? capture : null, name);
++
++        public static void Count(string name, long value)
++        {
++            var capture = Active;
++            if (capture is { IncludeDetails: true })
++                capture.record(new FrameProfileOperation(name, Stopwatch.GetTimestamp(), 0, Environment.CurrentManagedThreadId, value));
++        }
++
++        internal void Record(FrameProfileFrame frame)
++        {
++            Interlocked.Increment(ref writers);
++            try
++            {
++                if (Active != this)
++                    return;
++
++                int index = Interlocked.Increment(ref frameCount) - 1;
++                if (index < frames.Length)
++                    frames[index] = frame;
++            }
++            finally
++            {
++                Interlocked.Decrement(ref writers);
++            }
++        }
++
++        private void record(FrameProfileOperation operation)
++        {
++            Interlocked.Increment(ref writers);
++            try
++            {
++                if (Active != this)
++                    return;
++
++                int index = Interlocked.Increment(ref operationCount) - 1;
++                if (index < operations.Length)
++                    operations[index] = operation;
++            }
++            finally
++            {
++                Interlocked.Decrement(ref writers);
++            }
++        }
++
++        public void Dispose() => Interlocked.CompareExchange(ref active, null, this);
++
++        // Stop and read from a worker thread, after any writes that already started have finished.
++        public FrameProfileSnapshot Snapshot()
++        {
++            Dispose();
++            SpinWait.SpinUntil(() => Volatile.Read(ref writers) == 0);
++            return new FrameProfileSnapshot(StartTimestamp, Stopwatch.Frequency,
++                frames.AsSpan(0, Math.Min(frameCount, frames.Length)).ToArray(),
++                operations.AsSpan(0, Math.Min(operationCount, operations.Length)).ToArray(),
++                Math.Max(0, frameCount - frames.Length), Math.Max(0, operationCount - operations.Length));
++        }
++
++        public readonly struct Operation : IDisposable
++        {
++            private readonly FrameProfileCapture? capture;
++            private readonly string name;
++            private readonly long start;
++
++            internal Operation(FrameProfileCapture? capture, string name)
++            {
++                this.capture = capture;
++                this.name = name;
++                start = capture == null ? 0 : Stopwatch.GetTimestamp();
++            }
++
++            public void Dispose()
++            {
++                if (capture != null)
++                    capture.record(new FrameProfileOperation(name, start, Stopwatch.GetTimestamp() - start, Environment.CurrentManagedThreadId, null));
++            }
++        }
++    }
++
++    public readonly record struct FrameProfileFrame(
++        string Thread, int ManagedThreadId, ulong FrameIndex, ulong ProducedFrame, long Start, long End, double BudgetMs,
++        double WorkMs, double SchedulerMs, double SleepMs, double SwapMs, double GcMs, double DrawResetMs,
++        double WindowMessagesMs, double IpcMs, double DebugMs, long AllocatedBytes, long Invalidations, long Refreshes);
++
++    public readonly record struct FrameProfileOperation(string Name, long Start, long Duration, int ManagedThreadId, long? Value);
++
++    public sealed record FrameProfileSnapshot(long StartTimestamp, long Frequency, FrameProfileFrame[] Frames,
++        FrameProfileOperation[] Operations, int DroppedFrames, int DroppedOperations);
++}
+diff --git a/osu.Framework/Statistics/PerformanceMonitor.cs b/osu.Framework/Statistics/PerformanceMonitor.cs
+index 49c974edc..107ce7dd0 100644
+--- a/osu.Framework/Statistics/PerformanceMonitor.cs
++++ b/osu.Framework/Statistics/PerformanceMonitor.cs
+@@ -1,4 +1,4 @@
+-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
++// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+ // See the LICENCE file in the repository root for full licence text.
+ 
+ #nullable disable
+@@ -6,6 +6,7 @@
+ using System;
+ using System.Collections.Concurrent;
+ using System.Collections.Generic;
++using System.Diagnostics;
+ using System.Threading;
+ using Microsoft.Extensions.ObjectPool;
+ using osu.Framework.Allocation;
+@@ -31,6 +32,7 @@ internal class PerformanceMonitor : IDisposable
+         private const int max_pending_frames = 10;
+ 
+         private readonly string threadName;
++        private readonly bool isInput;
+ 
+         internal readonly ConcurrentQueue<FrameStatistics> PendingFrames = new ConcurrentQueue<FrameStatistics>();
+ 
+@@ -66,6 +68,7 @@ internal PerformanceMonitor(GameThread thread, IEnumerable<StatisticsCounterType
+         {
+             Clock = thread.Clock;
+             threadName = thread.Name;
++            isInput = thread is InputThread;
+ 
+             isActive = thread.IsActive.GetBoundCopy();
+             isActive.BindValueChanged(_ => updateEnabledState());
+@@ -151,8 +154,17 @@ private void endCollecting(PerformanceCollectionType type)
+         /// <summary>
+         /// Resets all frame statistics. Run exactly once per frame.
+         /// </summary>
+-        public void NewFrame()
++        private FrameProfileCapture frameCapture;
++        private long frameStart;
++        private long frameAllocated;
++        internal ulong ProfileProducedFrame { get; set; }
++
++        public void NewFrame(ulong frameIndex)
+         {
++            // Window messages are collected after the input GameThread returns from EndFrame.
++            if (isInput && frameCapture != null)
++                recordFrame(frameIndex - 1);
++
+             // Reset the counters we keep track of
+             for (int i = 0; i < ActiveCounters.Length; ++i)
+             {
+@@ -202,11 +214,40 @@ public void NewFrame()
+             traceCollector?.NewFrame(Clock.ElapsedFrameTime, Math.Max(10, Math.Max(1000 / Clock.MaximumUpdateHz, averageFrameTime) * 4));
+ 
+             consumeStopwatchElapsedTime();
++
++            frameCapture = FrameProfileCapture.Active;
++            if (frameCapture != null)
++            {
++                frameStart = Stopwatch.GetTimestamp();
++                frameAllocated = frameCapture.IncludeDetails ? GC.GetAllocatedBytesForCurrentThread() : 0;
++                ProfileProducedFrame = 0;
++            }
+         }
+ 
+-        public void EndFrame()
++        public void EndFrame(ulong frameIndex)
+         {
+             traceCollector?.EndFrame();
++            if (!isInput && frameCapture != null)
++                recordFrame(frameIndex);
++        }
++
++        private void recordFrame(ulong frameIndex)
++        {
++            if (!frameCapture.IncludeDetails)
++            {
++                frameCapture.Record(new FrameProfileFrame(threadName, Environment.CurrentManagedThreadId, frameIndex, 0,
++                    frameStart, Stopwatch.GetTimestamp(), FrameAimTime, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
++                return;
++            }
++
++            double duration(PerformanceCollectionType type) => currentFrame.CollectedTimes.GetValueOrDefault(type);
++            long counter(StatisticsCounterType type) => ActiveCounters[(int)type] ? FrameStatistics.COUNTERS[(int)type] : 0;
++            frameCapture.Record(new FrameProfileFrame(threadName, Environment.CurrentManagedThreadId, frameIndex, ProfileProducedFrame,
++                frameStart, Stopwatch.GetTimestamp(), FrameAimTime,
++                duration(PerformanceCollectionType.Work), duration(PerformanceCollectionType.Scheduler), duration(PerformanceCollectionType.Sleep),
++                duration(PerformanceCollectionType.SwapBuffer), duration(PerformanceCollectionType.GC), duration(PerformanceCollectionType.DrawReset),
++                duration(PerformanceCollectionType.WndProc), duration(PerformanceCollectionType.IPC), duration(PerformanceCollectionType.Debug),
++                GC.GetAllocatedBytesForCurrentThread() - frameAllocated, counter(StatisticsCounterType.Invalidations), counter(StatisticsCounterType.Refreshes)));
+         }
+ 
+         private void updateEnabledState()
+diff --git a/osu.Framework/Threading/GameThread.cs b/osu.Framework/Threading/GameThread.cs
+index 91232dfb7..efa431617 100644
+--- a/osu.Framework/Threading/GameThread.cs
++++ b/osu.Framework/Threading/GameThread.cs
+@@ -1,4 +1,4 @@
+-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
++// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+ // See the LICENCE file in the repository root for full licence text.
+ 
+ using System;
+@@ -446,7 +446,7 @@ void runWork()
+             {
+                 FrameIndex++;
+ 
+-                Monitor?.NewFrame();
++                Monitor?.NewFrame(FrameIndex);
+ 
+                 using (Monitor?.BeginCollecting(PerformanceCollectionType.Scheduler))
+                 {
+@@ -460,7 +460,7 @@ void runWork()
+                 using (Monitor?.BeginCollecting(PerformanceCollectionType.Sleep))
+                     Clock.ProcessFrame();
+ 
+-                Monitor?.EndFrame();
++                Monitor?.EndFrame(FrameIndex);
+             }
+             catch (Exception e)
+             {

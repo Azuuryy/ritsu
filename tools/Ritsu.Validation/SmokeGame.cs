@@ -3,8 +3,10 @@ using System.Text.Json;
 using osu.Framework.Allocation;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
+using osu.Framework.Statistics;
 using osu.Game;
 using osu.Game.Configuration;
+using osu.Game.Beatmaps;
 using osu.Game.IO;
 using osu.Game.Overlays;
 using osu.Game.Overlays.SkinEditor;
@@ -28,6 +30,9 @@ internal partial class SmokeGame : OsuGame
     private readonly NetworkAudit audit;
     private readonly bool reopen;
     private readonly bool linked;
+    private readonly bool? frameBenchmark;
+    private FrameProfileCapture? frameCapture;
+    private BeatmapInfo? frameBeatmap;
     private readonly Stopwatch elapsed = Stopwatch.StartNew();
     private readonly List<string> checks = new();
     private Task pending = Task.CompletedTask;
@@ -37,13 +42,14 @@ internal partial class SmokeGame : OsuGame
     private bool complete;
     private double nextAction;
 
-    public SmokeGame(string fixtures, string evidence, NetworkAudit audit, bool reopen = false, bool linked = false)
+    public SmokeGame(string fixtures, string evidence, NetworkAudit audit, bool reopen = false, bool linked = false, bool? frameBenchmark = null)
     {
         this.fixtures = fixtures;
         this.evidence = evidence;
         this.audit = audit;
         this.reopen = reopen;
         this.linked = linked;
+        this.frameBenchmark = frameBenchmark;
         Directory.CreateDirectory(evidence);
     }
 
@@ -92,11 +98,16 @@ internal partial class SmokeGame : OsuGame
                         savedScore = ScoreManager.GetScore(persistedInfo) ?? throw new Exception("Replay missing after restart");
                         Check(savedScore.Replay?.Frames.Count > 0, "score and replay persisted across process restart");
                         checkVariantScore(savedScore.ScoreInfo);
+                        if (frameBenchmark.HasValue)
+                        {
+                            frameCapture = new FrameProfileCapture(150_000, 150_000, frameBenchmark.Value);
+                            frameBeatmap = persistedInfo.BeatmapInfo!;
+                        }
                         Beatmap.Value = BeatmapManager.GetWorkingBeatmap(persistedInfo.BeatmapInfo!);
                         Ruleset.Value = persistedInfo.Ruleset;
                         SelectedMods.Value = persistedInfo.Mods;
-                        ScreenStack.Push(new SoloSongSelect());
-                        stage = 30;
+                        ScreenStack.Push(frameBenchmark.HasValue ? new BenchmarkSongSelect() : new SoloSongSelect());
+                        stage = frameBenchmark.HasValue ? 40 : 30;
                         nextAction = Time.Current + 1500;
                         break;
                     }
@@ -228,6 +239,20 @@ internal partial class SmokeGame : OsuGame
                     Check(audit.AttemptCount == 0, "no observed HTTP, DNS or socket attempt throughout the session");
                     Finish(null);
                     break;
+                case 40:
+                    if (ScreenStack.CurrentScreen is not BenchmarkSongSelect benchmark || !benchmark.IsLoaded) return;
+                    benchmark.Search("Ritsu offline validation");
+                    _ = BeatmapManager.GetWorkingBeatmap(frameBeatmap!).Beatmap;
+                    stage++;
+                    nextAction = Time.Current + 1500;
+                    break;
+                case 41:
+                    if (ScreenStack.CurrentScreen is not BenchmarkSongSelect warm) return;
+                    warm.Search(string.Empty);
+                    _ = BeatmapManager.GetWorkingBeatmap(frameBeatmap!).Beatmap;
+                    stage = 30;
+                    nextAction = Time.Current + 1500;
+                    break;
                 case 30:
                     if (ScreenStack.CurrentScreen is not SoloSongSelect) return;
                     ScreenStack.Push(new BackgroundPlayerLoader(() => new BackgroundReplayPlayer(savedScore!)));
@@ -238,7 +263,7 @@ internal partial class SmokeGame : OsuGame
                     if (ScreenStack.CurrentScreen is not ReplayPlayer restarted || !restarted.LoadedBeatmapSuccessfully) return;
                     Check(true, "replay playback loaded after process restart");
                     checkVariantPositions(restarted);
-                    pending = Capture("09-replay-after-restart");
+                    if (!frameBenchmark.HasValue) pending = Capture("09-replay-after-restart");
                     stage = 32;
                     nextAction = Time.Current + 1800;
                     break;
@@ -252,6 +277,51 @@ internal partial class SmokeGame : OsuGame
         {
             Finish(exception.ToString());
         }
+    }
+
+    private void writeFrameBenchmark(FrameProfileSnapshot snapshot)
+    {
+        double milliseconds(long ticks) => ticks * 1000.0 / snapshot.Frequency;
+        var threads = snapshot.Frames.GroupBy(f => f.Thread).Select(group =>
+        {
+            var frames = group.OrderBy(f => f.End - f.Start).ToArray();
+            double percentile(double fraction)
+            {
+                var frame = frames[(int)Math.Ceiling(fraction * frames.Length) - 1];
+                return milliseconds(frame.End - frame.Start);
+            }
+            return new
+            {
+                Thread = group.Key,
+                Frames = frames.Length,
+                P50 = percentile(0.50),
+                P95 = percentile(0.95),
+                P99 = percentile(0.99),
+                AboveBudget = frames.Count(f => f.BudgetMs > 0 && milliseconds(f.End - f.Start) > f.BudgetMs),
+                AllocatedBytes = frameBenchmark == true ? frames.Sum(f => f.AllocatedBytes) : (long?)null,
+            };
+        }).ToArray();
+        if (threads.Length == 0)
+            throw new InvalidOperationException("The benchmark captured no frame timings.");
+
+        string name = frameBenchmark == true ? "frame-instrumented" : "frame-baseline";
+        File.WriteAllText(Path.Combine(evidence, name + ".json"), JsonSerializer.Serialize(new
+        {
+            Build = typeof(OsuGame).Assembly.GetName().Version?.ToString(),
+            Renderer = Host.ResolvedRenderer.ToString(),
+            UpdateLimitHz = double.IsFinite(Host.MaximumUpdateHz) ? Host.MaximumUpdateHz : (double?)null,
+            OS = Environment.OSVersion.VersionString,
+            Cpu = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER"),
+            LogicalProcessors = Environment.ProcessorCount,
+            snapshot.DroppedFrames,
+            snapshot.DroppedOperations,
+            Threads = threads,
+        }));
+    }
+
+    private partial class BenchmarkSongSelect : SoloSongSelect
+    {
+        public void Search(string query) => FilterControl.SearchQuery.Value = query;
     }
 
     private void checkVariantScore(ScoreInfo score)
@@ -283,6 +353,17 @@ internal partial class SmokeGame : OsuGame
     private void Finish(string? error)
     {
         complete = true;
+        if (frameBenchmark.HasValue)
+        {
+            frameCapture?.Dispose();
+            if (error == null && frameCapture != null)
+                writeFrameBenchmark(frameCapture.Snapshot());
+            Environment.ExitCode = error == null ? 0 : 1;
+            Console.WriteLine(error ?? "PASS: frame benchmark");
+            Host.Exit();
+            return;
+        }
+
         audit.Save(Path.Combine(evidence, reopen ? "reopen-network.json" : "network.json"));
         File.WriteAllText(Path.Combine(evidence, reopen ? "reopen-result.json" : "result.json"), JsonSerializer.Serialize(new { success = error == null, stage, checks, error, seconds = elapsed.Elapsed.TotalSeconds }, new JsonSerializerOptions { WriteIndented = true }));
         Environment.ExitCode = error == null ? 0 : 1;
