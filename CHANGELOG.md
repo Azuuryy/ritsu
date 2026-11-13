@@ -4,6 +4,20 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
+### Added
+
+- A Spotify-style queue panel opens with Tab in solo Song Select, with local covers, queue controls, and shared session queue actions.
+- The command palette and local library are split into dedicated modules. Local map, score, profile, collection, and session actions are available through the command registry.
+- A dedicated score simulator uses lazer performance calculators for osu!standard, taiko, catch, and mania, with native mod selection and configurable judgements.
+- Local frame profiling can export bounded frame and operation traces, with benchmark scenarios for baseline and instrumented runs.
+- Documentation inventories GuraBot and Bathbot commands, maps local equivalents and service dependencies, and records the client/framework audit and Ronnia feasibility study.
+
+### Changed
+
+- `/bpm` can preserve the map's unmodded AR while changing playback speed, and `/compare`, `/simulate`, and `/visualize` expose local score and map workflows.
+- Beatmap queue and simulator entry points are shared between the command palette, Song Select, and mod selection.
+
+
 ## [0.5.0] - 2026-11-12
 
 ### Added
