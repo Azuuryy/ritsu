@@ -16,11 +16,12 @@ using osu.Game.Rulesets.Mods;
 using osu.Game.Utils;
 using osuTK;
 
-namespace osu.Game.Offline
+namespace osu.Game.Commands
 {
     internal partial class RitsuTargetBpmDialog : PopupDialog
     {
-        public RitsuTargetBpmDialog(IBeatmap beatmap, Ruleset ruleset, IReadOnlyList<Mod> selected, Action<Mod[]> apply)
+        public RitsuTargetBpmDialog(IBeatmap beatmap, Ruleset ruleset, IReadOnlyList<Mod> selected, Action<Mod[]> apply, double? initialTarget = null,
+                                    bool keepApproachRate = false, Func<bool>? canApply = null)
         {
             HeaderText = "Set target BPM";
             Icon = FontAwesome.Solid.Music;
@@ -45,21 +46,37 @@ namespace osu.Game.Offline
                 PlaceholderText = "Target BPM",
                 ReleaseFocusOnCommit = false,
             };
+            if (initialTarget.HasValue)
+                target.Text = initialTarget.Value.ToString(CultureInfo.CurrentCulture);
+
+            var keepAr = new OsuCheckbox
+            {
+                LabelText = "Keep original approach rate",
+                Current = { Value = keepApproachRate },
+            };
+            bool supportsAr = (ruleset.CreateModFromAcronym("DA") as ModDifficultyAdjust)?.RitsuApproachRate != null;
             var preview = new OsuSpriteText { RelativeSizeAxes = Axes.X };
             var save = new PopupDialogOkButton { Text = "Apply", HideDialogOnAction = false };
             Mod[]? result = null;
 
             void refresh()
             {
-                if (!tryParseBpm(target.Text, out double bpm))
+                if (!TryParseBpm(target.Text, out double bpm))
                 {
                     result = null;
                     preview.Text = $"Reference {section.Current.Value.Bpm:0.##} BPM. Enter a positive target.";
                 }
                 else
                 {
-                    string? error = TryBuildMods(ruleset, selected, section.Current.Value.Bpm, bpm, out result, out double achieved);
-                    preview.Text = error ?? $"Playback BPM {achieved:0.##} · {achieved / section.Current.Value.Bpm:0.##}×";
+                    double reference = section.Current.Value.Bpm;
+                    string? error = TryBuildMods(ruleset, selected, reference, bpm, out result, out double achieved);
+                    double? effectiveAr = null;
+
+                    if (error == null && keepAr.Current.Value)
+                        error = TryCompensateAr(ruleset, beatmap.Difficulty.ApproachRate, achieved / reference, ref result, out effectiveAr);
+
+                    string ar = effectiveAr.HasValue ? $" · effective AR {effectiveAr:0.##}" : string.Empty;
+                    preview.Text = error ?? $"Playback BPM {achieved:0.##} · {achieved / reference:0.##}×{ar}";
                 }
             }
 
@@ -67,6 +84,12 @@ namespace osu.Game.Offline
             {
                 if (result == null)
                     return;
+                if (canApply?.Invoke() == false)
+                {
+                    preview.Text = "The selected difficulty, mode or mods changed. Reopen this dialog.";
+                    return;
+                }
+
                 apply(result);
                 Hide();
             }
@@ -75,10 +98,13 @@ namespace osu.Game.Offline
             target.OnCommit += (_, _) => confirm();
             target.Current.ValueChanged += _ => refresh();
             section.Current.ValueChanged += _ => refresh();
+            keepAr.Current.ValueChanged += _ => refresh();
             var children = new List<Drawable>();
             if (variable)
                 children.Add(section);
             children.Add(target);
+            if (supportsAr)
+                children.Add(keepAr);
             children.Add(preview);
 
             MainContent.Add(new FillFlowContainer
@@ -95,7 +121,7 @@ namespace osu.Game.Offline
             refresh();
         }
 
-        private static bool tryParseBpm(string input, out double bpm) =>
+        internal static bool TryParseBpm(string input, out double bpm) =>
             double.TryParse(input, NumberStyles.Float, CultureInfo.CurrentCulture, out bpm)
             || double.TryParse(input, NumberStyles.Float, CultureInfo.InvariantCulture, out bpm);
 
@@ -128,6 +154,48 @@ namespace osu.Game.Offline
 
             achieved = reference * rate;
             result = mods.ToArray();
+            return null;
+        }
+
+        internal static string? TryCompensateAr(Ruleset ruleset, float originalAr, double rate, ref Mod[]? mods, out double? effectiveAr)
+        {
+            effectiveAr = null;
+            var result = mods!.ToList();
+            mods = null;
+            var existing = result.OfType<ModDifficultyAdjust>().FirstOrDefault();
+            var adjust = (ModDifficultyAdjust?)existing?.DeepClone() ?? ruleset.CreateModFromAcronym("DA") as ModDifficultyAdjust;
+            if (adjust?.RitsuApproachRate is not { } ar)
+                return "This mode cannot preserve approach rate.";
+
+            double originalPreempt = IBeatmapDifficultyInfo.DifficultyRangeInt(originalAr, ar.PreemptRange);
+            double targetPreempt = originalPreempt * rate;
+            float configuredAr = (float)IBeatmapDifficultyInfo.InverseDifficultyRange(targetPreempt, ar.PreemptRange);
+            float min = adjust.ExtendedLimits.Value ? ar.Setting.ExtendedMinValue ?? ar.Setting.MinValue : ar.Setting.MinValue;
+            float max = adjust.ExtendedLimits.Value ? ar.Setting.ExtendedMaxValue ?? ar.Setting.MaxValue : ar.Setting.MaxValue;
+            if (!float.IsFinite(configuredAr) || configuredAr < min || configuredAr > max)
+                return "Keeping the original approach rate would exceed Difficulty Adjust limits.";
+
+            ar.Setting.Value = configuredAr;
+            if (existing != null)
+                result[result.IndexOf(existing)] = adjust;
+            else
+                result.Add(adjust);
+
+            if (!ModUtils.CheckValidForGameplay(result, out _))
+                return "Difficulty Adjust conflicts with the selected mods.";
+
+            int appliedPreempt = IBeatmapDifficultyInfo.DifficultyRangeInt(ar.Setting.Value!.Value, ar.PreemptRange);
+            // The inverse is continuous, while hit objects use integer milliseconds. A float
+            // rounded just below an integer boundary can introduce one additional millisecond.
+            if (appliedPreempt < Math.Floor(targetPreempt) && configuredAr > min)
+            {
+                ar.Setting.Value = MathF.BitDecrement(configuredAr);
+                appliedPreempt = IBeatmapDifficultyInfo.DifficultyRangeInt(ar.Setting.Value!.Value, ar.PreemptRange);
+            }
+
+            double actualPreempt = appliedPreempt / rate;
+            effectiveAr = IBeatmapDifficultyInfo.InverseDifficultyRange(actualPreempt, ar.PreemptRange);
+            mods = result.ToArray();
             return null;
         }
 

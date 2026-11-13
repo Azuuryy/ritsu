@@ -9,6 +9,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.Library;
 using osu.Game.Configuration;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
@@ -244,7 +245,7 @@ namespace osu.Game.Screens.Select
                 public ScopeDropdown()
                     : base(BeatmapLeaderboardWedgeStrings.Scope)
                 {
-                    RitsuOrderKey = osu.Game.Offline.RitsuMenuOrdering.Scope;
+                    RitsuOrderKey = RitsuMenuOrdering.Scope;
                     Items = osu.Game.Offline.RitsuOffline.Enabled
                         ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
                         : Enum.GetValues<BeatmapLeaderboardScope>();

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Realms;
+using osu.Framework.Statistics;
 using osu.Framework.Platform;
 using osu.Game.Database;
 using osu.Game.Beatmaps;
@@ -433,6 +434,7 @@ namespace osu.Game.Offline
 
         private ScoreInfo[] getMatchingScores(Guid profileId, Func<ScoreInfo, bool> predicate)
         {
+            using var measurement = FrameProfileCapture.Measure("Profiles.GetScores");
             HashSet<Guid> ids;
             lock (sync)
                 ids = data.Scores.Where(s => s.Value.ProfileId == profileId).Select(s => s.Key).ToHashSet();
@@ -506,7 +508,7 @@ namespace osu.Game.Offline
             }
         }
 
-        public List<ScoreInfo> GetScores(Guid profileId, string ruleset)
+        public List<ScoreInfo> GetScores(Guid profileId, string ruleset, string? beatmapHash = null)
         {
             HashSet<Guid> ids;
             lock (sync)
@@ -515,7 +517,8 @@ namespace osu.Game.Offline
             // Realm's LINQ provider cannot compare a linked object's ShortName. Resolve
             // scores by their primary keys, then inspect the linked ruleset in memory.
             var scores = realm.Run(r => ids.Select(id => r.Find<ScoreInfo>(id))
-                                           .Where(s => s != null && !s.DeletePending && s.Ruleset.ShortName == ruleset)
+                                           .Where(s => s != null && !s.DeletePending && s.Ruleset.ShortName == ruleset
+                                                       && (beatmapHash == null || s.BeatmapHash == beatmapHash))
                                            .Select(s => s!)
                                            .Detach());
             foreach (var score in scores)
@@ -583,16 +586,21 @@ namespace osu.Game.Offline
         private static ScoreInfo[] bestScores(IEnumerable<ScoreInfo> eligible) => eligible.GroupBy(s => s.BeatmapHash)
             .Select(g => g.OrderByDescending(s => s.PP).First()).OrderByDescending(s => s.PP).ToArray();
 
-        private static double totalPP(IReadOnlyList<ScoreInfo> best)
+        private static double totalPP(IReadOnlyList<ScoreInfo> best) => CalculateWeightedPP(best.Select(score => score.PP!.Value));
+
+        internal static double CalculateWeightedPP(IEnumerable<double> orderedBest)
         {
             double factor = 1;
             double total = 0;
-            foreach (var score in best)
+            int count = 0;
+            foreach (double pp in orderedBest)
             {
-                total += score.PP!.Value * factor;
+                total += pp * factor;
                 factor *= 0.95;
+                count++;
             }
-            return total + (417.0 - 1.0 / 3.0) * (1.0 - Math.Pow(0.995, best.Count));
+
+            return total + (417.0 - 1.0 / 3.0) * (1.0 - Math.Pow(0.995, count));
         }
 
         private RitsuProfile activeProfile() => data.Profiles.Single(p => p.Id == data.ActiveProfileId);

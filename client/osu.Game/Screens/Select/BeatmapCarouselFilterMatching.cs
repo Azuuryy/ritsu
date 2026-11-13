@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using osu.Framework.Statistics;
 using osu.Game.Beatmaps;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Utils;
@@ -30,6 +31,7 @@ namespace osu.Game.Screens.Select
 
         public async Task<List<CarouselItem>> Run(IEnumerable<CarouselItem> items, CancellationToken cancellationToken) => await Task.Run(() =>
         {
+            using var measurement = FrameProfileCapture.Measure("SongSelect.Filter");
             var criteria = getCriteria();
 
             return matchItems(items, criteria, cancellationToken).ToList();

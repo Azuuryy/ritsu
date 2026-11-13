@@ -14,6 +14,7 @@ using FrameworkMenu = osu.Framework.Graphics.UserInterface.Menu;
 using osu.Framework.Localisation;
 using osu.Framework.Input.Events;
 using osuTK.Input;
+using osu.Game.Library;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;

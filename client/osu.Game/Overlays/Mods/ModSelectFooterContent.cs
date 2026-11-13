@@ -161,10 +161,12 @@ namespace osu.Game.Overlays.Mods
             }
         }
 
-        protected virtual IEnumerable<ShearedButton> CreateButtons() => new[]
+        protected virtual IEnumerable<ShearedButton> CreateButtons()
         {
-            DeselectAllModsButton = new DeselectAllModsButton(overlay)
-        };
+            yield return DeselectAllModsButton = new DeselectAllModsButton(overlay);
+            if (overlay.OpenRitsuSimulation is { } open)
+                yield return new ShearedButton { Width = ModSelectOverlay.BUTTON_WIDTH, Text = "Simulate PP", Action = open };
+        }
 
         protected override void PopIn()
         {

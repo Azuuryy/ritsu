@@ -16,6 +16,7 @@ using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input;
 using osu.Framework.Input.Events;
 using osu.Game;
+using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Graphics;
@@ -169,7 +170,7 @@ namespace osu.Game.Screens.Select
                     Items = osu.Game.Offline.RitsuOffline.Enabled
                         ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
                         : Enum.GetValues<BeatmapLeaderboardScope>(),
-                    RitsuOrderKey = osu.Game.Offline.RitsuMenuOrdering.Scope,
+                    RitsuOrderKey = RitsuMenuOrdering.Scope,
                     ItemText = scope => scope == BeatmapLeaderboardScope.Local ? "Current profile" : scope == BeatmapLeaderboardScope.LocalAll ? "All profiles" : $@"{scope} Ranking",
                     Current = { BindTarget = Scope },
                 },

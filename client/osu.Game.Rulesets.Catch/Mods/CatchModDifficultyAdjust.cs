@@ -8,6 +8,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Extensions;
 using osu.Game.Rulesets.Catch.Beatmaps;
+using osu.Game.Rulesets.Catch.Objects;
 using osu.Game.Rulesets.Mods;
 
 namespace osu.Game.Rulesets.Catch.Mods
@@ -36,6 +37,8 @@ namespace osu.Game.Rulesets.Catch.Mods
 
         [SettingSource("Spicy Patterns", "Adjust the patterns as if Hard Rock is enabled.")]
         public BindableBool HardRockOffsets { get; } = new BindableBool();
+
+        public override (DifficultyBindable Setting, DifficultyRange PreemptRange)? RitsuApproachRate => (ApproachRate, CatchHitObject.PREEMPT_RANGE);
 
         public override string ExtendedIconInformation
         {

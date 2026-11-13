@@ -13,6 +13,7 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
 using osu.Framework.Localisation;
+using osu.Game.Library;
 using osu.Game.Configuration;
 using osu.Game.Offline;
 using osu.Game.Graphics;

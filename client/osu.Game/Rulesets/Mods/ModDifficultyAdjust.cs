@@ -31,6 +31,8 @@ namespace osu.Game.Rulesets.Mods
 
         public override Type[] IncompatibleMods => new[] { typeof(ModEasy), typeof(ModHardRock) };
 
+        public virtual (DifficultyBindable Setting, DifficultyRange PreemptRange)? RitsuApproachRate => null;
+
         protected const int FIRST_SETTING_ORDER = 1;
 
         protected const int LAST_SETTING_ORDER = 2;

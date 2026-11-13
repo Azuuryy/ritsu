@@ -6,7 +6,14 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using osu.Framework.Testing;
+using osu.Game.Performance;
+using osu.Game.Rulesets.Osu.Mods;
+using osu.Game.Rulesets.Catch;
+using osu.Framework.Statistics;
 using osu.Framework.Platform;
+using osu.Game.Commands;
+using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Database;
@@ -23,6 +30,42 @@ namespace osu.Game.Tests.NonVisual
     [TestFixture]
     public class RitsuLibraryTest
     {
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public void TestSimulationUsesModePerformanceCalculator(int mode)
+        {
+            using var archive = new System.IO.Compression.ZipArchive(osu.Game.Tests.Resources.TestResources.GetTestBeatmapStream(true));
+            using var file = archive.Entries.First(entry => entry.Name.EndsWith(".osu", StringComparison.OrdinalIgnoreCase)).Open();
+            using var reader = new osu.Game.IO.LineBufferedReader(file);
+            var decoded = osu.Game.Beatmaps.Formats.Decoder.GetDecoder<Beatmap>(reader).Decode(reader);
+            var working = new osu.Game.Tests.Beatmaps.TestWorkingBeatmap(decoded);
+            osu.Game.Rulesets.Ruleset ruleset = mode switch
+            {
+                1 => new osu.Game.Rulesets.Taiko.TaikoRuleset(),
+                2 => new CatchRuleset(),
+                3 => new osu.Game.Rulesets.Mania.ManiaRuleset(),
+                _ => new OsuRuleset(),
+            };
+            var mods = Array.Empty<Mod>();
+            using var simulation = new RitsuSimulation(working, ruleset.RulesetInfo, mods, default);
+            var difficulty = ruleset.CreateDifficultyCalculator(working).Calculate(mods);
+            var calculator = ruleset.CreatePerformanceCalculator()!;
+            var perfect = simulation.Calculate(new Dictionary<HitResult, int>(), null, null);
+            Assert.That(perfect.Accuracy, Is.EqualTo(1));
+            Assert.That(perfect.PP, Is.EqualTo(calculator.Calculate(perfect, difficulty).Total).Within(0.000001));
+            Assert.That(simulation.PerfectPP, Is.EqualTo(perfect.PP));
+
+            var changes = new Dictionary<HitResult, int> { [HitResult.Miss] = 1 };
+            if (mode == 0 && simulation.Groups.Any(group => group.Best == HitResult.SliderTailHit))
+                changes.Add(HitResult.IgnoreMiss, 1);
+
+            var imperfect = simulation.Calculate(changes, null, null);
+            Assert.That(imperfect.Accuracy, Is.LessThan(1));
+            Assert.That(imperfect.PP, Is.EqualTo(calculator.Calculate(imperfect, difficulty).Total).Within(0.000001));
+        }
+
         [Test]
         public Task TestPreferencesPersistAndStayOutsideLinkedDatabase() => Task.Run(() =>
         {
@@ -119,6 +162,103 @@ namespace osu.Game.Tests.NonVisual
             var completion = RitsuSearchCompletion.Get("artist=Camellia status=ran length<2m", 26).Single();
             Assert.That(completion.Query, Is.EqualTo("artist=Camellia status=Ranked length<2m"));
             Assert.That(completion.Caret, Is.EqualTo("artist=Camellia status=Ranked".Length));
+        }
+
+        [TestCase(0.75, false)]
+        [TestCase(1.0, false)]
+        [TestCase(1.39, false)]
+        [TestCase(0.75, true)]
+        [TestCase(1.39, true)]
+        public void TestApproachRateCompensation(double rate, bool useCatch)
+        {
+            osu.Game.Rulesets.Ruleset ruleset = useCatch ? new CatchRuleset() : new OsuRuleset();
+            var da = (ModDifficultyAdjust)ruleset.CreateModFromAcronym("DA")!;
+            da.OverallDifficulty.Value = 7;
+            Mod[]? mods = new Mod[] { da };
+            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 8, rate, ref mods, out double? effectiveAr), Is.Null);
+            Assert.That(effectiveAr, Is.EqualTo(8).Within(0.02));
+            Assert.That(mods!.OfType<ModDifficultyAdjust>().Single().OverallDifficulty.Value, Is.EqualTo(7));
+            Assert.That(da.RitsuApproachRate!.Value.Setting.Value, Is.Null);
+        }
+
+        [Test]
+        public void TestApproachRateCompensationRejectsLimitsAndConflicts()
+        {
+            var ruleset = new OsuRuleset();
+            Mod[]? mods = Array.Empty<Mod>();
+            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 0, 1.5, ref mods, out _), Is.Not.Null);
+            mods = new Mod[] { new OsuModHardRock() };
+            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 8, 1.3, ref mods, out _), Is.Not.Null);
+        }
+
+        [Test]
+        public void TestQueueSkipsUnavailableEntriesAndOnlyConsumesAfterSelection()
+        {
+            var queue = new RitsuBeatmapQueue();
+            var first = map("first");
+            var second = map("second");
+            Assert.That(queue.Add(first), Is.True);
+            Assert.That(queue.Add(first), Is.False);
+            Assert.That(queue.Add(second), Is.True);
+            Assert.That(queue.Move("second", -1), Is.True);
+            Assert.That(queue.Snapshot().Select(i => i.Hash), Is.EqualTo(new[] { "second", "first" }));
+            Assert.Throws<InvalidOperationException>(() => queue.SelectNext(hash => hash == "first" ? first : null,
+                _ => throw new InvalidOperationException()));
+            Assert.That(queue.Snapshot().Select(i => i.Hash), Is.EqualTo(new[] { "first" }));
+            Assert.That(queue.SelectNext(_ => first, selected => Assert.That(selected, Is.SameAs(first))), Is.True);
+            Assert.That(queue.Snapshot(), Is.Empty);
+
+            static BeatmapInfo map(string hash)
+            {
+                var beatmap = new BeatmapInfo { MD5Hash = hash };
+                var set = new BeatmapSetInfo();
+                beatmap.BeatmapSet = set;
+                return beatmap;
+            }
+        }
+
+        [Test]
+        public void TestCommandMatchingAndAvailability()
+        {
+            var command = new RitsuCommand("test", "/test action", "Test action", "[argument]", () => false, _ => new RitsuCommandInvocation(() => { }));
+            var registry = new RitsuCommandRegistry(command);
+            Assert.That(registry.Match("/TEST ACTION argument"), Is.SameAs(command));
+            Assert.That(registry.Match("/test actions"), Is.Null);
+            Assert.That(RitsuCommandRegistry.Bind(command, string.Empty).Error, Is.Not.Null);
+        }
+
+        [Test]
+        public async Task TestFrameProfilerWritesOfflineReport()
+        {
+            using var storage = new TemporaryNativeStorage("ritsu-frame-report");
+            using var host = new HeadlessGameHost("ritsu-frame-report");
+            var profiler = new RitsuFrameProfiler(storage, host);
+            var export = profiler.Start(action => action(), TimeSpan.FromMilliseconds(150));
+            using (FrameProfileCapture.Measure("test-operation"))
+                FrameProfileCapture.Count("test.size", 42);
+            await export.ConfigureAwait(false);
+
+            string directory = storage.GetDirectories(string.Empty).Single();
+            string json = File.ReadAllText(storage.GetFullPath(Path.Combine(directory, "trace.json")));
+            string html = File.ReadAllText(storage.GetFullPath(Path.Combine(directory, "report.html")));
+            Assert.That(json, Does.Contain("\"SchemaVersion\":1").And.Contain("test-operation"));
+            Assert.That(html, Does.Contain(json).And.Contain("Ritsu frame profile"));
+            Assert.That(profiler.CanStart, Is.True);
+        }
+
+        [Test]
+        public void TestFrameCaptureOverflowAndNewSession()
+        {
+            using var first = new FrameProfileCapture(1, 1);
+            using (FrameProfileCapture.Measure("operation"))
+                FrameProfileCapture.Count("count", 2);
+            var snapshot = first.Snapshot();
+            Assert.That(snapshot.Operations.Select(o => o.Name), Is.EqualTo(new[] { "count" }));
+            Assert.That(snapshot.DroppedOperations, Is.EqualTo(1));
+            Assert.That(snapshot.Operations[0].Start, Is.GreaterThanOrEqualTo(snapshot.StartTimestamp));
+
+            using var second = new FrameProfileCapture(1, 1);
+            Assert.That(second.Snapshot().DroppedOperations, Is.Zero);
         }
 
         [Test]

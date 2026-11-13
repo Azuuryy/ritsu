@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using osu.Framework.Allocation;
+using osu.Framework.Statistics;
 using osu.Framework.Audio;
 using osu.Framework.Audio.Sample;
 using osu.Framework.Bindables;
@@ -278,6 +279,8 @@ namespace osu.Game.Overlays.Mods
                 mod.Preselected.Value = false;
         }
 
+        internal Action? OpenRitsuSimulation { get; init; }
+
         public new ModSelectFooterContent? DisplayedFooterContent => base.DisplayedFooterContent as ModSelectFooterContent;
 
         public override VisibilityContainer CreateFooterContent() => new ModSelectFooterContent(this)
@@ -292,6 +295,7 @@ namespace osu.Game.Overlays.Mods
 
         protected override void Update()
         {
+            using var measurement = FrameProfileCapture.Measure("Mods.Overlay.Update");
             base.Update();
 
             SearchTextBox.PlaceholderText = SearchTextBox.HasFocus ? input_search_placeholder : tab_to_search_placeholder;
@@ -481,6 +485,7 @@ namespace osu.Game.Overlays.Mods
 
         protected override void PopIn()
         {
+            using var measurement = FrameProfileCapture.Measure("Mods.Overlay.Open");
             const double fade_in_duration = 400;
 
             base.PopIn();
@@ -541,6 +546,7 @@ namespace osu.Game.Overlays.Mods
 
         protected override void PopOut()
         {
+            using var measurement = FrameProfileCapture.Measure("Mods.Overlay.Close");
             const double fade_out_duration = 500;
 
             base.PopOut();
