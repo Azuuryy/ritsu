@@ -9,6 +9,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using osu.Framework.Statistics;
 using osu.Framework.Platform;
 using osu.Game.Online.API;
 using osu.Framework.Allocation;
@@ -156,18 +157,25 @@ namespace osu.Game.Beatmaps
 
             internal bool TryGet(BeatmapInfo beatmap, out double value)
             {
+                using var measurement = FrameProfileCapture.Measure("PerfectPP.Lookup");
                 var (stable, legacy) = getKeys(beatmap);
                 lock (owner.performanceCacheLock)
                 {
                     if (stable != null && owner.performanceCache.TryGetValue(stable, out value) && double.IsFinite(value) && value >= 0)
+                    {
+                        FrameProfileCapture.Count("PerfectPP.hit", 1);
                         return true;
+                    }
                     if (stable != null && legacy != null && owner.legacyPerformanceCache.TryGetValue(legacy, out value) && double.IsFinite(value) && value >= 0)
                     {
+                        FrameProfileCapture.Count("PerfectPP.hit", 1);
                         owner.performanceCache[stable] = value;
+                        FrameProfileCapture.Count("PerfectPP.size", owner.performanceCache.Count);
                         if (++owner.performanceCacheChanges >= 200) owner.savePerformanceCache();
                         return true;
                     }
                 }
+                FrameProfileCapture.Count("PerfectPP.miss", 1);
                 value = 0;
                 return false;
             }
@@ -176,6 +184,7 @@ namespace osu.Game.Beatmaps
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (TryGet(beatmap, out double cached)) return cached;
+                using var measurement = FrameProfileCapture.Measure("PerfectPP.Calculate");
                 double? pp = owner.GetDifficultyAsync(beatmap, ruleset ?? beatmap.Ruleset, mods, cancellationToken).GetAwaiter().GetResult()?.PerformanceAttributes?.Total;
                 if (!pp.HasValue || !double.IsFinite(pp.Value) || pp.Value < 0) return null;
                 var (stable, _) = getKeys(beatmap);
@@ -184,6 +193,7 @@ namespace osu.Game.Beatmaps
                     lock (owner.performanceCacheLock)
                     {
                         owner.performanceCache[stable] = pp.Value;
+                        FrameProfileCapture.Count("PerfectPP.size", owner.performanceCache.Count);
                         if (++owner.performanceCacheChanges >= 200) owner.savePerformanceCache();
                     }
                 }
@@ -352,7 +362,9 @@ namespace osu.Game.Beatmaps
                 return null;
 
             var lookup = new DifficultyCacheLookup(localBeatmapInfo, localRulesetInfo, mods);
-            return CheckExists(lookup, out var existing) ? existing : null;
+            bool found = CheckExists(lookup, out var existing);
+            FrameProfileCapture.Count(found ? "DifficultyCache.hit" : "DifficultyCache.miss", 1);
+            return found ? existing : null;
         }
 
         /// <summary>
@@ -528,6 +540,7 @@ namespace osu.Game.Beatmaps
                 var ruleset = rulesetInfo.CreateInstance();
                 Debug.Assert(ruleset != null);
 
+                using var measurement = FrameProfileCapture.Measure("DifficultyCache.Calculate");
                 PlayableCachedWorkingBeatmap workingBeatmap = new PlayableCachedWorkingBeatmap(beatmapManager.GetWorkingBeatmap(key.BeatmapInfo));
                 IBeatmap playableBeatmap = workingBeatmap.GetPlayableBeatmap(ruleset.RulesetInfo, key.OrderedMods, cancellationToken);
 

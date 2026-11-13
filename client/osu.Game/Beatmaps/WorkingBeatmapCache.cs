@@ -93,6 +93,7 @@ namespace osu.Game.Beatmaps
 
         public virtual WorkingBeatmap GetWorkingBeatmap([CanBeNull] BeatmapInfo beatmapInfo)
         {
+            using var measurement = FrameProfileCapture.Measure("WorkingBeatmapCache.Lookup");
             if (beatmapInfo == null || ReferenceEquals(beatmapInfo, DefaultBeatmap.BeatmapInfo))
                 return DefaultBeatmap;
 
@@ -101,7 +102,12 @@ namespace osu.Game.Beatmaps
                 var working = workingCache.FirstOrDefault(w => beatmapInfo.Equals(w.BeatmapInfo));
 
                 if (working != null)
+                {
+                    FrameProfileCapture.Count("WorkingBeatmapCache.hit", 1);
                     return working;
+                }
+
+                FrameProfileCapture.Count("WorkingBeatmapCache.miss", 1);
 
                 beatmapInfo = beatmapInfo.Detach();
 
@@ -112,7 +118,9 @@ namespace osu.Game.Beatmaps
                 workingCache.Add(working = new BeatmapManagerWorkingBeatmap(beatmapInfo, this));
 
                 // best effort; may be higher than expected.
-                GlobalStatistics.Get<int>("Beatmaps", $"Cached {nameof(WorkingBeatmap)}s").Value = workingCache.Count();
+                int count = workingCache.Count();
+                GlobalStatistics.Get<int>("Beatmaps", $"Cached {nameof(WorkingBeatmap)}s").Value = count;
+                FrameProfileCapture.Count("WorkingBeatmapCache.size", count);
 
                 return working;
             }

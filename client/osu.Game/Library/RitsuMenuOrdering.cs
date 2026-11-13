@@ -15,7 +15,7 @@ using osu.Game.Overlays.Dialog;
 using osuTK;
 using osuTK.Input;
 
-namespace osu.Game.Offline
+namespace osu.Game.Library
 {
     internal static partial class RitsuMenuOrdering
     {

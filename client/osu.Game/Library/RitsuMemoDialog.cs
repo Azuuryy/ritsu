@@ -13,7 +13,7 @@ using osu.Game.Overlays.Dialog;
 using osu.Game.Scoring;
 using osuTK;
 
-namespace osu.Game.Offline
+namespace osu.Game.Library
 {
     internal partial class RitsuMemoDialog : PopupDialog
     {

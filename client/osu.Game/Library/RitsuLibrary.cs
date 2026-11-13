@@ -9,7 +9,7 @@ using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Game.Screens.Select.Filter;
 
-namespace osu.Game.Offline
+namespace osu.Game.Library
 {
     internal sealed class RitsuLibrary
     {

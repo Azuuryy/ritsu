@@ -341,7 +341,7 @@ namespace osu.Game
             if (Offline.RitsuOffline.Enabled)
             {
                 var libraryStorage = Storage is OsuStorage osuStorage ? Host.GetStorage(osuStorage.DefaultStoragePath) : Storage;
-                dependencies.Cache(new Offline.RitsuLibrary(libraryStorage));
+                dependencies.Cache(new Library.RitsuLibrary(libraryStorage));
             }
             if (API is Offline.OfflineAPIProvider offlineProfilesApi)
             {

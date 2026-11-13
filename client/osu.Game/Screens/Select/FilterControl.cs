@@ -20,6 +20,7 @@ using osu.Framework.Input;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Framework.Threading;
+using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Configuration;
@@ -856,6 +857,9 @@ namespace osu.Game.Screens.Select
                 {
                     var controls = CompletionControls?.Invoke();
                     if (controls?.HandleSuggestionKey(e) == true)
+                        return true;
+
+                    if (this.FindClosestParent<SongSelect>()?.TryOpenRitsuQueue(e) == true)
                         return true;
 
                     if (controls != null && RitsuOffline.Enabled && HasFocus && !e.Repeat && ((e.Key == Key.AltLeft && e.ControlPressed)

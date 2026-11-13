@@ -28,6 +28,7 @@ using osu.Framework.Input.StateChanges;
 using osu.Framework.Logging;
 using osu.Framework.Screens;
 using osu.Framework.Threading;
+using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Configuration;
@@ -106,6 +107,10 @@ namespace osu.Game.Screens.Select
         /// Generally set to show external content in this space.
         /// </summary>
         public float TopPadding { get; init; }
+
+        private RitsuQueuePanel? ritsuQueuePanel;
+
+        internal Bindable<WorkingBeatmap> BeatmapForQueue => Beatmap;
 
         private ModSelectOverlay modSelectOverlay = null!;
         private ModSpeedHotkeyHandler modSpeedHotkeyHandler = null!;
@@ -601,6 +606,16 @@ namespace osu.Game.Screens.Select
         protected virtual ModSelectOverlay CreateModSelectOverlay() => new UserModSelectOverlay
         {
             ShowPresets = true,
+            OpenRitsuSimulation = this is SoloSongSelect && Offline.RitsuOffline.Enabled
+                ? () =>
+                {
+                    if (game is OsuGame osuGame && !Beatmap.IsDefault)
+                    {
+                        modSelectOverlay.Hide();
+                        osuGame.ShowRitsuMap(true);
+                    }
+                }
+                : null,
         };
 
         private void requestRecommendedSelection(IEnumerable<GroupedBeatmap> groupedBeatmaps)
@@ -968,6 +983,7 @@ namespace osu.Game.Screens.Select
 
         public override void OnSuspending(ScreenTransitionEvent e)
         {
+            ritsuQueuePanel?.Hide();
             carousel.VisuallyFocusSelected = true;
 
             this.FadeOut(fade_duration, Easing.OutQuint);
@@ -978,6 +994,7 @@ namespace osu.Game.Screens.Select
 
         public override bool OnExiting(ScreenExitEvent e)
         {
+            ritsuQueuePanel?.Hide();
             this.FadeOut(fade_duration, Easing.OutQuint);
             onLeavingScreen();
 
@@ -1369,6 +1386,12 @@ namespace osu.Game.Screens.Select
 
         public virtual bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
         {
+            if (e.Action == GlobalAction.Back && ritsuQueuePanel?.State.Value == Visibility.Visible)
+            {
+                ritsuQueuePanel.Hide();
+                return true;
+            }
+
             if (!this.IsCurrentScreen()) return false;
 
             if (game == null)
@@ -1429,12 +1452,37 @@ namespace osu.Game.Screens.Select
         {
         }
 
+        internal bool TryOpenRitsuQueue(KeyDownEvent e) =>
+            this is SoloSongSelect && this.IsCurrentScreen() && e.Key == Key.Tab && !e.Repeat
+            && !e.ShiftPressed && !e.ControlPressed && !e.AltPressed
+            && dialogOverlay?.CurrentDialog == null && modSelectOverlay.State.Value != Visibility.Visible
+            && Offline.RitsuOffline.Enabled && game is OsuGame osuGame && toggleRitsuQueue(osuGame);
+
+        private bool toggleRitsuQueue(OsuGame osuGame)
+        {
+            if (ritsuQueuePanel == null)
+                AddInternal(ritsuQueuePanel = new RitsuQueuePanel(osuGame, this));
+
+            if (ritsuQueuePanel.State.Value == Visibility.Visible)
+                ritsuQueuePanel.Hide();
+            else
+                ritsuQueuePanel.Show();
+
+            return true;
+        }
+
         protected override bool OnKeyDown(KeyDownEvent e)
         {
             if (e.Repeat) return false;
 
             switch (e.Key)
             {
+                case Key.Tab when inputManager.FocusedDrawable is not osu.Framework.Graphics.UserInterface.TextBox:
+                    if (TryOpenRitsuQueue(e))
+                        return true;
+
+                    break;
+
                 case Key.Delete:
                     if (e.ShiftPressed)
                     {
@@ -1640,8 +1688,14 @@ namespace osu.Game.Screens.Select
             if (game is OsuGame osuGame && Offline.RitsuOffline.Enabled)
             {
                 yield return new OsuMenuItem("Add to play queue", MenuItemType.Standard, () => osuGame.QueueRitsuBeatmap(beatmap));
+                if (!beatmap.Hidden && beatmap.BeatmapSet?.DeletePending == false)
+                    yield return new OsuMenuItem("Simulate PP", MenuItemType.Standard, () => osuGame.ShowRitsuMap(true, beatmap));
                 if (beatmap.Equals(Beatmap.Value.BeatmapInfo))
+                {
                     yield return new OsuMenuItem("Set target BPM", MenuItemType.Standard, osuGame.ShowRitsuTargetBpm);
+                    yield return new OsuMenuItem("Map attributes", MenuItemType.Standard, () => osuGame.ShowRitsuMap(false));
+
+                }
             }
 
             foreach (var i in CreateCollectionMenuActions(beatmap))
@@ -1652,7 +1706,7 @@ namespace osu.Game.Screens.Select
         {
             yield return new OsuMenuItem(CommonStrings.Collections)
             {
-                Items = RitsuCollectionMenu.Create(realm, manageCollectionsDialog, beatmap, Dependencies.Get<Offline.RitsuLibrary>(),
+                Items = RitsuCollectionMenu.Create(realm, manageCollectionsDialog, beatmap, Dependencies.Get<RitsuLibrary>(),
                     Dependencies.Get<Offline.RitsuProfileManager>(), game: game as OsuGame),
             };
         }

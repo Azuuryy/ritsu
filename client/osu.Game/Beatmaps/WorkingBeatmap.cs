@@ -11,6 +11,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using osu.Framework.Statistics;
 using osu.Framework.Audio;
 using osu.Framework.Audio.Track;
 using osu.Framework.Extensions;
@@ -206,6 +207,7 @@ namespace osu.Game.Beatmaps
                 {
                     // TODO: This is a touch expensive and can become an issue if being accessed every Update call.
                     // Optimally we would not involve the async flow if things are already loaded.
+                    using var measurement = FrameProfileCapture.Measure("Beatmap.WaitForLoad");
                     return loadBeatmapAsync().GetResultSafely();
                 }
                 catch (AggregateException ae)
@@ -233,6 +235,7 @@ namespace osu.Game.Beatmaps
             {
                 return beatmapLoadTask ??= Task.Factory.StartNew(() =>
                 {
+                    using var measurement = FrameProfileCapture.Measure("Beatmap.Parse");
                     // Todo: Handle cancellation during beatmap parsing
                     var b = GetBeatmap() ?? new Beatmap();
 

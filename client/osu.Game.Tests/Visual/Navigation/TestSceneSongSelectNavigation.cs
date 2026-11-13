@@ -9,6 +9,8 @@ using osu.Framework.Extensions;
 using osu.Framework.Extensions.TypeExtensions;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Testing;
+using osu.Game.Commands;
+using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Configuration;
@@ -60,6 +62,19 @@ namespace osu.Game.Tests.Visual.Navigation
             openPalette();
             runCommand("/queue next");
             AddUntilStep("next difficulty selected in Song Select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect && Game.Beatmap.Value.BeatmapInfo.MD5Hash == mapHash);
+            AddUntilStep("wait for queue command to close", () => dialog() == null);
+            AddStep("press Tab in Song Select", () => InputManager.Key(Key.Tab));
+            AddUntilStep("queue view opens", () => select().ChildrenOfType<RitsuQueuePanel>().Any(panel => panel.State.Value == osu.Framework.Graphics.Containers.Visibility.Visible));
+            AddStep("close queue", () => InputManager.Key(Key.Escape));
+
+            openPalette();
+            AddStep("select osu!standard for simulation", () => Game.Ruleset.Value = new OsuRuleset().RulesetInfo);
+            runCommand("/simulate");
+            AddUntilStep("simulator calculated perfect PP", () => Game.ScreenStack.CurrentScreen is RitsuSimulationScreen simulation
+                && simulation.ChildrenOfType<osu.Game.Graphics.Sprites.OsuSpriteText>().Any(text => text.Text.ToString().Contains(" PP", StringComparison.Ordinal)));
+            AddStep("close simulation", () => ((RitsuSimulationScreen)Game.ScreenStack.CurrentScreen)
+                .ChildrenOfType<osu.Game.Graphics.UserInterfaceV2.RoundedButton>().Single(button => button.Text.ToString() == "Back to Song Select").TriggerClick());
+            AddUntilStep("wait for Song Select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
             AddStep("set initial search", () => select().RitsuFilters.Search("length<2m"));
 
             openPalette();

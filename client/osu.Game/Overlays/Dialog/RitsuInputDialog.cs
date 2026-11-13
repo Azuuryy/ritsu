@@ -5,9 +5,8 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
-using osu.Game.Overlays.Dialog;
 
-namespace osu.Game.Offline
+namespace osu.Game.Overlays.Dialog
 {
     internal partial class RitsuInputDialog : PopupDialog
     {

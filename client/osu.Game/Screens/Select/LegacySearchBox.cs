@@ -124,6 +124,9 @@ namespace osu.Game.Screens.Select
                 if (CompletionControls.HandleSuggestionKey(e))
                     return true;
 
+                if (this.FindClosestParent<SongSelect>()?.TryOpenRitsuQueue(e) == true)
+                    return true;
+
                 if (RitsuOffline.Enabled && HasFocus && !e.Repeat && ((e.Key == Key.AltLeft && e.ControlPressed)
                         || (e.Key is Key.ControlLeft or Key.ControlRight && e.CurrentState.Keyboard.Keys.IsPressed(Key.AltLeft))))
                 {
