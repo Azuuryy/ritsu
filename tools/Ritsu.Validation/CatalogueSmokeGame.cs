@@ -74,7 +74,7 @@ internal partial class CatalogueSmokeGame : OsuGame
                 nextAction = Time.Current + 2000;
                 return;
             }
-            var results = (FillFlowContainer<BeatmapCard>)typeof(RitsuBeatmapCatalogue).GetField("results", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(catalogue)!;
+            var results = (Container)typeof(RitsuBeatmapCatalogue).GetField("results", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(catalogue)!;
             if (stage == 3)
             {
                 if (results.Count == 0) return;
@@ -90,7 +90,7 @@ internal partial class CatalogueSmokeGame : OsuGame
             }
             if (stage == 5)
             {
-                var card = results.First(c => !c.BeatmapSet.IsLocal && c.BeatmapSet.HasVideo);
+                var card = results.Children.OfType<BeatmapCard>().First(c => !c.BeatmapSet.IsLocal && c.BeatmapSet.HasVideo);
                 if (!card.ContextMenuItems.Any(i => i.Text.Value.ToString().Contains("Copy osu!")) || !card.ContextMenuItems.Any(i => i.Text.Value.ToString().Contains("Copy Torii"))) throw new Exception("Missing beatmap link actions");
                 if (card.Scale.X <= 1 || Math.Abs(results.ScreenSpaceDrawQuad.Centre.X - results.Parent!.ScreenSpaceDrawQuad.Centre.X) > 2) throw new Exception("Grid is not enlarged and centred");
                 card.Action!();

@@ -93,7 +93,7 @@ namespace osu.Game.Overlays
 
             if (Offline.RitsuOffline.Enabled)
             {
-                panelTarget.Child = new RitsuBeatmapCatalogue();
+                panelTarget.Child = new RitsuBeatmapCatalogue(ScrollFlow);
             }
 
             filterControl.TypingStarted = onTypingStarted;

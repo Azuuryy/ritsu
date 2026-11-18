@@ -53,7 +53,8 @@ namespace osu.Game.Offline
 
         public Task PerformAsync(APIRequest request)
         {
-            if (request is DownloadBeatmapSetRequest download) return download.PerformCatalogueAsync(this);
+            if (request is DownloadBeatmapSetRequest download)
+                return download.PerformCatalogueAsync(this);
             reject(request);
             // IAPIProvider reports request failure via APIRequest.Failure, including
             // callers that intentionally do not await this dispatch task.

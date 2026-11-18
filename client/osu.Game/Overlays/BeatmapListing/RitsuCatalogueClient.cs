@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using osu.Game.Online.API.Requests.Responses;
+using osu.Game.Offline;
 
 namespace osu.Game.Overlays.BeatmapListing
 {
