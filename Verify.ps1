@@ -7,7 +7,7 @@ $ritsuFixtures = Join-Path $PSScriptRoot 'tools/fixtures'
 New-Item -ItemType Directory -Force $ritsuCache | Out-Null
 & dotnet build (Join-Path $PSScriptRoot 'tools/Ritsu.Validation/Ritsu.Validation.csproj') -c Release "-p:NuGetPackages=$NuGetPackages" -v:quiet
 if ($LASTEXITCODE -ne 0) { throw 'Verification build failed.' }
-$ritsuExecutable = Join-Path $PSScriptRoot 'tools/Ritsu.Validation/bin/Release/net10.0/Ritsu.Validation.exe'
+$ritsuExecutable = Join-Path $PSScriptRoot 'tools/Ritsu.Validation/bin/Release/net11.0/Ritsu.Validation.exe'
 $ritsuTestDirectory = Split-Path -Parent $ritsuExecutable
 foreach ($ritsuCheck in @('--checks','--audit-control')) {
     & $ritsuExecutable $ritsuCheck
