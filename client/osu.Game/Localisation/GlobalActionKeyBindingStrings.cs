@@ -35,8 +35,10 @@ namespace osu.Game.Localisation
         public static LocalisableString ToggleSettings => new TranslatableString(getKey(@"toggle_settings"), @"Toggle settings");
 
         /// <summary>
-        /// "Toggle beatmap listing"
+        /// "Toggle Ritsu command palette"
         /// </summary>
+        public static LocalisableString ToggleRitsuPalette => new TranslatableString(getKey("toggle_ritsu_palette"), "Toggle Ritsu command palette");
+
         public static LocalisableString ToggleBeatmapListing => new TranslatableString(getKey(@"toggle_beatmap_listing"), @"Toggle beatmap listing");
 
         /// <summary>

@@ -10,6 +10,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Offline;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Scoring;
@@ -20,6 +21,9 @@ namespace osu.Game.Overlays.Mods
     public partial class ModSelectFooterContent : VisibilityContainer
     {
         private readonly ModSelectOverlay overlay;
+
+        [Resolved(CanBeNull = true)]
+        private RitsuProfileManager? profiles { get; set; }
 
         private RankingInformationDisplay? rankingInformationDisplay;
         private BeatmapAttributesDisplay? beatmapAttributesDisplay;
@@ -98,6 +102,8 @@ namespace osu.Game.Overlays.Mods
         {
             base.LoadComplete();
 
+            if (profiles != null) profiles.Changed += onProfileChanged;
+
             Beatmap.BindValueChanged(b =>
             {
                 beatmapAttributesDisplay?.BeatmapInfo.Value = b.NewValue?.BeatmapInfo;
@@ -131,10 +137,22 @@ namespace osu.Game.Overlays.Mods
                 double multiplier = scoreMultiplierCalculator?.CalculateFor(ActiveMods.Value) ?? 1;
 
                 rankingInformationDisplay.ModMultiplier.Value = multiplier;
-                rankingInformationDisplay.Ranked.Value = ActiveMods.Value.All(m => m.Ranked);
+                rankingInformationDisplay.Ranked.Value = RitsuOffline.Enabled && profiles != null
+                    ? RitsuLocalBeatmapStatus.ForBeatmap(workingBeatmap.BeatmapInfo, profiles.GetActiveProfile()) != BeatmapOnlineStatus.Unranked
+                      && ActiveMods.Value.All(m => m.Acronym != "AT" && m.Acronym != "CN"
+                          && (m.Acronym != "RX" && m.Acronym != "AP" || profiles.IncludeRelaxAutopilot))
+                    : ActiveMods.Value.All(m => m.Ranked);
             }
 
             beatmapAttributesDisplay?.Mods.Value = ActiveMods.Value;
+        }
+
+        private void onProfileChanged() => Schedule(updateInformation);
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (isDisposing && profiles != null) profiles.Changed -= onProfileChanged;
+            base.Dispose(isDisposing);
         }
 
         protected override void Update()
@@ -161,10 +179,12 @@ namespace osu.Game.Overlays.Mods
             }
         }
 
-        protected virtual IEnumerable<ShearedButton> CreateButtons() => new[]
+        protected virtual IEnumerable<ShearedButton> CreateButtons()
         {
-            DeselectAllModsButton = new DeselectAllModsButton(overlay)
-        };
+            yield return DeselectAllModsButton = new DeselectAllModsButton(overlay);
+            if (overlay.OpenRitsuSimulation is { } open)
+                yield return new ShearedButton { Width = ModSelectOverlay.BUTTON_WIDTH, Text = "Simulate PP", Action = open };
+        }
 
         protected override void PopIn()
         {

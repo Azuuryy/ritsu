@@ -666,6 +666,40 @@ namespace osu.Game.Tests.Beatmaps.Formats
             });
         }
 
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        public void TestRandomV2VariantSettingsSurviveOsrRoundTrip(int version)
+        {
+            var ruleset = new OsuRuleset().RulesetInfo;
+            var scoreInfo = TestResources.CreateTestScoreInfo(ruleset);
+            scoreInfo.Mods = new Mod[]
+            {
+                new OsuModRandomV2
+                {
+                    Seed = { Value = 123 },
+                    TransformationVersion = { Value = version },
+                    CustomAngle = { Value = true },
+                    PatternMask = { Value = 3 },
+                    SeparatePatterns = { Value = version == 2 },
+                    StreamPatterns = { Value = version == 2 ? 1 << 11 : 0 },
+                }
+            };
+            var score = new Score
+            {
+                ScoreInfo = scoreInfo,
+                Replay = new Replay { Frames = new List<ReplayFrame> { new OsuReplayFrame(2000, OsuPlayfield.BASE_SIZE / 2, OsuAction.LeftButton) } }
+            };
+
+            var decoded = encodeThenDecode(LegacyBeatmapDecoder.LATEST_VERSION, score, new TestBeatmap(ruleset));
+            var mod = decoded.ScoreInfo.Mods.OfType<OsuModRandomV2>().Single();
+            Assert.That(mod.Seed.Value, Is.EqualTo(123));
+            Assert.That(mod.TransformationVersion.Value, Is.EqualTo(version));
+            Assert.That(mod.SeparatePatterns.Value, Is.EqualTo(version == 2));
+            Assert.That(mod.StreamPatterns.Value, Is.EqualTo(version == 2 ? 1 << 11 : 0));
+            Assert.That(mod.PatternMask.Value, Is.EqualTo(3));
+        }
+
         private static Score encodeThenDecode(int beatmapVersion, Score score, TestBeatmap beatmap)
         {
             var encodeStream = new MemoryStream();

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="84" viewBox="0 0 120 84">
+  <g fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round">
+    <defs><mask id="slider"><rect width="120" height="84" fill="white" stroke="none"/><path d="M39 54 78 30" stroke="black" stroke-width="9"/></mask></defs><path d="M39 54 78 30" stroke-width="19" mask="url(#slider)"/><path d="M37 18 84 65" stroke-width="7"/>
+  </g>
+</svg>

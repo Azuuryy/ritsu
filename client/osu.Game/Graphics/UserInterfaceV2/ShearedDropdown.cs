@@ -14,7 +14,10 @@ using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.Library;
 using osu.Game.Graphics.Sprites;
+using osu.Game.Offline;
+using osu.Game.Overlays.Dialog;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Input.Bindings;
 using osu.Game.Overlays;
@@ -25,6 +28,23 @@ namespace osu.Game.Graphics.UserInterfaceV2
 {
     public partial class ShearedDropdown<T> : Dropdown<T>, IKeyBindingHandler<GlobalAction>
     {
+        internal string? RitsuOrderKey { get; init; }
+        private Action? configureRitsuOrder;
+
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private IDialogOverlay? dialogs { get; set; }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            if (library != null && RitsuOrderKey != null)
+                configureRitsuOrder = RitsuMenuOrdering.Bind(library, dialogs, this, Menu, RitsuOrderKey, item => GenerateItemText(item).ToString());
+        }
+
         protected override DropdownHeader CreateHeader() => new ShearedDropdownHeader();
 
         protected override DropdownMenu CreateMenu() => new ShearedDropdownMenu();
@@ -62,6 +82,8 @@ namespace osu.Game.Graphics.UserInterfaceV2
 
         protected override bool OnMouseDown(MouseDownEvent e)
         {
+            if (e.Button == MouseButton.Right && configureRitsuOrder != null)
+                configureRitsuOrder();
             if (e.Button == MouseButton.Middle && MiddleClickAction != null)
                 MiddleClickAction();
             return true;

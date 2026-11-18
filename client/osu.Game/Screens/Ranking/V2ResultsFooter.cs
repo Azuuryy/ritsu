@@ -67,7 +67,6 @@ namespace osu.Game.Screens.Ranking
         private FillFlowContainer<ScreenFooterButton> buttonsFlow = null!;
         private Box background = null!;
         private ScreenFooterButton screenshotButton = null!;
-        private bool screenshotUploadMode;
 
         private readonly Bindable<DownloadState> replayState = new Bindable<DownloadState>();
         private bool exportWhenDownloaded;

@@ -14,7 +14,7 @@ Read [ROADMAP.md](ROADMAP.md) before starting and [VALIDATION.md](VALIDATION.md)
 
 ## Requirements
 
-Windows x64, Git, the .NET 10 SDK, and Python 3 for packaging and the optional graphical scenarios. Downloading dependencies requires Internet access on the first run; the built client runs offline.
+Windows x64, Git, the .NET 11 SDK, and Python 3 for packaging and the optional graphical scenarios. Downloading dependencies requires Internet access on the first run; the built client runs offline.
 
 ## Set up and build
 

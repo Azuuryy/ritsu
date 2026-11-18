@@ -203,16 +203,20 @@ namespace osu.Game.Screens.Select
             }
         }
 
-        protected override void OnStart()
+        protected override void OnStart() => start(null);
+
+        public void StartModPreview(ModAutoplay autoplay) => SelectAndRun(Beatmap.Value.BeatmapInfo, () => start(autoplay));
+
+        private void start(ModAutoplay? preview)
         {
             if (playerLoader != null) return;
 
             modsAtGameplayStart = Mods.Value.Select(m => m.DeepClone()).ToArray();
 
             // Ctrl+Enter should start map with autoplay enabled.
-            if (GetContainingInputManager()?.CurrentState?.Keyboard.ControlPressed == true)
+            if (preview != null || GetContainingInputManager()?.CurrentState?.Keyboard.ControlPressed == true)
             {
-                var autoInstance = getAutoplayMod();
+                var autoInstance = preview ?? getAutoplayMod();
 
                 if (autoInstance == null)
                 {
@@ -223,7 +227,7 @@ namespace osu.Game.Screens.Select
                     return;
                 }
 
-                var mods = Mods.Value.Append(autoInstance).ToArray();
+                var mods = Mods.Value.Where(m => preview == null || m is not ModAutoplay).Append(autoInstance).ToArray();
 
                 if (!ModUtils.CheckCompatibleSet(mods, out var invalid))
                     mods = mods.Except(invalid).Append(autoInstance).ToArray();
@@ -243,7 +247,10 @@ namespace osu.Game.Screens.Select
 
                 if (replayGeneratingMod != null)
                 {
-                    player = new ReplayPlayer(replayGeneratingMod.CreateScoreFromReplayData);
+                    player = new ReplayPlayer(replayGeneratingMod.CreateScoreFromReplayData)
+                    {
+                        ModPreviewSettings = preview != null ? modsAtGameplayStart : null,
+                    };
                 }
                 else
                 {
@@ -260,6 +267,15 @@ namespace osu.Game.Screens.Select
                 return;
 
             SelectAndRun(beatmap, () => this.Push(new EditorLoader()));
+        }
+
+        internal Action<SoloSongSelect>? RitsuOnEnter { get; init; }
+
+        public override void OnEntering(ScreenTransitionEvent e)
+        {
+            base.OnEntering(e);
+            if (RitsuOnEnter != null)
+                Schedule(() => RitsuOnEnter(this));
         }
 
         public override void OnResuming(ScreenTransitionEvent e)

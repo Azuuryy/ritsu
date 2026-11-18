@@ -26,7 +26,7 @@ namespace osu.Game.Graphics
     /// so a grep for "ThemeAware" finds every spot where the two
     /// themes intentionally differ.
     ///
-    /// Why a generic <typeparamref name="T"/> instead of overloads per
+    /// Why a generic <c>T</c> instead of overloads per
     /// type: the helper is read at construction time on drawables, not
     /// in a hot loop. Generic dispatch costs nothing at runtime
     /// (resolved at JIT compile), but lets one method serve floats

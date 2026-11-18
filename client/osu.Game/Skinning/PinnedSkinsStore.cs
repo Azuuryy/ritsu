@@ -16,7 +16,7 @@ namespace osu.Game.Skinning
     ///
     /// Why this exists outside Realm
     /// -----------------------------
-    /// Earlier the same flag lived on <see cref="SkinInfo.Pinned"/> and
+    /// Earlier the same flag lived on <c>Pinned</c> and
     /// required a Realm schema bump (51 → 52). That bump bricked vanilla
     /// osu! lazer's ability to open shared-with-Torii realm folders, so
     /// the field has been moved off the Realm schema and into a JSON

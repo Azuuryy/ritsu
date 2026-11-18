@@ -1,6 +1,8 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using osu.Game.Graphics;
+using osu.Framework.Graphics.Sprites;
 using System;
 using System.Linq;
 using osu.Framework.Bindables;
@@ -25,6 +27,7 @@ namespace osu.Game.Rulesets.Osu.Mods
 
         public override LocalisableString Description => "Spacing grows/shrinks over time.";
 
+        public override IconUsage? Icon => OsuIcon.ModSpacingOvertime;
         public override string Acronym => "SOT";
 
         public override ModType Type => ModType.Conversion;

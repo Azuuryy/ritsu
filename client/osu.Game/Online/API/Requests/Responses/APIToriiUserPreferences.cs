@@ -20,7 +20,7 @@ namespace osu.Game.Online.API.Requests.Responses
     /// Nullable bool because the PATCH endpoint accepts partial updates:
     /// when sending we want missing fields to ABSENT in the JSON (not
     /// <c>false</c>), so the server doesn't overwrite untouched
-    /// preferences. <see cref="JsonConvert.SerializeObject"/> on a
+    /// preferences. <c>SerializeObject</c> on a
     /// nullable bool with default <c>NullValueHandling.Include</c>
     /// surfaces null which the server tolerates — and on the receive
     /// side, missing keys become null on this POCO without crashing.

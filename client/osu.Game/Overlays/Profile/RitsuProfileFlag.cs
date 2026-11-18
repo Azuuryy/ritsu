@@ -39,7 +39,7 @@ namespace osu.Game.Overlays.Profile
         private bool chooseImage;
         private Guid selectedProfile;
 
-        public LocalisableString TooltipText => "Click to choose a country; right-click to import a flag.";
+        public override LocalisableString TooltipText => "Click to choose a country; right-click to import a flag.";
 
         public RitsuProfileFlag()
         {

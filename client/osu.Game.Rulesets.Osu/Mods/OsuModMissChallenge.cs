@@ -1,5 +1,7 @@
 // Adapted from Modosu (Azuuryy), derived from MOsu (p-720), GPL-3.0.
 // See LICENCE-Modosu.txt in the distribution.
+using osu.Game.Graphics;
+using osu.Framework.Graphics.Sprites;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,6 +20,7 @@ namespace osu.Game.Rulesets.Osu.Mods
     public class OsuModMissChallenge : ModFailCondition, IApplicableToPlayer, IModosuMod
     {
         public override string Name => "Miss Challenge";
+        public override IconUsage? Icon => OsuIcon.ModMissChallenge;
         public override string Acronym => "MC";
         public override LocalisableString Description => "Fail if the miss limit is exceeded.";
         public override ModType Type => ModType.DifficultyIncrease;

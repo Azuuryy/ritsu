@@ -74,7 +74,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators.Aim
                     if (currVelocity > relax_washing_machine_velocity_threshold)
                     {
                         // The wider the curve is the harsher will be the flow aim nerf, killing abuse maps 
-                        double flowConsistencyKeep = DifficultyCalculationUtils.Smoothstep(angularVelocity, 0, relax_circularity_angular_threshold);
+                        double flowConsistencyKeep = DiffUtils.Smoothstep(angularVelocity, 0, relax_circularity_angular_threshold);
 
                         // Exponential velocity penalty: the larger the circle, the harder the multiplier drops, it should be able to kill pp completely at cs0 
                         double velocityPenalty = Math.Pow(relax_washing_machine_velocity_threshold / currVelocity, 2);
@@ -114,7 +114,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators.Aim
                 }
 
                 // Scale with ratio of difference compared to 0.5 * max dist.
-                double distRatio = DifficultyCalculationUtils.Smoothstep(Math.Abs(prevVelocity - currVelocity) / Math.Max(prevVelocity, currVelocity), 0, 1);
+                double distRatio = DiffUtils.Smoothstep(Math.Abs(prevVelocity - currVelocity) / Math.Max(prevVelocity, currVelocity), 0, 1);
 
                 // Reward for % distance up to 125 / strainTime for overlaps where velocity is still changing.
                 double overlapVelocityBuff = Math.Min(OsuDifficultyHitObject.NORMALISED_DIAMETER * 1.25 / Math.Min(osuCurrObj.AdjustedDeltaTime, osuLastObj.AdjustedDeltaTime),
@@ -143,7 +143,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators.Aim
             flowDifficulty = Math.Pow(flowDifficulty, 1.45);
 
             // Reduce difficulty for low spacing since spacing below radius is always to be flowed
-            return flowDifficulty * DifficultyCalculationUtils.Smootherstep(currDistance, 0, OsuDifficultyHitObject.NORMALISED_RADIUS);
+            return flowDifficulty * DiffUtils.Smootherstep(currDistance, 0, OsuDifficultyHitObject.NORMALISED_RADIUS);
         }
 
         private static double calculateOverlapFactor(OsuDifficultyHitObject first, OsuDifficultyHitObject second)

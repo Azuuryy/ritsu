@@ -34,6 +34,18 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
         });
 
         [Test]
+        public void TestSelectedBlueprintWithoutDrawable()
+        {
+            AddStep("remove drawable", () =>
+            {
+                Clear();
+                AddBlueprint(blueprint = new TestBlueprint(hitCircle));
+            });
+            AddUntilStep("blueprint loads", () => blueprint.IsLoaded);
+            AddAssert("circle remains selectable", () => blueprint.ReceivePositionalInputAt(blueprint.CirclePiece.ScreenSpaceDrawQuad.Centre));
+        }
+
+        [Test]
         public void TestInitialState()
         {
             AddAssert("blueprint positioned over hitobject", () => blueprint.CirclePiece.Position == hitCircle.Position);

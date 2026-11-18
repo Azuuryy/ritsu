@@ -9,6 +9,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Input;
 using osu.Framework.Testing;
+using osu.Game.Configuration;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Mods;
@@ -79,6 +80,50 @@ namespace osu.Game.Tests.Visual.UserInterface
                 panel.Enabled.Value = false;
                 panel.ExpandedState.Value = ModCustomisationPanel.ModCustomisationPanelState.Collapsed;
             });
+        }
+
+        [Test]
+        public void TestRandomV2PatternSelection()
+        {
+            var mod = new OsuModRandomV2 { Angle = { Value = OsuModRandomV2.AngleEnum.Ninety } };
+            OsuModRandomV2.PatternSetting patterns = null!;
+            OsuModRandomV2.CategoryPatternSetting streams = null!;
+            OsuModRandomV2.AngleEnumSetting angle = null!;
+            AddStep("add the trajectory settings", () =>
+            {
+                var controls = mod.CreateSettingsControls().Where(c => c is OsuModRandomV2.PatternSetting or OsuModRandomV2.AngleEnumSetting).ToArray();
+                patterns = controls.OfType<OsuModRandomV2.PatternSetting>().Single(control => control is not OsuModRandomV2.CategoryPatternSetting);
+                streams = controls.OfType<OsuModRandomV2.CategoryPatternSetting>().Single(control => control.LabelText.ToString() == "Stream patterns");
+                angle = controls.OfType<OsuModRandomV2.AngleEnumSetting>().Single();
+                Child = new FillFlowContainer
+                {
+                    Width = 400,
+                    AutoSizeAxes = Axes.Y,
+                    Direction = FillDirection.Vertical,
+                    Children = controls,
+                };
+            });
+            AddUntilStep("trajectory settings hidden", () => patterns.IsLoaded && angle.IsLoaded && !patterns.IsPresent && !angle.IsPresent);
+            AddStep("enable custom angle", () => mod.CustomAngle.Value = true);
+            AddUntilStep("patterns and base angle visible", () => patterns.IsPresent && angle.IsPresent);
+            AddStep("check octagon and ladder", () =>
+            {
+                var checkboxes = patterns.ChildrenOfType<OsuCheckbox>().ToArray();
+                InputManager.MoveMouseTo(checkboxes[^1]);
+                InputManager.Click(MouseButton.Left);
+                InputManager.MoveMouseTo(checkboxes[0]);
+                InputManager.Click(MouseButton.Left);
+            });
+            AddAssert("both patterns saved", () => mod.PatternMask.Value, () => Is.EqualTo(1 | (1 << 14)));
+            AddUntilStep("base angle hidden when patterns are selected", () => !angle.IsPresent);
+            AddStep("clear the pattern selection", () => patterns.ApplyDefault());
+            AddAssert("all patterns unchecked", () => patterns.ChildrenOfType<OsuCheckbox>().All(checkbox => !checkbox.Current.Value));
+            AddUntilStep("base angle visible again", () => angle.IsPresent);
+            AddAssert("original angle restored", () => angle.Current.Value, () => Is.EqualTo(OsuModRandomV2.AngleEnum.Ninety));
+            AddStep("enable separate selections", () => mod.SeparatePatterns.Value = true);
+            AddUntilStep("stream settings replace the global selection", () => streams.IsPresent && !patterns.IsPresent && angle.IsPresent);
+            AddStep("set a stream pattern", () => mod.StreamPatterns.Value = 1 << 11);
+            AddUntilStep("base angle hides for a category selection", () => !angle.IsPresent);
         }
 
         [Test]

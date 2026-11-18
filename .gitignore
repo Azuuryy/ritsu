@@ -8,3 +8,5 @@ __pycache__/
 **/obj/
 toriirefresh-framework/
 toriirefresh-resources/
+
+/.local-dotnet11/

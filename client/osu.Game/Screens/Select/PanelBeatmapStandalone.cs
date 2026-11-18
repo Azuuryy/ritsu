@@ -235,6 +235,7 @@ namespace osu.Game.Screens.Select
             titleText.Text = new RomanisableString(beatmapSet.Metadata.TitleUnicode, beatmapSet.Metadata.Title);
             artistText.Text = new RomanisableString(beatmapSet.Metadata.ArtistUnicode, beatmapSet.Metadata.Artist);
             updateButton.BeatmapSet = beatmapSet;
+            statusPill.LocalBeatmap = beatmap;
             statusPill.Status = beatmap.Status;
 
             difficultyIcon.Icon = beatmap.Ruleset.CreateInstance().CreateIcon();
@@ -257,6 +258,7 @@ namespace osu.Game.Screens.Select
             scheduledBackgroundRetrieval = null;
             beatmapBackground.Beatmap = null;
             updateButton.BeatmapSet = null;
+            statusPill.LocalBeatmap = null;
             localRank.Beatmap = null;
             starDifficultyBindable = null;
             spreadDisplay.Beatmap.Value = null;

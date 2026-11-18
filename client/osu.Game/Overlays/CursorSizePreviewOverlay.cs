@@ -33,7 +33,7 @@ namespace osu.Game.Overlays
     /// - The user's ACTUAL skin cursor sprites (<c>cursor.png</c> +
     ///   optional <c>cursormiddle.png</c> if present, the same way
     ///   the gameplay cursor is composed). This is loaded from the
-    ///   active <see cref="ISkinSource"/> so a legacy skin shows its
+    ///   active <c>ISkinSource</c> so a legacy skin shows its
     ///   own art, an Argon / Triangles skin (which doesn't ship
     ///   those legacy textures) falls back to a stylised circle that
     ///   approximates the default look.

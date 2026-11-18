@@ -47,6 +47,24 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
         });
 
         [Test]
+        public void TestSelectedBlueprintWithoutDrawable()
+        {
+            AddStep("remove drawable", () =>
+            {
+                Clear();
+                AddBlueprint(blueprint = new TestSliderBlueprint(slider));
+            });
+            AddUntilStep("blueprint loads", () => blueprint.IsLoaded);
+            AddStep("check selection geometry", () =>
+            {
+                Assert.DoesNotThrow(() => _ = blueprint.SelectionQuad);
+                Assert.DoesNotThrow(() => _ = blueprint.ScreenSpaceSelectionPoint);
+                Assert.DoesNotThrow(() => _ = blueprint.ScreenSpaceSnapPoints);
+                Assert.DoesNotThrow(() => blueprint.ReceivePositionalInputAt(blueprint.ScreenSpaceDrawQuad.Centre));
+            });
+        }
+
+        [Test]
         public void TestInitialState()
         {
             checkPositions();

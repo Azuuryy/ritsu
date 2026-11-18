@@ -208,7 +208,7 @@ namespace osu.Game.Screens.Select
                     }, items);
 
                 case GroupMode.RankedStatus:
-                    return getGroupsBy(b => defineGroupByStatus(b.BeatmapSet!.Status), items);
+                    return getGroupsBy(b => defineGroupByStatus(criteria.GetDisplayStatus(b)), items);
 
                 case GroupMode.BPM:
                     return getGroupsBy(b => defineGroupByBPM(FormatUtils.RoundBPM(b.BPM)), items);
@@ -378,6 +378,7 @@ namespace osu.Game.Screens.Select
                     return new RankedStatusGroupDefinition(5, status).Yield();
 
                 case BeatmapOnlineStatus.None:
+                case BeatmapOnlineStatus.Unranked:
                     return new RankedStatusGroupDefinition(6, status).Yield();
 
                 case BeatmapOnlineStatus.Loved:

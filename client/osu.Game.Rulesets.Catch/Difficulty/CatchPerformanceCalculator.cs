@@ -58,7 +58,7 @@ namespace osu.Game.Rulesets.Catch.Difficulty
 
             var difficulty = score.BeatmapInfo!.Difficulty.Clone();
 
-            score.Mods.OfType<IApplicableToDifficulty>().ForEach(m => m.ApplyToDifficulty(difficulty));
+            IApplicableToDifficulty.InApplicationOrder(score.Mods).ForEach(m => m.ApplyToDifficulty(difficulty));
 
             double clockRate = ModUtils.CalculateRateWithMods(score.Mods);
 

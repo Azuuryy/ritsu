@@ -52,6 +52,20 @@ namespace osu.Game.Collections
         public override int GetHashCode() => Collection?.ID.GetHashCode() ?? 0;
     }
 
+    internal sealed class RitsuCollectionFilterMenuItem : CollectionFilterMenuItem
+    {
+        public Guid Id { get; }
+
+        public RitsuCollectionFilterMenuItem(Guid id, LocalisableString name)
+            : base(name)
+        {
+            Id = id;
+        }
+
+        public override bool Equals(CollectionFilterMenuItem? other) => other is RitsuCollectionFilterMenuItem item && Id == item.Id;
+        public override int GetHashCode() => Id.GetHashCode();
+    }
+
     public class AllBeatmapsCollectionFilterMenuItem : CollectionFilterMenuItem
     {
         public AllBeatmapsCollectionFilterMenuItem()

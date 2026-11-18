@@ -9,6 +9,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.Library;
 using osu.Game.Configuration;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
@@ -35,6 +36,7 @@ namespace osu.Game.Screens.Select
             public IBindable<BeatmapLeaderboardScope> Scope => scopeDropdown.Current;
 
             private readonly Bindable<BeatmapDetailTab> configDetailTab = new Bindable<BeatmapDetailTab>();
+            private readonly Bindable<BeatmapLeaderboardScope> localScope = new Bindable<BeatmapLeaderboardScope>();
 
             public IBindable<LeaderboardSortMode> Sorting => sortDropdown.Current;
 
@@ -110,6 +112,7 @@ namespace osu.Game.Screens.Select
                     },
                 };
 
+                config.BindWith(OsuSetting.RitsuLeaderboardScope, localScope);
                 config.BindWith(OsuSetting.BeatmapDetailTab, configDetailTab);
                 config.BindWith(OsuSetting.BeatmapLeaderboardSortMode, configLeaderboardSortMode);
                 config.BindWith(OsuSetting.BeatmapDetailModsFilter, selectedModsToggle.Active);
@@ -119,9 +122,10 @@ namespace osu.Game.Screens.Select
             {
                 base.LoadComplete();
 
-                scopeDropdown.Current.Value = osu.Game.Offline.RitsuOffline.Enabled
-                    ? BeatmapLeaderboardScope.Local
-                    : tryMapDetailTabToLeaderboardScope(configDetailTab.Value) ?? scopeDropdown.Current.Value;
+                if (osu.Game.Offline.RitsuOffline.Enabled)
+                    scopeDropdown.Current.BindTo(localScope);
+                else
+                    scopeDropdown.Current.Value = tryMapDetailTabToLeaderboardScope(configDetailTab.Value) ?? scopeDropdown.Current.Value;
                 scopeDropdown.Current.BindValueChanged(_ => updateConfigDetailTab());
 
                 tabControl.Current.Value = configDetailTab.Value == BeatmapDetailTab.Details ? Selection.Details : Selection.Ranking;
@@ -244,6 +248,7 @@ namespace osu.Game.Screens.Select
                 public ScopeDropdown()
                     : base(BeatmapLeaderboardWedgeStrings.Scope)
                 {
+                    RitsuOrderKey = RitsuMenuOrdering.Scope;
                     Items = osu.Game.Offline.RitsuOffline.Enabled
                         ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
                         : Enum.GetValues<BeatmapLeaderboardScope>();

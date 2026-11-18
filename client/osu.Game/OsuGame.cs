@@ -1034,7 +1034,7 @@ namespace osu.Game
             presentScore(score, ScorePresentType.Results, true);
         }
 
-        private void presentScore(IScoreInfo score, ScorePresentType presentType, bool fromLocalProfile)
+        private void presentScore(IScoreInfo score, ScorePresentType presentType, bool fromLocalProfile, double? replayTime = null)
         {
             Logger.Log($"Beginning {nameof(PresentScore)} with score {score}");
 
@@ -1048,6 +1048,12 @@ namespace osu.Game
             {
                 Logger.Log("The replay cannot be played because the beatmap is missing.", LoggingTarget.Information);
 
+                if (replayTime.HasValue)
+                {
+                    postRitsuNotice("This replay or its beatmap is no longer available.");
+                    return;
+                }
+
                 var req = new GetBeatmapRequest(new BeatmapInfo { MD5Hash = notFound.Hash });
                 req.Success += res => Notifications.Post(new MissingBeatmapNotification(res, notFound.Hash, null));
                 API.Queue(req);
@@ -1057,13 +1063,17 @@ namespace osu.Game
 
             if (databasedScore == null)
             {
+                if (replayTime.HasValue)
+                    postRitsuNotice("This replay is no longer available.");
                 return;
             }
 
             Dependencies.Get<Offline.RitsuProfileManager>()?.ApplyProfileNameToDetachedScore(databasedScore.ScoreInfo);
 
-            if (databasedScore.Replay == null)
+            if (databasedScore.Replay == null && (presentType == ScorePresentType.Gameplay || !fromLocalProfile))
             {
+                if (replayTime.HasValue)
+                    postRitsuNotice("This replay is no longer available.");
                 Logger.Log("The loaded score has no replay data.", LoggingTarget.Information, LogLevel.Important);
                 return;
             }
@@ -1124,7 +1134,7 @@ namespace osu.Game
                 switch (presentType)
                 {
                     case ScorePresentType.Gameplay:
-                        screen.Push(new ReplayPlayerLoader(databasedScore));
+                        screen.Push(new ReplayPlayerLoader(databasedScore, replayTime));
                         break;
 
                     case ScorePresentType.Results:
@@ -1258,6 +1268,9 @@ namespace osu.Game
 
         protected override void Dispose(bool isDisposing)
         {
+            if (isDisposing)
+                ritsuFrameProfiler?.Stop();
+
             // Without this, tests may deadlock due to cancellation token not becoming cancelled before disposal.
             // To reproduce, run `TestSceneButtonSystemNavigation` ensuring `TestConstructor` runs before `TestFastShortcutKeys`.
             detachedBeatmapStore?.Dispose();
@@ -1354,7 +1367,7 @@ namespace osu.Game
                 // sale vacio, que es lo que paso en el primer intento.
                 Scheduler.AddDelayed(() =>
                 {
-                    string ruta = osu.Framework.Graphics.Rendering.TextureBindTrace.Dump("torii-" + pantalla);
+                    var ruta = osu.Framework.Graphics.Rendering.TextureBindTrace.Dump("torii-" + pantalla);
 
                     if (ruta != null)
                         Logger.Log($@"[TextureTrace] {ruta}", LoggingTarget.Runtime, LogLevel.Debug);
@@ -2136,6 +2149,9 @@ namespace osu.Game
                     var mouseDisableButtons = LocalConfig.GetBindable<bool>(OsuSetting.MouseDisableButtons);
                     mouseDisableButtons.Value = !mouseDisableButtons.Value;
                     return true;
+
+                case GlobalAction.ToggleRitsuPalette:
+                    return toggleRitsuPalette();
 
                 case GlobalAction.ToggleProfile:
                     if (Offline.RitsuOffline.Enabled)

@@ -39,6 +39,8 @@ namespace osu.Game.Rulesets.Osu.Mods
             ReadCurrentFromDifficulty = diff => diff.ApproachRate,
         };
 
+        public override (DifficultyBindable Setting, DifficultyRange PreemptRange)? RitsuApproachRate => (ApproachRate, OsuHitObject.PREEMPT_RANGE);
+
         public override string ExtendedIconInformation
         {
             get

@@ -288,7 +288,6 @@ namespace osu.Game.Overlays.Toolbar
                                         AutoSizeAxes = Axes.X,
                                         Children = new Drawable[]
                                         {
-                                            // The beatmap catalogue button opens an offline placeholder.
                                             new ToolbarBeatmapListingButton(),
                                             new ToolbarMusicButton(),
                                             new ToolbarClock(),

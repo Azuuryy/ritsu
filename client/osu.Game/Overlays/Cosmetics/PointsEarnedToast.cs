@@ -314,13 +314,13 @@ namespace osu.Game.Overlays.Cosmetics
             if (string.IsNullOrEmpty(reasonRef) || !reasonRef.StartsWith("streak:", StringComparison.Ordinal))
                 return 0;
 
-            return int.TryParse(reasonRef.Substring("streak:".Length), out int n) ? n : 0;
+            return int.TryParse(reasonRef.AsSpan("streak:".Length), out int n) ? n : 0;
         }
 
         private static string milestoneSubtitle(string reasonRef)
         {
             if (!string.IsNullOrEmpty(reasonRef) && reasonRef.StartsWith("pp:", StringComparison.Ordinal)
-                && int.TryParse(reasonRef.Substring("pp:".Length), out int pp))
+                && int.TryParse(reasonRef.AsSpan("pp:".Length), out int pp))
                 return $"{pp:N0}pp reached";
 
             return null;

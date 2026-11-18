@@ -48,7 +48,7 @@ namespace osu.Game.Skinning
 
         /// <summary>
         /// Torii: swap the texture of BOTH inner sprites (the main one + the kiai-flash
-        /// overlay) at runtime. Used by <see cref="osu.Game.Rulesets.Osu.Skinning.Legacy.LegacyMainCirclePiece"/>
+        /// overlay) at runtime. Used by <c>LegacyMainCirclePiece</c>
         /// to pick a different hitcircle texture per combo color slot
         /// (<c>hitcircle1.png</c>, <c>hitcircle2.png</c>, …) without rebuilding the
         /// drawable tree on every pool-acquisition. No-op for non-<see cref="Sprite"/>

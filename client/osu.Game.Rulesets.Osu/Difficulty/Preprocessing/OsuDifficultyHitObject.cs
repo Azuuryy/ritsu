@@ -196,7 +196,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Preprocessing
                 double windowRatio = Math.Pow(Math.Min(1, currDeltaTime / HitWindow(HitResult.Great)), 5);
 
                 // Can't doubletap if circles don't intersect
-                double distanceFactor = Math.Pow(DifficultyCalculationUtils.ReverseLerp(LazyJumpDistance, NORMALISED_DIAMETER, NORMALISED_RADIUS), 2);
+                double distanceFactor = Math.Pow(DiffUtils.ReverseLerp(LazyJumpDistance, NORMALISED_DIAMETER, NORMALISED_RADIUS), 2);
 
                 return 1.0 - Math.Pow(speedRatio, distanceFactor * (1 - windowRatio));
             }

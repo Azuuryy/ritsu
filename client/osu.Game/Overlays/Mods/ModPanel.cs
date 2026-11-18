@@ -39,6 +39,7 @@ namespace osu.Game.Overlays.Mods
         private static readonly Color4 ritsu_blue = new Color4(158, 203, 248, 255);
         private static readonly Color4 ritsu_lavender = new Color4(209, 198, 245, 255);
         private static readonly Color4 ritsu_badge_active = new Color4(35, 48, 85, 255);
+        private static readonly Color4 wip_yellow = new Color4(255, 205, 60, 255);
 
         /// <summary>
         /// Style of the "exclusive" badge associated with this panel's mod, if any.
@@ -71,6 +72,9 @@ namespace osu.Game.Overlays.Mods
             Title = Mod.Name;
             Description = Mod.Description;
 
+            if (!modState.CanActivate)
+                Active.BindValueChanged(active => Enabled.Value = active.NewValue, true);
+
             SwitchContainer.Child = new ModSwitchSmall(Mod)
             {
                 Anchor = Anchor.Centre,
@@ -93,6 +97,13 @@ namespace osu.Game.Overlays.Mods
 
             exclusiveStyle = Mod switch
             {
+                IWorkInProgressMod => new ExclusiveStyle(
+                    "WIP",
+                    new SpriteIcon { Icon = FontAwesome.Solid.ExclamationTriangle, Size = new Vector2(10) },
+                    TintIcon: true,
+                    wip_yellow, Color4.Black,
+                    wip_yellow, wip_yellow, wip_yellow),
+
                 IToriiExclusiveMod => new ExclusiveStyle(
                     "from torii",
                     new SpriteIcon { Icon = FontAwesome.Solid.ToriiGate, Size = new Vector2(12) },
@@ -242,6 +253,9 @@ namespace osu.Game.Overlays.Mods
 
         protected override void Select()
         {
+            if (!modState.CanActivate)
+                return;
+
             modState.PendingConfiguration = Mod.RequiresConfiguration;
             Active.Value = true;
         }

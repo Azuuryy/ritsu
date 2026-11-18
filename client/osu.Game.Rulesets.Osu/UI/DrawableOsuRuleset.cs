@@ -42,6 +42,7 @@ namespace osu.Game.Rulesets.Osu.UI
         [BackgroundDependencyLoader]
         private void load(ReplayPlayer? replayPlayer)
         {
+            KeyBindingInputManager.TrackFlickMotion = Mods.Any(mod => mod is OsuModDirectionalFlicks);
             if (replayPlayer != null)
             {
                 replayPlayer.AddSettings(new SongProgressSettings());
@@ -49,8 +50,13 @@ namespace osu.Game.Rulesets.Osu.UI
                 PlayfieldAdjustmentContainer.Add(analysisOverlay = new ReplayAnalysisOverlay(replayPlayer.Score.Replay));
                 Overlays.Add(analysisOverlay.CreateProxy().With(p => p.Depth = float.NegativeInfinity));
                 replayPlayer.AddSettings(new ReplayAnalysisSettings(Config));
-                if (Mods.OfType<OsuModRandomV2>().FirstOrDefault() is OsuModRandomV2 randomV2)
-                    replayPlayer.AddSettings(new RandomV2Settings(randomV2, Beatmap, Mods, () => ReplayScore?.Replay, replayPlayer.Mods));
+                if (replayPlayer.ModPreviewSettings is { } previewSettings && Mods.OfType<OsuModRandomV2>().FirstOrDefault() is OsuModRandomV2 randomV2)
+                {
+                    var trajectory = new RandomV2Trajectory(Beatmap.HitObjects.Cast<OsuHitObject>().ToArray());
+                    PlayfieldAdjustmentContainer.Add(trajectory);
+                    Overlays.Add(trajectory.CreateProxy().With(p => p.Depth = float.NegativeInfinity));
+                    replayPlayer.AddSettings(new RandomV2Settings(randomV2, Beatmap, Mods, () => ReplayScore?.Replay, previewSettings, trajectory.Visible));
+                }
                 if (Mods.OfType<OsuModSpacingAdjust>().FirstOrDefault() is OsuModSpacingAdjust spacingAdjust)
                     replayPlayer.AddSettings(new SpacingAdjustSettings(spacingAdjust, Beatmap, Mods, () => ReplayScore?.Replay, replayPlayer.Mods));
 

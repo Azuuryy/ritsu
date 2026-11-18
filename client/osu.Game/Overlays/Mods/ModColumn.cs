@@ -168,13 +168,14 @@ namespace osu.Game.Overlays.Mods
 
             if (toggleAllCheckbox != null && !SelectionAnimationRunning)
             {
-                bool anyPanelsVisible = availableMods.Any(panel => panel.Visible);
+                var visiblePanels = availableMods.Where(panel => panel.Visible && (panel.CanActivate || panel.Active.Value));
+                bool anyPanelsVisible = visiblePanels.Any();
 
                 toggleAllCheckbox.Alpha = anyPanelsVisible ? 1 : 0;
 
                 // checking `anyPanelsVisible` is important since `.All()` returns `true` for empty enumerables.
                 if (anyPanelsVisible)
-                    toggleAllCheckbox.Current.Value = availableMods.Where(panel => panel.Visible).All(panel => panel.Active.Value);
+                    toggleAllCheckbox.Current.Value = visiblePanels.All(panel => panel.Active.Value);
             }
         }
 
@@ -228,7 +229,7 @@ namespace osu.Game.Overlays.Mods
         {
             pendingSelectionOperations.Clear();
 
-            foreach (var button in availableMods.Where(b => !b.Active.Value && b.Visible))
+            foreach (var button in availableMods.Where(b => b.CanActivate && !b.Active.Value && b.Visible))
                 pendingSelectionOperations.Enqueue(() => button.Active.Value = true);
         }
 

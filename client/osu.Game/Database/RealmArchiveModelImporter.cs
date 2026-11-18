@@ -335,12 +335,15 @@ namespace osu.Game.Database
             if (parameters.Batch && archive != null)
             {
                 // this is a fast bail condition to improve large import performance.
-                item.Hash = computeHashFast(archive);
+                item.Hash = parameters.ModelHashOverride ?? computeHashFast(archive);
 
                 existing = CheckForExisting(item, realm);
 
                 if (existing != null)
                 {
+                    if (parameters.PreserveExisting && existing.DeletePending)
+                        throw new InvalidOperationException("An existing deleted item has the same content.");
+
                     // bare minimum comparisons
                     //
                     // note that this should really be checking filesizes on disk (of existing files) for some degree of sanity.
@@ -399,7 +402,7 @@ namespace osu.Game.Database
                 }
 
                 item.Files.AddRange(files);
-                item.Hash = ComputeHash(item);
+                item.Hash = parameters.ModelHashOverride ?? ComputeHash(item);
 
                 // TODO: do we want to make the transaction this local? not 100% sure, will need further investigation.
                 using (var transaction = realm.BeginWrite())
@@ -416,6 +419,8 @@ namespace osu.Game.Database
 
                     if (existing != null)
                     {
+                        if (parameters.PreserveExisting && existing.DeletePending)
+                            throw new InvalidOperationException("An existing deleted item has the same content.");
                         if (CanReuseExisting(existing, item))
                         {
                             LogForModel(item, @$"Found existing {HumanisedModelName} for {item} (ID {existing.ID}) – skipping import.");
@@ -428,6 +433,8 @@ namespace osu.Game.Database
 
                         LogForModel(item, @"Found existing but failed re-use check.");
 
+                        if (parameters.PreserveExisting)
+                            throw new InvalidOperationException("An existing item has the same content but different files.");
                         existing.DeletePending = true;
                     }
 

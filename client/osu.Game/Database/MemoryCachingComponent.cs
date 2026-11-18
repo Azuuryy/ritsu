@@ -4,6 +4,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using osu.Framework.Extensions.TypeExtensions;
@@ -23,7 +25,12 @@ namespace osu.Game.Database
 
         private readonly GlobalStatistic<MemoryCachingStatistics> statistics;
 
+        private readonly object pendingLock = new object();
+        private readonly Dictionary<TLookup, TaskCompletionSource<TValue?>> pending = new Dictionary<TLookup, TaskCompletionSource<TValue?>>();
+
         protected virtual bool CacheNullValues => true;
+
+        protected virtual bool SharePendingComputations => false;
 
         protected MemoryCachingComponent()
         {
@@ -48,6 +55,9 @@ namespace osu.Game.Database
             if (computationDelay > 0)
                 await Task.Delay(computationDelay, cancellationToken).ConfigureAwait(false);
 
+            if (SharePendingComputations)
+                return await getSharedAsync(lookup, cancellationToken).ConfigureAwait(false);
+
             var computed = await ComputeValueAsync(lookup, cancellationToken).ConfigureAwait(false);
 
             statistics.Value.MissCount++;
@@ -61,19 +71,87 @@ namespace osu.Game.Database
             return computed;
         }
 
+        private Task<TValue?> getSharedAsync(TLookup lookup, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            TaskCompletionSource<TValue?> computation;
+            bool start = false;
+            lock (pendingLock)
+            {
+                if (CheckExists(lookup, out TValue? existing))
+                    return Task.FromResult(existing);
+
+                if (!pending.TryGetValue(lookup, out var existingComputation))
+                {
+                    computation = new TaskCompletionSource<TValue?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    pending.Add(lookup, computation);
+                    start = true;
+                }
+                else
+                    computation = existingComputation;
+            }
+
+            if (start)
+                _ = computeSharedAsync(lookup, computation);
+
+            return computation.Task.WaitAsync(cancellationToken);
+        }
+
+        private async Task computeSharedAsync(TLookup lookup, TaskCompletionSource<TValue?> computation)
+        {
+            try
+            {
+                var result = await ComputeValueAsync(lookup).ConfigureAwait(false);
+                lock (pendingLock)
+                {
+                    if (pending.TryGetValue(lookup, out var current) && ReferenceEquals(current, computation))
+                    {
+                        pending.Remove(lookup);
+                        statistics.Value.MissCount++;
+                        if (result != null || CacheNullValues)
+                            cache[lookup] = result;
+                        statistics.Value.Usage = cache.Count;
+                        computation.TrySetResult(result);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                lock (pendingLock)
+                {
+                    if (pending.TryGetValue(lookup, out var current) && ReferenceEquals(current, computation))
+                        pending.Remove(lookup);
+
+                    if (e is OperationCanceledException cancellation)
+                        computation.TrySetCanceled(cancellation.CancellationToken);
+                    else if (computation.TrySetException(e))
+                        _ = computation.Task.Exception;
+                }
+            }
+        }
+
         /// <summary>
         /// Invalidate all entries matching a provided predicate.
         /// </summary>
         /// <param name="matchKeyPredicate">The predicate to decide which keys should be invalidated.</param>
         protected void Invalidate(Func<TLookup, bool> matchKeyPredicate)
         {
-            foreach (var kvp in cache)
+            lock (pendingLock)
             {
-                if (matchKeyPredicate(kvp.Key))
-                    cache.TryRemove(kvp.Key, out _);
-            }
+                foreach (var kvp in cache)
+                {
+                    if (matchKeyPredicate(kvp.Key))
+                        cache.TryRemove(kvp.Key, out _);
+                }
 
-            statistics.Value.Usage = cache.Count;
+                foreach (var key in pending.Keys.Where(matchKeyPredicate).ToArray())
+                {
+                    pending[key].TrySetResult(default);
+                    pending.Remove(key);
+                }
+
+                statistics.Value.Usage = cache.Count;
+            }
         }
 
         /// <summary>
@@ -81,8 +159,14 @@ namespace osu.Game.Database
         /// </summary>
         public virtual void Clear()
         {
-            cache.Clear();
-            statistics.Value.Usage = 0;
+            lock (pendingLock)
+            {
+                cache.Clear();
+                foreach (var computation in pending.Values)
+                    computation.TrySetResult(default);
+                pending.Clear();
+                statistics.Value.Usage = 0;
+            }
         }
 
         protected bool CheckExists(TLookup lookup, [MaybeNullWhen(false)] out TValue value) =>

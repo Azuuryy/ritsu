@@ -504,13 +504,13 @@ namespace osu.Game.Cosmetics.Definitions
 
             private void applyLoop(LoopSpec loop)
             {
-                Drawable target = (loop.Target ?? "inner").ToLowerInvariant() == "whole" ? (Drawable)visual : visual.Child;
+                Drawable target = string.Equals(loop.Target, "whole", StringComparison.OrdinalIgnoreCase) ? (Drawable)visual : visual.Child;
                 if (target == null)
                     return;
 
                 var easing = ParseEasing(loop.Easing);
 
-                if ((loop.Channel ?? "scale").ToLowerInvariant() == "moveoffset")
+                if (string.Equals(loop.Channel, "moveoffset", StringComparison.OrdinalIgnoreCase))
                 {
                     target.MoveToOffset(new Vector2(0, -loop.Amount), loop.Ms, easing)
                           .Then().MoveToOffset(new Vector2(0, loop.Amount), loop.Ms, easing)

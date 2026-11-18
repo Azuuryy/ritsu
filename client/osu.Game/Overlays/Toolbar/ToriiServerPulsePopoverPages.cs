@@ -2108,7 +2108,7 @@ namespace osu.Game.Overlays.Toolbar
 
         /// <summary>
         /// Sprite subclass that resolves its texture in its own
-        /// <see cref="BackgroundDependencyLoader"/> via a [Resolved]
+        /// <c>BackgroundDependencyLoader</c> via a [Resolved]
         /// <see cref="LargeTextureStore"/> — the same shape
         /// <see cref="osu.Game.Users.Drawables.DrawableAvatar"/>
         /// uses for user avatars (which works in production).

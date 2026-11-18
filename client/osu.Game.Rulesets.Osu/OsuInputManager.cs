@@ -1,11 +1,13 @@
 ﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
+using osu.Framework.Input.StateChanges.Events;
 using osu.Framework.Lists;
 using osu.Framework.Localisation;
 using osu.Game.Input.Bindings;
@@ -67,6 +69,59 @@ namespace osu.Game.Rulesets.Osu
             if ((e is MouseMoveEvent || e is TouchMoveEvent) && !AllowUserCursorMovement) return false;
 
             return base.Handle(e);
+        }
+
+        internal bool TrackFlickMotion { get; set; }
+
+        private readonly Queue<(double Time, Vector2 Position)> cursorHistory = new Queue<(double, Vector2)>();
+        private (double Time, Vector2 Position)? lastCursorSample;
+
+        protected override void HandleMousePositionChange(MousePositionChangeEvent e)
+        {
+            if (TrackFlickMotion)
+                recordCursor(e.State.Mouse.Position);
+
+            base.HandleMousePositionChange(e);
+        }
+
+        protected override void Update()
+        {
+            base.Update();
+            if (TrackFlickMotion)
+                recordCursor(CurrentState.Mouse.Position);
+        }
+
+        internal Vector2 GetFlickMovement(OsuPlayfield playfield)
+        {
+            recordCursor(CurrentState.Mouse.Position);
+            if (cursorHistory.Count < 2)
+                return Vector2.Zero;
+
+            var first = cursorHistory.Peek();
+            var second = cursorHistory.ElementAt(1);
+            double cutoff = Time.Current - 40;
+            Vector2 origin = first.Position;
+            if (first.Time < cutoff && second.Time > cutoff)
+                origin = Vector2.Lerp(first.Position, second.Position, (float)((cutoff - first.Time) / (second.Time - first.Time)));
+
+            return playfield.ToLocalSpace(CurrentState.Mouse.Position) - playfield.ToLocalSpace(origin);
+        }
+
+        private void recordCursor(Vector2 position)
+        {
+            double now = Time.Current;
+            if (lastCursorSample is { } previous)
+            {
+                if (now < previous.Time || now - previous.Time > 100)
+                    cursorHistory.Clear();
+                if (now == previous.Time && position == previous.Position)
+                    return;
+            }
+
+            cursorHistory.Enqueue((now, position));
+            lastCursorSample = (now, position);
+            while (cursorHistory.Count > 256 || (cursorHistory.Count > 1 && cursorHistory.ElementAt(1).Time <= now - 40))
+                cursorHistory.Dequeue();
         }
 
         private partial class OsuKeyBindingContainer : RulesetKeyBindingContainer

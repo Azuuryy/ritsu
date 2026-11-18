@@ -18,7 +18,7 @@ namespace osu.Game.Configuration
     /// ----------------
     /// A per-feature interaction counter. When the user clicks (taps)
     /// the host control of a [NEW] badge, the host forwards via
-    /// <see cref="NewFeatureBadge.RegisterInteraction"/> which bumps
+    /// <c>RegisterInteraction</c> which bumps
     /// this counter for the badge's feature ID. Once the counter
     /// reaches <see cref="dismiss_threshold"/> the badge auto-hides
     /// for good — the user has engaged with the feature enough times

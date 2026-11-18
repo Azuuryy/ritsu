@@ -303,6 +303,9 @@ namespace osu.Game.Screens.Ranking.Expanded.Statistics
             const double hang_duration = 580;
             const double dive_duration = 260;
 
+            if (penaltyFly == null || content == null)
+                return;
+
             penaltyFly.Text = penaltyLabel();
 
             // aparece flotando arriba del numero, con un pop.
@@ -319,7 +322,7 @@ namespace osu.Game.Screens.Ranking.Expanded.Statistics
             {
                 Schedule(() => flySample?.Play());
 
-                penaltyFly.MoveTo(counterCentre(), dive_duration, Easing.InCubic)
+                penaltyFly.MoveTo(counterCentre(content), dive_duration, Easing.InCubic)
                           .ScaleTo(0.7f, dive_duration, Easing.InCubic)
                           .RotateTo(-10, dive_duration, Easing.InCubic)
                           .Then()
@@ -329,10 +332,13 @@ namespace osu.Game.Screens.Ranking.Expanded.Statistics
             Scheduler.AddDelayed(applyImpact, hang_duration + dive_duration);
         }
 
-        private Vector2 counterCentre() => content.ToLocalSpace(counter.ScreenSpaceDrawQuad.Centre);
+        private Vector2 counterCentre(Container target) => target.ToLocalSpace(counter.ScreenSpaceDrawQuad.Centre);
 
         private void applyImpact()
         {
+            if (content == null || counterArea == null)
+                return;
+
             hitSample?.Play();
 
             // el golpe: shake del numero, flash rojo, y la caida rapida al valor real.
@@ -350,7 +356,7 @@ namespace osu.Game.Screens.Ranking.Expanded.Statistics
                        .ScaleTo(1f, 400, Easing.OutElasticHalf);
 
             // particulas fisicas del impacto, calcadas del danio de ranked.
-            var impactPosition = counterCentre();
+            var impactPosition = counterCentre(content);
 
             for (int i = 0; i < 9; i++)
             {

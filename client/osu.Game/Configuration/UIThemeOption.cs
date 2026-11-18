@@ -24,9 +24,9 @@ namespace osu.Game.Configuration
     /// can drop any stable .osk that ships <c>user-bg</c>,
     /// <c>levelbar</c>, <c>songselect-bottom</c>, etc. into their
     /// skins folder and select it; the in-code panels
-    /// (<see cref="osu.Game.Screens.SelectV2.LegacyUserStatsPanel"/>,
-    /// <see cref="osu.Game.Screens.SelectV2.LegacyFooterChromeStrip"/>)
-    /// pick those textures up via <see cref="osu.Game.Skinning.ISkinSource.GetTexture"/>.
+    /// (<c>LegacyUserStatsPanel</c>,
+    /// <c>LegacyFooterChromeStrip</c>)
+    /// pick those textures up via <c>GetTexture</c>.
     /// Otherwise the panels render their own Torii-Nova fallback chrome.
     /// </summary>
     public enum UIThemeOption

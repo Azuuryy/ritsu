@@ -26,10 +26,10 @@
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
     <!-- Held back due to .NET 9 requirement. See https://github.com/Humanizr/Humanizer?tab=readme-ov-file#supported-frameworks -->
     <PackageReference Include="Humanizer" Version="2.14.1" />
-    <PackageReference Include="MessagePack" Version="3.1.7" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.9" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="10.0.9" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson" Version="10.0.9" />
+    <PackageReference Include="MessagePack" Version="3.1.9" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.15" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="10.0.15" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson" Version="10.0.15" />
     <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.9" />
     <PackageReference Include="Microsoft.Toolkit.HighPerformance" Version="7.1.2" />
@@ -55,9 +55,6 @@
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
 
     <!-- Required since Veldrid references a library that depends on Microsoft.DotNet.PlatformAbstractions (2.0.3), which doesn't play nice with Realm. -->
-    <PackageReference Include="System.IO.FileSystem.Primitives" Version="4.3.0" />
-    <PackageReference Include="System.Runtime.InteropServices" Version="4.3.0" />
-    <PackageReference Include="System.Runtime.Handles" Version="4.3.0" />
   </ItemGroup>
 
   <!-- torii: las auras hechas en la Cosmetic Creator viajan embebidas y las
@@ -66,6 +63,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Cosmetics\Definitions\Shipped\*.toriicosmetic" />
     <EmbeddedResource Include="Textures\Ritsu\logo.png" />
+    <EmbeddedResource Include="Textures\Icons\Mods\ritsu-*.png" />
     <EmbeddedResource Include="..\..\VERSION" LogicalName="Ritsu.VERSION" />
     <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="Ritsu.CHANGELOG.md" />
   </ItemGroup>

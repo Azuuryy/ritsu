@@ -4,7 +4,7 @@
 
 Ritsu is a standalone osu!lazer client for local play, built on Torii. It keeps osu!'s gameplay and interface, adds local profiles and the Modosu training mods, and runs without an account or an Internet connection.
 
-> **Current milestone: local play with optional beatmap search.** The Torii catalogue provides search, covers, audio previews and beatmap downloads. Player authentication, online leaderboards, updates, chat, presence and telemetry remain disabled. Later milestones are described in [ROADMAP.md](ROADMAP.md) and are not implemented yet.
+> **Current milestone: local play with optional Torii beatmap search.** Browse the catalogue and download maps without signing in. Scores and profiles are local. Authentication, online leaderboards, updates, chat, presence and telemetry are disabled. See [ROADMAP.md](ROADMAP.md) for later milestones.
 
 <!-- Banner and screenshots can be added here. -->
 

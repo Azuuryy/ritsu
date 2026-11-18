@@ -131,6 +131,9 @@ namespace osu.Game.Scoring
         /// </summary>
         private void populateUserDetails(ScoreInfo model)
         {
+            if (Offline.RitsuOffline.Enabled)
+                return;
+
             if (model.RealmUser.OnlineID == APIUser.SYSTEM_USER_ID)
                 return;
 

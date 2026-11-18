@@ -22,6 +22,8 @@ namespace osu.Game.Rulesets.Judgements
         /// </summary>
         public virtual HitResult MaxResult => HitResult.Perfect;
 
+        public virtual bool IsValidResult(HitResult result) => result.IsValidHitResult(MinResult, MaxResult);
+
         /// <summary>
         /// The minimum <see cref="HitResult"/> that can be achieved - the inverse of <see cref="MaxResult"/>.
         /// </summary>

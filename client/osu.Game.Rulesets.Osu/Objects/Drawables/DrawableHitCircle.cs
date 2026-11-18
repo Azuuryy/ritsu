@@ -1,6 +1,7 @@
 ﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using osu.Framework.Graphics.Sprites;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -30,6 +31,7 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
     {
         public OsuAction? HitAction => HitArea.HitAction;
         protected virtual OsuSkinComponents CirclePieceComponent => OsuSkinComponents.HitCircle;
+        protected virtual Drawable CreateDefaultCirclePiece() => new MainCirclePiece();
 
         public SkinnableDrawable ApproachCircle { get; private set; } = null!;
         public HitReceptor HitArea { get; private set; } = null!;
@@ -81,7 +83,7 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
                             RelativeSizeAxes = Axes.Both,
                             Children = new Drawable[]
                             {
-                                CirclePiece = new SkinnableDrawable(new OsuSkinComponentLookup(CirclePieceComponent), _ => new MainCirclePiece())
+                                CirclePiece = new SkinnableDrawable(new OsuSkinComponentLookup(CirclePieceComponent), _ => CreateDefaultCirclePiece())
                                 {
                                     Anchor = Anchor.Centre,
                                     Origin = Anchor.Centre,
@@ -134,6 +136,36 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
 
         public override void Shake() => shakeContainer.Shake();
 
+        [Resolved(canBeNull: true)]
+        private OsuPlayfield? playfield { get; set; }
+
+        private SpriteIcon? flickArrow;
+
+        protected override void OnApply()
+        {
+            base.OnApply();
+            if (HitObject is not HitCircle { FlickDirection: Vector2 direction })
+            {
+                flickArrow?.Hide();
+                return;
+            }
+
+            if (flickArrow == null)
+            {
+                AddInternal(flickArrow = new SpriteIcon
+                {
+                    Anchor = Anchor.Centre,
+                    Origin = Anchor.Centre,
+                    Size = new Vector2(28),
+                    Colour = Color4.Cyan,
+                    Icon = FontAwesome.Solid.ArrowRight,
+                });
+            }
+
+            flickArrow.Rotation = MathF.Atan2(direction.Y, direction.X) * 180 / MathF.PI;
+            flickArrow.Show();
+        }
+
         protected override void CheckForResult(bool userTriggered, double timeOffset)
         {
             Debug.Assert(HitObject.HitWindows != null);
@@ -162,6 +194,18 @@ namespace osu.Game.Rulesets.Osu.Objects.Drawables
 
             if (result == HitResult.None || clickAction != ClickAction.Hit)
                 return;
+
+            if (HitObject is HitCircle { FlickDirection: Vector2 direction })
+            {
+                Vector2 movement = playfield != null && OsuActionInputManager is OsuInputManager input
+                    ? input.GetFlickMovement(playfield)
+                    : Vector2.Zero;
+                if (movement.Length < HitObject.Radius / 2 || Vector2.Dot(movement, direction) < movement.Length * 0.70710678f)
+                {
+                    Shake();
+                    return;
+                }
+            }
 
             ApplyResult<(HitResult result, Vector2? position)>((r, state) =>
             {

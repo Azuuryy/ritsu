@@ -138,7 +138,6 @@ namespace osu.Game.Overlays.Toolbar
 
         // Swipe / drag state
         private float dragStartStripX;
-        private bool isDragging;
 
         public ToriiServerPulsePopover()
         {
@@ -842,7 +841,6 @@ namespace osu.Game.Overlays.Toolbar
             protected override bool OnDragStart(DragStartEvent e)
             {
                 popover.dragStartStripX = popover.pagesStrip.X;
-                popover.isDragging = true;
                 popover.autoAdvanceDelegate?.Cancel();
                 return true;
             }
@@ -857,7 +855,6 @@ namespace osu.Game.Overlays.Toolbar
 
             protected override void OnDragEnd(DragEndEvent e)
             {
-                popover.isDragging = false;
 
                 // Compute which page the strip is closest to. Using
                 // page_step (the actual carousel step size) rather than

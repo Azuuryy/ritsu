@@ -30,7 +30,7 @@ namespace osu.Game.Screens.Backgrounds
 
         /// <summary>
         /// El sprite del wallpaper, tal cual quedo despues del Fill, la escala de
-        /// <see cref="Update"/> y el parallax. Lo usa el frost de los paneles del carousel para
+        /// <c>Update</c> y el parallax. Lo usa el frost de los paneles del carousel para
         /// copiarle la geometria exacta en vez de calcular la suya (ver PanelBackdrop).
         /// </summary>
         public Sprite BackgroundSprite => Background?.Sprite;

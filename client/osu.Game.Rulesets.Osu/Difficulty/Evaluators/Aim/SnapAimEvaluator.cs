@@ -78,8 +78,8 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators.Aim
                     acuteAngleBonus *= 0.08 + 0.92 * (1 - Math.Min(acuteAngleBonus, Math.Pow(CalcAngleAcuteness(lastAngle), 3)));
 
                     // Apply acute angle bonus for BPM above 300 1/2 and distance more than one diameter
-                    acuteAngleBonus *= velocityInfluence * DifficultyCalculationUtils.Smootherstep(DifficultyCalculationUtils.MillisecondsToBPM(osuCurrObj.AdjustedDeltaTime, 2), 300, 400) *
-                                       DifficultyCalculationUtils.Smootherstep(currDistance, 0, diameter * 2);
+                    acuteAngleBonus *= velocityInfluence * DiffUtils.Smootherstep(DiffUtils.MillisecondsToBPM(osuCurrObj.AdjustedDeltaTime, 2), 300, 400) *
+                                       DiffUtils.Smootherstep(currDistance, 0, diameter * 2);
                 }
 
                 double wideAngleBonus = calcAngleWideness(currAngle);
@@ -121,12 +121,12 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators.Aim
                 // Apply wiggle bonus for jumps that are [radius, 3*diameter] in distance, with < 110 angle
                 // https://www.desmos.com/calculator/dp0v0nvowc
                 double wiggleBonus = velocityInfluence
-                                     * DifficultyCalculationUtils.Smootherstep(currDistance, radius, diameter)
-                                     * Math.Pow(DifficultyCalculationUtils.ReverseLerp(currDistance, diameter * 3, diameter), 1.8)
-                                     * DifficultyCalculationUtils.Smootherstep(currAngle, double.DegreesToRadians(110), double.DegreesToRadians(60))
-                                     * DifficultyCalculationUtils.Smootherstep(prevDistance, radius, diameter)
-                                     * Math.Pow(DifficultyCalculationUtils.ReverseLerp(prevDistance, diameter * 3, diameter), 1.8)
-                                     * DifficultyCalculationUtils.Smootherstep(lastAngle, double.DegreesToRadians(110), double.DegreesToRadians(60));
+                                     * DiffUtils.Smootherstep(currDistance, radius, diameter)
+                                     * Math.Pow(DiffUtils.ReverseLerp(currDistance, diameter * 3, diameter), 1.8)
+                                     * DiffUtils.Smootherstep(currAngle, double.DegreesToRadians(110), double.DegreesToRadians(60))
+                                     * DiffUtils.Smootherstep(prevDistance, radius, diameter)
+                                     * Math.Pow(DiffUtils.ReverseLerp(prevDistance, diameter * 3, diameter), 1.8)
+                                     * DiffUtils.Smootherstep(lastAngle, double.DegreesToRadians(110), double.DegreesToRadians(60));
 
                 snapDifficulty += wiggleBonus * wiggle_multiplier;
             }
@@ -140,7 +140,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators.Aim
                 }
 
                 // Scale with ratio of difference compared to 0.5 * max dist.
-                double distRatio = DifficultyCalculationUtils.Smoothstep(Math.Abs(prevVelocity - currVelocity) / Math.Max(prevVelocity, currVelocity), 0, 1);
+                double distRatio = DiffUtils.Smoothstep(Math.Abs(prevVelocity - currVelocity) / Math.Max(prevVelocity, currVelocity), 0, 1);
 
                 // Reward for % distance up to 125 / strainTime for overlaps where velocity is still changing.
                 double overlapVelocityBuff = Math.Min(diameter * 1.25 / Math.Min(osuCurrObj.AdjustedDeltaTime, osuLastObj.AdjustedDeltaTime), Math.Abs(prevVelocity - currVelocity));
@@ -201,7 +201,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators.Aim
 
             double vectorRepetition = Math.Pow(Math.Min(0.5 / constantAngleCount, 1), 2);
 
-            double stackFactor = DifficultyCalculationUtils.Smootherstep(current.LazyJumpDistance, 0, OsuDifficultyHitObject.NORMALISED_DIAMETER);
+            double stackFactor = DiffUtils.Smootherstep(current.LazyJumpDistance, 0, OsuDifficultyHitObject.NORMALISED_DIAMETER);
 
             double currAngle = current.Angle.Value;
             double lastAngle = previous.Angle.Value;
@@ -213,8 +213,8 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators.Aim
             return Math.Pow(baseNerf + (1 - baseNerf) * vectorRepetition * maximum_vector_influence * stackFactor, 2);
         }
 
-        private static double calcAngleWideness(double angle) => DifficultyCalculationUtils.Smoothstep(angle, double.DegreesToRadians(40), double.DegreesToRadians(140));
+        private static double calcAngleWideness(double angle) => DiffUtils.Smoothstep(angle, double.DegreesToRadians(40), double.DegreesToRadians(140));
 
-        public static double CalcAngleAcuteness(double angle) => DifficultyCalculationUtils.Smoothstep(angle, double.DegreesToRadians(140), double.DegreesToRadians(40));
+        public static double CalcAngleAcuteness(double angle) => DiffUtils.Smoothstep(angle, double.DegreesToRadians(140), double.DegreesToRadians(40));
     }
 }

@@ -13,6 +13,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Localisation;
+using osu.Game.Offline;
 using osu.Game.Resources.Localisation.Web;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Osu.Mods;
@@ -211,6 +212,10 @@ namespace osu.Game.Tests.Visual.SongSelect
             addBeatmapSet(s => s.Status = BeatmapOnlineStatus.None, beatmapSets, out var noneBeatmap);
             addBeatmapSet(s => s.Status = BeatmapOnlineStatus.LocallyModified, beatmapSets, out var localBeatmap);
 
+            foreach (var set in beatmapSets)
+                foreach (var beatmap in set.Beatmaps)
+                    beatmap.Status = set.Status;
+
             var results = await runGrouping(GroupMode.RankedStatus, beatmapSets);
             assertGroup(results, 0, BeatmapsetsStrings.ShowStatusRanked, rankedBeatmap.Beatmaps.Concat(approvedBeatmap.Beatmaps), ref total);
             assertGroup(results, 1, BeatmapsetsStrings.ShowStatusQualified, qualifiedBeatmap.Beatmaps, ref total);
@@ -218,9 +223,36 @@ namespace osu.Game.Tests.Visual.SongSelect
             assertGroup(results, 3, BeatmapsetsStrings.ShowStatusPending, pendingBeatmap.Beatmaps, ref total);
             assertGroup(results, 4, BeatmapsetsStrings.ShowStatusGraveyard, graveyardBeatmap.Beatmaps, ref total);
             assertGroup(results, 5, SongSelectStrings.LocallyModified, localBeatmap.Beatmaps, ref total);
-            assertGroup(results, 6, SongSelectStrings.StatusUnknown, noneBeatmap.Beatmaps, ref total);
+            assertGroup(results, 6, "Unranked", noneBeatmap.Beatmaps, ref total);
             assertGroup(results, 7, BeatmapsetsStrings.ShowStatusLoved, lovedBeatmap.Beatmaps, ref total);
             assertTotal(results, total);
+        }
+
+        [Test]
+        public async Task TestGroupingByLocalStatusSplitsPartiallyExcludedSet()
+        {
+            var set = TestResources.CreateTestBeatmapSetInfo(2);
+            set.Status = BeatmapOnlineStatus.Ranked;
+            foreach (var beatmap in set.Beatmaps)
+            {
+                beatmap.Status = BeatmapOnlineStatus.Ranked;
+                beatmap.BeatmapSet = set;
+            }
+
+            var profile = new RitsuProfile();
+            profile.ExcludedBeatmapIds.Add(set.Beatmaps[0].ID);
+            var grouping = new BeatmapCarouselFilterGrouping
+            {
+                GetCriteria = () => new FilterCriteria { Group = GroupMode.RankedStatus, LocalProfile = profile },
+                GetCollections = () => new List<BeatmapCollection>(),
+                GetLocalUserTopRanks = _ => new Dictionary<Guid, ScoreRank>(),
+                GetFavouriteBeatmapSets = () => favouriteBeatmapSets,
+            };
+            var results = await grouping.Run(set.Beatmaps.Select(beatmap => new CarouselItem(beatmap)).ToList(), CancellationToken.None);
+            var groups = results.Select(item => item.Model).OfType<RankedStatusGroupDefinition>().ToArray();
+            Assert.That(groups.Select(group => group.Status), Is.EqualTo(new[] { BeatmapOnlineStatus.Ranked, BeatmapOnlineStatus.Unranked }));
+            Assert.That(results.Select(item => item.Model).OfType<GroupedBeatmap>()
+                               .Single(item => item.Beatmap.ID == set.Beatmaps[0].ID).Group, Is.EqualTo(groups[1]));
         }
 
         #endregion

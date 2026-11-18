@@ -10,7 +10,7 @@ From the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Package.ps1
 ```
 
-The version comes from [`VERSION`](../VERSION) (`0.4.0` for this release). Requirements: Windows x64, the .NET 10 SDK, Python 3, and Internet access for the first package restore. Pass `-SkipBootstrap` when the pinned client, framework and resources are already prepared, `-SkipPublish` to package the existing `.cache\Ritsu-<version>-<rid>` outputs, or `-Platforms win-x64,linux-x64` to restrict the build.
+The version comes from [`VERSION`](../VERSION) (`0.5.0` for this release). Requirements: Windows x64, the .NET 11 SDK, Python 3, and Internet access for the first package restore. Pass `-SkipBootstrap` when the pinned client, framework and resources are already prepared, `-SkipPublish` to package the existing `.cache\Ritsu-<version>-<rid>` outputs, or `-Platforms win-x64,linux-x64` to restrict the build.
 
 To package only the Windows build:
 

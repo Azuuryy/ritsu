@@ -184,6 +184,7 @@ namespace osu.Game.Rulesets.Osu
                     return new Mod[]
                     {
                         new OsuModEasy(),
+                        new OsuModHalfStream(),
                         new OsuModNoFail(),
                         new MultiMod(new OsuModHalfTime(), new OsuModDaycore()),
                     };
@@ -199,6 +200,11 @@ namespace osu.Game.Rulesets.Osu
                         new OsuModStrictTracking(),
                         new OsuModAccuracyChallenge(),
                         new OsuModMissChallenge(),
+                        new OsuModNoSliding(),
+                        new OsuModOneEye(),
+                        new OsuModDirectionalFlicks(),
+                        new OsuModDecoyCircles(),
+                        new OsuModReversedSliders(),
                     };
 
                 case ModType.Conversion:
@@ -209,7 +215,6 @@ namespace osu.Game.Rulesets.Osu
                         new OsuModClassic(),
                         new OsuModCircleGeneration(),
                         new OsuModRandomV2(),
-                        new OsuModNoSliding(),
                         new OsuModRandom(),
                         new MultiMod(new OsuModSpacingAdjust(), new OsuModSpacingOvertime()),
                         new OsuModMirror(),
@@ -254,6 +259,9 @@ namespace osu.Game.Rulesets.Osu
                     {
                         new OsuModTouchDevice(),
                         new ModScoreV2(),
+                        new OsuModPhraseMirror(),
+                        new OsuModEcho(),
+                        new OsuModSwing(),
                     };
 
                 default:

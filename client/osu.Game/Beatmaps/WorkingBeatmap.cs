@@ -11,6 +11,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using osu.Framework.Statistics;
 using osu.Framework.Audio;
 using osu.Framework.Audio.Track;
 using osu.Framework.Extensions;
@@ -206,6 +207,7 @@ namespace osu.Game.Beatmaps
                 {
                     // TODO: This is a touch expensive and can become an issue if being accessed every Update call.
                     // Optimally we would not involve the async flow if things are already loaded.
+                    using var measurement = FrameProfileCapture.Measure("Beatmap.WaitForLoad");
                     return loadBeatmapAsync().GetResultSafely();
                 }
                 catch (AggregateException ae)
@@ -233,6 +235,7 @@ namespace osu.Game.Beatmaps
             {
                 return beatmapLoadTask ??= Task.Factory.StartNew(() =>
                 {
+                    using var measurement = FrameProfileCapture.Measure("Beatmap.Parse");
                     // Todo: Handle cancellation during beatmap parsing
                     var b = GetBeatmap() ?? new Beatmap();
 
@@ -281,6 +284,12 @@ namespace osu.Game.Beatmaps
             if (rulesetInstance == null)
                 throw new RulesetLoadException("Creating ruleset instance failed when attempting to create playable beatmap.");
 
+            foreach (var mod in mods)
+            {
+                if (mod is IBeatmapVariant variant && (variant.TransformationVersion.Value < 0 || variant.TransformationVersion.Value > variant.LatestTransformationVersion))
+                    throw new UnsupportedBeatmapVariantException(mod, variant.TransformationVersion.Value);
+            }
+
             IBeatmapConverter converter = CreateBeatmapConverter(Beatmap, rulesetInstance);
 
             // Check if the beatmap can be converted
@@ -295,7 +304,7 @@ namespace osu.Game.Beatmaps
             }
 
             // Convert
-            IBeatmap converted = converter.Convert(token);
+            IBeatmap converted = converter.Convert(token, mods.Any(mod => mod is IBeatmapVariant));
 
             // Apply conversion mods to the result
             foreach (var mod in mods.OfType<IApplicableAfterBeatmapConversion>())
@@ -305,13 +314,10 @@ namespace osu.Game.Beatmaps
             }
 
             // Apply difficulty mods
-            if (mods.Any(m => m is IApplicableToDifficulty))
+            foreach (var mod in IApplicableToDifficulty.InApplicationOrder(mods))
             {
-                foreach (var mod in mods.OfType<IApplicableToDifficulty>())
-                {
-                    token.ThrowIfCancellationRequested();
-                    mod.ApplyToDifficulty(converted.Difficulty);
-                }
+                token.ThrowIfCancellationRequested();
+                mod.ApplyToDifficulty(converted.Difficulty);
             }
 
             var processor = rulesetInstance.CreateBeatmapProcessor(converted);

@@ -103,6 +103,9 @@ namespace osu.Game.Screens.Play
         protected virtual bool PauseOnFocusLost => true;
 
         public Action<bool> PrepareLoaderForRestart;
+        internal Action<int> SetVariantSeedForRestart;
+        internal int? RestartVariantSeed { get; set; }
+        internal string BeatmapLoadFailure { get; private set; }
 
         private bool isRestarting;
         private bool skipExitTransition;
@@ -272,6 +275,17 @@ namespace osu.Game.Screens.Play
             constantHitsoundVolume = config.Get<bool>(OsuSetting.ToriiConstantHitsoundVolume);
 
             var gameplayMods = Mods.Value.Select(m => m.DeepClone()).ToArray();
+            if (this is SoloPlayer && RestartVariantSeed is int seed && gameplayMods.OfType<IRetrySeededMod>().FirstOrDefault() is { } seededMod)
+                seededMod.Seed.Value = seed;
+
+            if (this is not ReplayPlayer || this is ReplayPlayer { ModPreviewSettings: not null })
+            {
+                foreach (var variant in gameplayMods.OfType<IBeatmapVariant>())
+                {
+                    if (variant.TransformationVersion.Value >= 0 && variant.TransformationVersion.Value <= variant.LatestTransformationVersion)
+                        variant.TransformationVersion.Value = variant.DefaultTransformationVersion;
+                }
+            }
 
             if (gameplayMods.Any(m => m is UnknownMod))
             {
@@ -376,6 +390,7 @@ namespace osu.Game.Screens.Play
                 {
                     SaveReplay = Configuration.AllowUserInteraction ? async () => await prepareAndImportScoreAsync(true).ConfigureAwait(false) : null,
                     OnRetry = Configuration.AllowUserInteraction ? () => Restart() : null,
+                    OnRetryNewSeed = canRetrySeededVariant ? () => restart(false, true) : null,
                     OnQuit = () => PerformExitWithConfirmation(),
                 },
             });
@@ -597,6 +612,7 @@ namespace osu.Game.Screens.Play
                         OnResume = Resume,
                         Retries = RestartCount,
                         OnRetry = () => Restart(),
+                        OnRetryNewSeed = canRetrySeededVariant ? () => restart(false, true) : null,
                         OnQuit = () => PerformExitWithConfirmation(),
                     },
                     // Torii: one-time mid-map skip briefing, created only alongside the skip overlay.
@@ -740,6 +756,12 @@ namespace osu.Game.Screens.Play
                     Logger.Log("Beatmap contains no hit objects!", level: LogLevel.Important);
                     return null;
                 }
+            }
+            catch (UnsupportedBeatmapVariantException e)
+            {
+                BeatmapLoadFailure = e.Message;
+                Logger.Log(e.Message, level: LogLevel.Important);
+                return null;
             }
             catch (OperationCanceledException)
             {
@@ -957,7 +979,12 @@ namespace osu.Game.Screens.Play
         /// </summary>
         /// <param name="quickRestart">Whether a quick restart was requested (skipping intro etc.).</param>
         /// <returns>Whether this call resulted in a restart.</returns>
-        public bool Restart(bool quickRestart = false)
+        public bool Restart(bool quickRestart = false) => restart(quickRestart, false);
+
+        private bool canRetrySeededVariant => this is SoloPlayer && Configuration.AllowUserInteraction && Configuration.AllowRestart
+                                              && SetVariantSeedForRestart != null && GameplayState?.Mods.OfType<IRetrySeededMod>().FirstOrDefault()?.Seed.Value != null;
+
+        private bool restart(bool quickRestart, bool newSeed)
         {
             if (!Configuration.AllowRestart)
                 return false;
@@ -969,6 +996,17 @@ namespace osu.Game.Screens.Play
             musicController.Stop();
 
             skipExitTransition = quickRestart;
+            int? seed = canRetrySeededVariant ? GameplayState.Mods.OfType<IRetrySeededMod>().First().Seed.Value : null;
+            if (newSeed && seed is int previousSeed)
+            {
+                do
+                    seed = Random.Shared.Next();
+                while (seed == previousSeed);
+            }
+
+            if (seed.HasValue)
+                SetVariantSeedForRestart?.Invoke(seed.Value);
+
             PrepareLoaderForRestart?.Invoke(quickRestart);
 
             return PerformExit(quickRestart);

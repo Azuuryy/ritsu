@@ -95,7 +95,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
                 return 0;
 
             // Use a weighted sum of all notes. Constants are arbitrary and give nice values
-            return sliderStrains.Sum(s => DifficultyCalculationUtils.Logistic(s / consistentTopNote, 0.88, 10, 1.1));
+            return sliderStrains.Sum(s => DiffUtils.Logistic(s / consistentTopNote, 0.88, 10, 1.1));
         }
     }
 }

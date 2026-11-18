@@ -10,7 +10,10 @@ namespace osu.Game.Online
 {
     public sealed class TrustedDomainOnlineStore : OnlineStore, IResourceStore<byte[]>
     {
-        private static readonly HttpClient media = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        private static readonly HttpClient sharedMedia = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        private readonly HttpClient media;
+
+        public TrustedDomainOnlineStore(HttpClient? client = null) => media = client ?? sharedMedia;
 
         public static bool IsCatalogueMedia(string url)
         {

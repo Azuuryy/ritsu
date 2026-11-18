@@ -28,6 +28,7 @@ using osu.Framework.Input.StateChanges;
 using osu.Framework.Logging;
 using osu.Framework.Screens;
 using osu.Framework.Threading;
+using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Configuration;
@@ -107,6 +108,10 @@ namespace osu.Game.Screens.Select
         /// </summary>
         public float TopPadding { get; init; }
 
+        private RitsuQueuePanel? ritsuQueuePanel;
+
+        internal Bindable<WorkingBeatmap> BeatmapForQueue => Beatmap;
+
         private ModSelectOverlay modSelectOverlay = null!;
         private ModSpeedHotkeyHandler modSpeedHotkeyHandler = null!;
 
@@ -136,6 +141,17 @@ namespace osu.Game.Screens.Select
         private BeatmapCarousel carousel = null!;
 
         protected FilterControl FilterControl { get; private set; } = null!;
+
+        internal FilterControl RitsuFilters => FilterControl;
+
+        internal void SelectQueuedBeatmap(BeatmapInfo difficulty)
+        {
+            ((IHandlePresentBeatmap)this).PresentBeatmap(beatmaps.GetWorkingBeatmap(difficulty), difficulty.Ruleset);
+            var criteria = FilterControl.CreateCriteria();
+            if (difficulty.BeatmapSet != null && (criteria.SmartCollectionCriteria != null || criteria.UsesPerformanceFilter
+                                                 || !BeatmapCarouselFilterMatching.CheckCriteriaMatch(difficulty, criteria)))
+                ScopeToBeatmapSet(difficulty.BeatmapSet);
+        }
 
         private BeatmapTitleWedge titleWedge = null!;
         private BeatmapDetailsArea detailsArea = null!;
@@ -414,13 +430,7 @@ namespace osu.Game.Screens.Select
                     TargetDrawSize = new Vector2(1366, 768),
                     Strategy = DrawSizePreservationStrategy.Minimum,
                     Alpha = 0,
-                    Child = new LegacySongSelectTop
-                    {
-                        Anchor = Anchor.TopLeft,
-                        Origin = Anchor.TopLeft,
-                        RelativeSizeAxes = Axes.Both,
-                        FilterControl = FilterControl,
-                    },
+                    Child = createLegacySongSelectTop(),
                 },
                 // Torii: stable-style bottom-left ranking panel (Local Ranking dropdown + scores)
                 // for the legacy UI, in the same 1366x768 scaled space. Hidden by default.
@@ -538,6 +548,16 @@ namespace osu.Game.Screens.Select
             Schedule(rebuildLegacyChrome);
         }
 
+        private PopoverContainer createLegacySongSelectTop() => new PopoverContainer
+        {
+            RelativeSizeAxes = Axes.Both,
+            Child = new LegacySongSelectTop
+            {
+                RelativeSizeAxes = Axes.Both,
+                FilterControl = FilterControl,
+            },
+        };
+
         /// <summary>
         /// torii: reconstruye el chrome legacy como si entraramos de cero. el toggle solo hacia fade de
         /// los contenedores creados una vez en load(), pero sus hijos resuelven las texturas de skin
@@ -558,13 +578,7 @@ namespace osu.Game.Screens.Select
 
             try
             {
-                topContainer.Child = new LegacySongSelectTop
-                {
-                    Anchor = Anchor.TopLeft,
-                    Origin = Anchor.TopLeft,
-                    RelativeSizeAxes = Axes.Both,
-                    FilterControl = FilterControl,
-                };
+                topContainer.Child = createLegacySongSelectTop();
 
                 leaderboardContainer.Child = new OsuContextMenuContainer
                 {
@@ -592,6 +606,16 @@ namespace osu.Game.Screens.Select
         protected virtual ModSelectOverlay CreateModSelectOverlay() => new UserModSelectOverlay
         {
             ShowPresets = true,
+            OpenRitsuSimulation = this is SoloSongSelect && Offline.RitsuOffline.Enabled
+                ? () =>
+                {
+                    if (game is OsuGame osuGame && !Beatmap.IsDefault)
+                    {
+                        modSelectOverlay.Hide();
+                        osuGame.ShowRitsuMap(true);
+                    }
+                }
+                : null,
         };
 
         private void requestRecommendedSelection(IEnumerable<GroupedBeatmap> groupedBeatmaps)
@@ -959,6 +983,7 @@ namespace osu.Game.Screens.Select
 
         public override void OnSuspending(ScreenTransitionEvent e)
         {
+            ritsuQueuePanel?.Hide();
             carousel.VisuallyFocusSelected = true;
 
             this.FadeOut(fade_duration, Easing.OutQuint);
@@ -969,6 +994,7 @@ namespace osu.Game.Screens.Select
 
         public override bool OnExiting(ScreenExitEvent e)
         {
+            ritsuQueuePanel?.Hide();
             this.FadeOut(fade_duration, Easing.OutQuint);
             onLeavingScreen();
 
@@ -1360,6 +1386,12 @@ namespace osu.Game.Screens.Select
 
         public virtual bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
         {
+            if (e.Action == GlobalAction.Back && ritsuQueuePanel?.State.Value == Visibility.Visible)
+            {
+                ritsuQueuePanel.Hide();
+                return true;
+            }
+
             if (!this.IsCurrentScreen()) return false;
 
             if (game == null)
@@ -1420,12 +1452,37 @@ namespace osu.Game.Screens.Select
         {
         }
 
+        internal bool TryOpenRitsuQueue(KeyDownEvent e) =>
+            this is SoloSongSelect && this.IsCurrentScreen() && e.Key == Key.Tab && !e.Repeat
+            && !e.ShiftPressed && !e.ControlPressed && !e.AltPressed
+            && dialogOverlay?.CurrentDialog == null && modSelectOverlay.State.Value != Visibility.Visible
+            && Offline.RitsuOffline.Enabled && game is OsuGame osuGame && toggleRitsuQueue(osuGame);
+
+        private bool toggleRitsuQueue(OsuGame osuGame)
+        {
+            if (ritsuQueuePanel == null)
+                AddInternal(ritsuQueuePanel = new RitsuQueuePanel(osuGame, this));
+
+            if (ritsuQueuePanel.State.Value == Visibility.Visible)
+                ritsuQueuePanel.Hide();
+            else
+                ritsuQueuePanel.Show();
+
+            return true;
+        }
+
         protected override bool OnKeyDown(KeyDownEvent e)
         {
             if (e.Repeat) return false;
 
             switch (e.Key)
             {
+                case Key.Tab when inputManager.FocusedDrawable is not osu.Framework.Graphics.UserInterface.TextBox:
+                    if (TryOpenRitsuQueue(e))
+                        return true;
+
+                    break;
+
                 case Key.Delete:
                     if (e.ShiftPressed)
                     {
@@ -1628,20 +1685,30 @@ namespace osu.Game.Screens.Select
 
             yield return new OsuMenuItemSpacer();
 
+            if (game is OsuGame osuGame && Offline.RitsuOffline.Enabled)
+            {
+                yield return new OsuMenuItem("Add to play queue", MenuItemType.Standard, () => osuGame.QueueRitsuBeatmap(beatmap));
+                if (!beatmap.Hidden && beatmap.BeatmapSet?.DeletePending == false)
+                    yield return new OsuMenuItem("Simulate PP", MenuItemType.Standard, () => osuGame.ShowRitsuMap(true, beatmap));
+                if (beatmap.Equals(Beatmap.Value.BeatmapInfo))
+                {
+                    yield return new OsuMenuItem("Set target BPM", MenuItemType.Standard, osuGame.ShowRitsuTargetBpm);
+                    yield return new OsuMenuItem("Map attributes", MenuItemType.Standard, () => osuGame.ShowRitsuMap(false));
+
+                }
+            }
+
             foreach (var i in CreateCollectionMenuActions(beatmap))
                 yield return i;
         }
 
         protected IEnumerable<OsuMenuItem> CreateCollectionMenuActions(BeatmapInfo beatmap)
         {
-            var collectionItems = realm.Realm.All<BeatmapCollection>()
-                                       .OrderBy(c => c.Name)
-                                       .AsEnumerable()
-                                       .Select(c => new CollectionToggleMenuItem(c.ToLive(realm), beatmap)).Cast<OsuMenuItem>().ToList();
-
-            collectionItems.Add(new OsuMenuItem(CommonStrings.Manage, MenuItemType.Standard, () => manageCollectionsDialog?.Show()));
-
-            yield return new OsuMenuItem(CommonStrings.Collections) { Items = collectionItems };
+            yield return new OsuMenuItem(CommonStrings.Collections)
+            {
+                Items = RitsuCollectionMenu.Create(realm, manageCollectionsDialog, beatmap, Dependencies.Get<RitsuLibrary>(),
+                    Dependencies.Get<Offline.RitsuProfileManager>(), game: game as OsuGame),
+            };
         }
 
         public void ManageCollections() => collectionsDialog?.Show();

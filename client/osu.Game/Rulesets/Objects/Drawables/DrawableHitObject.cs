@@ -735,7 +735,7 @@ namespace osu.Game.Rulesets.Objects.Drawables
 
             HitResultExtensions.ValidateHitResultPair(Result.Judgement.MaxResult, Result.Judgement.MinResult);
 
-            if (!Result.Type.IsValidHitResult(Result.Judgement.MinResult, Result.Judgement.MaxResult))
+            if (!Result.Judgement.IsValidResult(Result.Type))
             {
                 throw new InvalidOperationException(
                     $"{GetType().ReadableName()} applied an invalid hit result (was: {Result.Type}, expected: [{Result.Judgement.MinResult} ... {Result.Judgement.MaxResult}]).");

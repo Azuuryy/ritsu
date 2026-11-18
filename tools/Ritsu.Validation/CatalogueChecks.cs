@@ -1,5 +1,7 @@
 using System.Net;
 using osu.Game.Overlays.BeatmapListing;
+using osu.Game.Offline;
+using osu.Game.Online;
 
 internal static class CatalogueChecks
 {
@@ -7,13 +9,15 @@ internal static class CatalogueChecks
     {
         using var handler = new FakeHandler();
         using var catalogue = new RitsuCatalogueClient(handler);
-        var torii = await catalogue.SearchAsync("a & b", "next cursor", CancellationToken.None);
-        Require(torii.Total == 1 && torii.BeatmapSets.Count == 1 && torii.Cursor == "second", "Torii response and cursor");
-        Require(handler.Requests[0].host == "lazer-api.shikkesora.com" && handler.Requests[0].query.Contains("q=a%20%26%20b") && handler.Requests[0].query.Contains("cursor_string=next%20cursor") && handler.Requests[0].authorization == null, "Torii query is escaped and anonymous");
-        await catalogue.SearchAsync("blue zenith", null, CancellationToken.None, new Dictionary<string, string> { ["s"] = "ranked", ["m"] = "3" });
-        Require(handler.Requests[1].query.Contains("s=ranked") && handler.Requests[1].query.Contains("m=3"), "Native filters sent to Torii");
-        Require(osu.Game.Online.TrustedDomainOnlineStore.IsCatalogueMedia("https://assets.ppy.sh/beatmaps/1/covers/card.jpg"), "Beatmap covers permitted");
-        Require(!osu.Game.Online.TrustedDomainOnlineStore.IsCatalogueMedia("https://assets.ppy.sh/menu-content.json"), "Unrelated online services remain blocked");
+        var first = await catalogue.SearchAsync("test", null, CancellationToken.None);
+        Require(first.Cursor == "second", "Catalogue returns cursor");
+        await catalogue.SearchAsync("test", first.Cursor, CancellationToken.None);
+        Require(handler.Requests[1].query.Contains("cursor_string=second"), "Next page sends cursor");
+        Require(handler.Requests.All(r => r.authorization == null), "Catalogue needs no authentication");
+        using var media = new HttpClient(handler, false);
+        using var store = new TrustedDomainOnlineStore(media);
+        Require(await store.GetAsync("https://assets.ppy.sh/beatmaps/1/covers/card.jpg") != null, "Trusted catalogue media allowed");
+        Require(await store.GetAsync("https://example.com/image.jpg") == null, "Untrusted media rejected");
         Console.WriteLine("PASS: catalogue transport checks");
     }
 

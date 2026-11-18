@@ -58,7 +58,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
             if (Mods.Any(m => m is OsuModDeflate))
             {
                 float deflateInitialScale = Mods.OfType<OsuModDeflate>().First().StartScale.Value;
-                difficulty *= Math.Clamp(DifficultyCalculationUtils.ReverseLerp(deflateInitialScale, 11, 1), 0.1, 1);
+                difficulty *= Math.Clamp(DiffUtils.ReverseLerp(deflateInitialScale, 11, 1), 0.1, 1);
             }
 
             if (Mods.Any(m => m is OsuModRelax))

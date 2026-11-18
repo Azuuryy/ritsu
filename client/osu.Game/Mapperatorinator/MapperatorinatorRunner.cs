@@ -102,6 +102,7 @@ namespace osu.Game.Mapperatorinator
     /// </summary>
     public class MapperatorinatorRunner
     {
+        private static readonly JsonSerializerOptions configJsonOptions = new JsonSerializerOptions { WriteIndented = true };
         public const string CONFIG_FILENAME = @"mapperatorinator.json";
 
         private readonly string configPath;
@@ -174,7 +175,7 @@ namespace osu.Game.Mapperatorinator
             {
                 try
                 {
-                    string json = JsonSerializer.Serialize(Config, new JsonSerializerOptions { WriteIndented = true });
+                    string json = JsonSerializer.Serialize(Config, configJsonOptions);
 
                     // se escribe al lado y se mueve encima: si el juego se muere en el
                     // medio, queda el de antes y no uno a medio escribir.
@@ -1534,7 +1535,6 @@ print('torii-gpu-ok', torch.cuda.get_device_name(0))";
                     return null;
 
                 return new AmdGpuInfo { GfxTarget = bestGfx, Name = amdGpuName(bestGfx), KfdAccessible = canOpenKfd() };
-                return amdGpu;
             }
             catch
             {

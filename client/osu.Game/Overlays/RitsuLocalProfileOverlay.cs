@@ -14,6 +14,7 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Framework.Logging;
+using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Graphics;
@@ -22,6 +23,7 @@ using osu.Game.Graphics.Cursor;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Offline;
+using osu.Game.Database;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Overlays.Profile;
 using osu.Game.Rulesets;
@@ -46,6 +48,12 @@ namespace osu.Game.Overlays
         private readonly ProfileSectionsContainer sections;
         private readonly ProfileSectionTabControl tabs;
         private readonly RitsuLocalScoresSection scores;
+
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved]
+        private RealmAccess realm { get; set; } = null!;
         private readonly LoadingLayer loading;
         private ProfileSection? lastSection;
         private int refreshVersion;
@@ -115,6 +123,8 @@ namespace osu.Game.Overlays
             ((IBindable<RulesetInfo>)ruleset).BindTo(currentRuleset);
             ruleset.BindValueChanged(_ => Schedule(() => { if (State.Value == Visibility.Visible) refresh(); }));
             profiles.Changed += onProfilesChanged;
+            if (library != null)
+                library.Changed += onLibraryChanged;
             State.BindValueChanged(e =>
             {
                 if (e.NewValue == Visibility.Visible)
@@ -122,6 +132,21 @@ namespace osu.Game.Overlays
                 else
                     ++refreshVersion;
             });
+        }
+
+        private void onLibraryChanged() => Schedule(() =>
+        {
+            if (State.Value == Visibility.Visible)
+                refreshMarkedScores(profiles.ActiveProfileId);
+        });
+
+        private void refreshMarkedScores(Guid profileId)
+        {
+            var ids = library?.GetMarkedScores(profileId) ?? Array.Empty<Guid>();
+            var marked = realm.Run(r => ids.Select(id => r.Find<ScoreInfo>(id))
+                                           .Where(s => s is { DeletePending: false })
+                                           .Select(s => s!).Detach());
+            scores.SetMarkedScores(marked.OrderByDescending(s => s.Date).ToArray());
         }
 
         private void onProfilesChanged() => Schedule(() => { if (State.Value == Visibility.Visible) refresh(); });
@@ -142,6 +167,7 @@ namespace osu.Game.Overlays
             scores.User.Value = Header.User.Value;
             scores.SetScores(Array.Empty<ScoreInfo>(), Array.Empty<ScoreInfo>());
             scores.SetError(null);
+            refreshMarkedScores(id);
             loading.Show();
 
             Task.Run(() =>
@@ -151,7 +177,7 @@ namespace osu.Game.Overlays
                 var ppByProfile = new Dictionary<Guid, double> { [id] = statistics.PP };
                 foreach (var profile in allProfiles.Where(p => p.Id != id))
                 {
-                    try { ppByProfile[profile.Id] = profiles.GetStatistics(profile.Id, mode.ShortName).PP; }
+                    try { ppByProfile[profile.Id] = profiles.GetPerformancePoints(profile.Id, mode.ShortName); }
                     catch (Exception ex) { Logger.Error(ex, "Could not load a local profile's PP for the profile selector."); }
                 }
                 int? localRank = statistics.BestScores.Count > 0
@@ -216,6 +242,7 @@ namespace osu.Game.Overlays
             if (isDisposing)
             {
                 if (profiles != null) profiles.Changed -= onProfilesChanged;
+                if (library != null) library.Changed -= onLibraryChanged;
                 ruleset.UnbindBindings();
                 playtimeMode.UnbindBindings();
             }

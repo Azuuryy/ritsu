@@ -3,11 +3,16 @@ using System.Text.Json;
 using osu.Framework.Allocation;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
+using osu.Framework.Statistics;
 using osu.Game;
 using osu.Game.Configuration;
+using osu.Game.Beatmaps;
+using osu.Game.IO;
 using osu.Game.Overlays;
 using osu.Game.Overlays.SkinEditor;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Osu.Mods;
+using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Scoring;
 using osu.Game.Screens.Edit;
 using osu.Game.Screens.Menu;
@@ -18,10 +23,16 @@ using SixLabors.ImageSharp;
 
 internal partial class SmokeGame : OsuGame
 {
+    private const int variant_seed = 3817;
+
     private readonly string fixtures;
     private readonly string evidence;
     private readonly NetworkAudit audit;
     private readonly bool reopen;
+    private readonly bool linked;
+    private readonly bool? frameBenchmark;
+    private FrameProfileCapture? frameCapture;
+    private BeatmapInfo? frameBeatmap;
     private readonly Stopwatch elapsed = Stopwatch.StartNew();
     private readonly List<string> checks = new();
     private Task pending = Task.CompletedTask;
@@ -31,19 +42,33 @@ internal partial class SmokeGame : OsuGame
     private bool complete;
     private double nextAction;
 
-    public SmokeGame(string fixtures, string evidence, NetworkAudit audit, bool reopen = false)
+    public SmokeGame(string fixtures, string evidence, NetworkAudit audit, bool reopen = false, bool linked = false, bool? frameBenchmark = null)
     {
         this.fixtures = fixtures;
         this.evidence = evidence;
         this.audit = audit;
         this.reopen = reopen;
+        this.linked = linked;
+        this.frameBenchmark = frameBenchmark;
         Directory.CreateDirectory(evidence);
     }
 
     public override void SetHost(GameHost host)
     {
         // A test run must not reuse the baseline host's imported library.
-        Storage = host.GetStorage(Path.Combine(evidence, "profile"));
+        var profileStorage = host.GetStorage(Path.Combine(evidence, "profile"));
+        Storage = profileStorage;
+        if (linked)
+        {
+            string linkedPath = Path.Combine(evidence, "linked-library");
+            Directory.CreateDirectory(linkedPath);
+            using (var linkedConfig = new OsuConfigManager(host.GetStorage(linkedPath)))
+                linkedConfig.SetValue(OsuSetting.ShowFirstRunSetup, false);
+            using (var config = new StorageConfigManager(profileStorage))
+                config.SetValue(StorageConfig.FullPath, linkedPath);
+            Storage = new OsuStorage(host, profileStorage);
+        }
+
         base.SetHost(host);
         LocalConfig.SetValue(OsuSetting.ShowFirstRunSetup, false);
         LocalConfig.SetValue(OsuSetting.ShowToriiWelcome, false);
@@ -64,16 +89,25 @@ internal partial class SmokeGame : OsuGame
                     if (ScreenStack?.CurrentScreen is not MainMenu menu || !menu.IsLoaded) return;
                     if (elapsed.Elapsed.TotalSeconds < 10) return;
                     Check(!API.IsLoggedIn, "menu available without an account");
+                    if (linked)
+                        Check(Path.GetFullPath(Storage.GetFullPath(".")).TrimEnd(Path.DirectorySeparatorChar)
+                              == Path.Combine(evidence, "linked-library"), "uses the isolated linked library in place");
                     if (reopen)
                     {
                         var persistedInfo = ScoreManager.Query(s => s.Hash != "") ?? throw new Exception("Score missing after restart");
                         savedScore = ScoreManager.GetScore(persistedInfo) ?? throw new Exception("Replay missing after restart");
                         Check(savedScore.Replay?.Frames.Count > 0, "score and replay persisted across process restart");
+                        checkVariantScore(savedScore.ScoreInfo);
+                        if (frameBenchmark.HasValue)
+                        {
+                            frameCapture = new FrameProfileCapture(150_000, 150_000, frameBenchmark.Value);
+                            frameBeatmap = persistedInfo.BeatmapInfo!;
+                        }
                         Beatmap.Value = BeatmapManager.GetWorkingBeatmap(persistedInfo.BeatmapInfo!);
                         Ruleset.Value = persistedInfo.Ruleset;
                         SelectedMods.Value = persistedInfo.Mods;
-                        ScreenStack.Push(new SoloSongSelect());
-                        stage = 30;
+                        ScreenStack.Push(frameBenchmark.HasValue ? new BenchmarkSongSelect() : new SoloSongSelect());
+                        stage = frameBenchmark.HasValue ? 40 : 30;
                         nextAction = Time.Current + 1500;
                         break;
                     }
@@ -103,7 +137,17 @@ internal partial class SmokeGame : OsuGame
                     stage++;
                     break;
                 case 4:
-                    SelectedMods.Value = new[] { new OsuModNoFail() };
+                    SelectedMods.Value = new Mod[]
+                    {
+                        new OsuModNoFail(),
+                        new OsuModRandomV2
+                        {
+                            Seed = { Value = variant_seed },
+                            CustomAngle = { Value = true },
+                            SeparatePatterns = { Value = true },
+                            JumpPatterns = { Value = 1 << 11 },
+                        },
+                    };
                     player = new BackgroundSoloPlayer();
                     ScreenStack.Push(new BackgroundPlayerLoader(() => player));
                     stage++;
@@ -111,15 +155,18 @@ internal partial class SmokeGame : OsuGame
                     break;
                 case 5:
                     if (ScreenStack.CurrentScreen is not Player p || !p.LoadedBeatmapSuccessfully) return;
-                    Check(true, "normal solo gameplay loaded (NF, no synthetic input)");
+                    Check(true, "solo RandomV2 gameplay loaded (NF, no synthetic input)");
+                    File.WriteAllText(Path.Combine(evidence, "variant-positions.json"), variantPositions(p));
                     pending = Capture("03-gameplay");
                     stage++;
                     break;
                 case 6:
                     if (ScreenStack.CurrentScreen is not ResultsScreen results || !results.IsLoaded) return;
-                    var scoreInfo = ScoreManager.Query(s => s.Hash != "") ?? throw new Exception("Local score was not saved");
+                    var scoreInfo = ScoreManager.Query(s => s.Hash != "");
+                    if (scoreInfo == null) return;
                     savedScore = ScoreManager.GetScore(scoreInfo) ?? throw new Exception("Saved replay was not readable");
                     Check(savedScore.Replay != null && savedScore.Replay.Frames.Count > 0, "normal score and recorded replay saved");
+                    checkVariantScore(savedScore.ScoreInfo);
                     stage = 18;
                     nextAction = Time.Current + 1800;
                     break;
@@ -139,13 +186,18 @@ internal partial class SmokeGame : OsuGame
                     break;
                 case 17:
                     Check(true, "exported OSR re-import completed");
-                    PerformFromScreen(screen => screen.Push(new BackgroundPlayerLoader(() => new BackgroundReplayPlayer(savedScore!))), new[] { typeof(SoloSongSelect) });
+                    PerformFromScreen(screen =>
+                    {
+                        SelectedMods.Value = savedScore!.ScoreInfo.Mods;
+                        screen.Push(new BackgroundPlayerLoader(() => new BackgroundReplayPlayer(savedScore)));
+                    }, new[] { typeof(SoloSongSelect) });
                     stage = 9;
                     nextAction = Time.Current + 5000;
                     break;
                 case 9:
                     if (ScreenStack.CurrentScreen is not ReplayPlayer replay || !replay.LoadedBeatmapSuccessfully) return;
                     Check(true, "saved replay playback loaded");
+                    checkVariantPositions(replay);
                     pending = Capture("05-replay");
                     stage++;
                     break;
@@ -187,6 +239,20 @@ internal partial class SmokeGame : OsuGame
                     Check(audit.AttemptCount == 0, "no observed HTTP, DNS or socket attempt throughout the session");
                     Finish(null);
                     break;
+                case 40:
+                    if (ScreenStack.CurrentScreen is not BenchmarkSongSelect benchmark || !benchmark.IsLoaded) return;
+                    benchmark.Search("Ritsu offline validation");
+                    _ = BeatmapManager.GetWorkingBeatmap(frameBeatmap!).Beatmap;
+                    stage++;
+                    nextAction = Time.Current + 1500;
+                    break;
+                case 41:
+                    if (ScreenStack.CurrentScreen is not BenchmarkSongSelect warm) return;
+                    warm.Search(string.Empty);
+                    _ = BeatmapManager.GetWorkingBeatmap(frameBeatmap!).Beatmap;
+                    stage = 30;
+                    nextAction = Time.Current + 1500;
+                    break;
                 case 30:
                     if (ScreenStack.CurrentScreen is not SoloSongSelect) return;
                     ScreenStack.Push(new BackgroundPlayerLoader(() => new BackgroundReplayPlayer(savedScore!)));
@@ -196,7 +262,8 @@ internal partial class SmokeGame : OsuGame
                 case 31:
                     if (ScreenStack.CurrentScreen is not ReplayPlayer restarted || !restarted.LoadedBeatmapSuccessfully) return;
                     Check(true, "replay playback loaded after process restart");
-                    pending = Capture("09-replay-after-restart");
+                    checkVariantPositions(restarted);
+                    if (!frameBenchmark.HasValue) pending = Capture("09-replay-after-restart");
                     stage = 32;
                     nextAction = Time.Current + 1800;
                     break;
@@ -211,6 +278,64 @@ internal partial class SmokeGame : OsuGame
             Finish(exception.ToString());
         }
     }
+
+    private void writeFrameBenchmark(FrameProfileSnapshot snapshot)
+    {
+        double milliseconds(long ticks) => ticks * 1000.0 / snapshot.Frequency;
+        var threads = snapshot.Frames.GroupBy(f => f.Thread).Select(group =>
+        {
+            var frames = group.OrderBy(f => f.End - f.Start).ToArray();
+            double percentile(double fraction)
+            {
+                var frame = frames[(int)Math.Ceiling(fraction * frames.Length) - 1];
+                return milliseconds(frame.End - frame.Start);
+            }
+            return new
+            {
+                Thread = group.Key,
+                Frames = frames.Length,
+                P50 = percentile(0.50),
+                P95 = percentile(0.95),
+                P99 = percentile(0.99),
+                AboveBudget = frames.Count(f => f.BudgetMs > 0 && milliseconds(f.End - f.Start) > f.BudgetMs),
+                AllocatedBytes = frameBenchmark == true ? frames.Sum(f => f.AllocatedBytes) : (long?)null,
+            };
+        }).ToArray();
+        if (threads.Length == 0)
+            throw new InvalidOperationException("The benchmark captured no frame timings.");
+
+        string name = frameBenchmark == true ? "frame-instrumented" : "frame-baseline";
+        File.WriteAllText(Path.Combine(evidence, name + ".json"), JsonSerializer.Serialize(new
+        {
+            Build = typeof(OsuGame).Assembly.GetName().Version?.ToString(),
+            Renderer = Host.ResolvedRenderer.ToString(),
+            UpdateLimitHz = double.IsFinite(Host.MaximumUpdateHz) ? Host.MaximumUpdateHz : (double?)null,
+            OS = Environment.OSVersion.VersionString,
+            Cpu = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER"),
+            LogicalProcessors = Environment.ProcessorCount,
+            snapshot.DroppedFrames,
+            snapshot.DroppedOperations,
+            Threads = threads,
+        }));
+    }
+
+    private partial class BenchmarkSongSelect : SoloSongSelect
+    {
+        public void Search(string query) => FilterControl.SearchQuery.Value = query;
+    }
+
+    private void checkVariantScore(ScoreInfo score)
+    {
+        var variant = score.Mods.OfType<OsuModRandomV2>().Single();
+        Check(variant.Seed.Value == variant_seed && variant.TransformationVersion.Value == 2 && variant.SeparatePatterns.Value && variant.JumpPatterns.Value == 1 << 11,
+            "score retained RandomV2 seed, settings and transformation version");
+    }
+
+    private void checkVariantPositions(Player player) =>
+        Check(variantPositions(player) == File.ReadAllText(Path.Combine(evidence, "variant-positions.json")), "replay reconstructed the playable variant positions");
+
+    private static string variantPositions(Player player) => JsonSerializer.Serialize(player.GameplayState.Beatmap.HitObjects.OfType<OsuHitObject>()
+        .Select(obj => new { obj.StartTime, obj.Position.X, obj.Position.Y, EndX = obj.EndPosition.X, EndY = obj.EndPosition.Y }));
 
     private void Check(bool condition, string message)
     {
@@ -228,6 +353,17 @@ internal partial class SmokeGame : OsuGame
     private void Finish(string? error)
     {
         complete = true;
+        if (frameBenchmark.HasValue)
+        {
+            frameCapture?.Dispose();
+            if (error == null && frameCapture != null)
+                writeFrameBenchmark(frameCapture.Snapshot());
+            Environment.ExitCode = error == null ? 0 : 1;
+            Console.WriteLine(error ?? "PASS: frame benchmark");
+            Host.Exit();
+            return;
+        }
+
         audit.Save(Path.Combine(evidence, reopen ? "reopen-network.json" : "network.json"));
         File.WriteAllText(Path.Combine(evidence, reopen ? "reopen-result.json" : "result.json"), JsonSerializer.Serialize(new { success = error == null, stage, checks, error, seconds = elapsed.Elapsed.TotalSeconds }, new JsonSerializerOptions { WriteIndented = true }));
         Environment.ExitCode = error == null ? 0 : 1;
@@ -237,9 +373,10 @@ internal partial class SmokeGame : OsuGame
 
     private partial class BackgroundPlayerLoader : PlayerLoader
     {
+        protected override bool ReadyForGameplay => true;
+
         public BackgroundPlayerLoader(Func<Player> createPlayer) : base(createPlayer)
         {
-            WindowShouldBeActiveForGameplayStart = false;
         }
     }
 

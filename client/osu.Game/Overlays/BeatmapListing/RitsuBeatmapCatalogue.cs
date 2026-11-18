@@ -16,6 +16,7 @@ using osu.Game.Extensions;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
+using osu.Game.Online.API.Requests.Responses;
 using osuTK;
 using osuTK.Graphics;
 
@@ -27,11 +28,19 @@ namespace osu.Game.Overlays.BeatmapListing
         private readonly BeatmapListingSearchControl filters;
         private readonly BeatmapListingSortTabControl sorting;
         private readonly OsuSpriteText status;
-        private readonly FillFlowContainer<BeatmapCard> results;
+        private const float card_spacing = 10;
+        private const int overscan_rows = 2;
+        private readonly Drawable viewport;
+        private readonly Container results;
+        private readonly List<APIBeatmapSet> beatmapSets = new List<APIBeatmapSet>();
+        private readonly HashSet<int> resultIds = new HashSet<int>();
+        private readonly Dictionary<int, BeatmapCardNormal> visibleCards = new Dictionary<int, BeatmapCardNormal>();
         private readonly RoundedButton next;
         private readonly Container resultsArea;
         private CancellationTokenSource? detailCancellation;
         private float gridWidth;
+        private int firstVisibleIndex = -1;
+        private int lastVisibleIndex = -1;
 
         [Resolved]
         private BeatmapSetOverlay details { get; set; } = null!;
@@ -39,9 +48,11 @@ namespace osu.Game.Overlays.BeatmapListing
         private ScheduledDelegate? debounce;
         private string? cursor;
         private int generation;
+        private int emptyPageCount;
 
-        public RitsuBeatmapCatalogue()
+        public RitsuBeatmapCatalogue(Drawable viewport)
         {
+            this.viewport = viewport;
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
             InternalChild = new FillFlowContainer
@@ -68,13 +79,10 @@ namespace osu.Game.Overlays.BeatmapListing
                     {
                         RelativeSizeAxes = Axes.X,
                         AutoSizeAxes = Axes.Y,
-                        Child = results = new FillFlowContainer<BeatmapCard>
+                        Child = results = new Container
                         {
                             Anchor = Anchor.TopCentre,
                             Origin = Anchor.TopCentre,
-                            AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Full,
-                            Spacing = new Vector2(10),
                             Width = BeatmapCard.WIDTH,
                         },
                     },
@@ -114,7 +122,7 @@ namespace osu.Game.Overlays.BeatmapListing
             debounce?.Cancel();
             cancelSearch();
             detailCancellation?.Cancel();
-            results.Clear();
+            clearResults();
             next.Alpha = 0;
             status.Text = "Search Torii. Downloads are imported into the currently selected beatmap library.";
         }
@@ -134,7 +142,11 @@ namespace osu.Game.Overlays.BeatmapListing
             string text = filters.Query.Value ?? string.Empty;
             string? page = more ? cursor : null;
             cancelSearch();
-            if (!more) results.Clear();
+            if (!more)
+            {
+                clearResults();
+                emptyPageCount = 0;
+            }
             next.Alpha = 0;
             if (filters.Category.Value is SearchCategory.Mine or SearchCategory.Favourites || filters.Played.Value != SearchPlayed.Any || filters.Ranks.Any() || filters.Downloaded.Value != SearchDownloaded.Any || filters.General.Contains(SearchGeneral.Recommended) || filters.General.Contains(SearchGeneral.Follows))
             {
@@ -169,17 +181,24 @@ namespace osu.Game.Overlays.BeatmapListing
                 Schedule(() =>
                 {
                     if (current != generation) return;
-                    var existing = results.Select(c => c.BeatmapSet.OnlineID).ToHashSet();
-                    foreach (var set in data.BeatmapSets.Where(s => existing.Add(s.OnlineID)))
-                    {
-                        var card = new BeatmapCardNormal(set, allowExpansion: false);
-                        card.Action = () => _ = showDetailsAsync(set.OnlineID);
-                        results.Add(card);
-                    }
-                    gridWidth = 0;
+                    int previousCount = beatmapSets.Count;
+                    beatmapSets.AddRange(data.BeatmapSets.Where(set => resultIds.Add(set.OnlineID)));
+                    int added = beatmapSets.Count - previousCount;
                     cursor = data.Cursor;
+                    if (added == 0 && !string.IsNullOrEmpty(cursor) && cursor != page && ++emptyPageCount <= 5)
+                    {
+                        startSearch(true);
+                        return;
+                    }
+                    emptyPageCount = 0;
+                    if (cursor == page && !string.IsNullOrEmpty(cursor))
+                    {
+                        next.Alpha = 1;
+                        status.Text = "No new maps returned. Try loading again.";
+                        return;
+                    }
                     next.Alpha = string.IsNullOrEmpty(cursor) ? 0 : 1;
-                    status.Text = $"";
+                    status.Text = added == 0 ? "No new maps found." : string.Empty;
                 });
             }
             catch (OperationCanceledException) { }
@@ -195,16 +214,65 @@ namespace osu.Game.Overlays.BeatmapListing
             }
         }
 
+        private void clearResults()
+        {
+            beatmapSets.Clear();
+            resultIds.Clear();
+            visibleCards.Clear();
+            results.Clear();
+            results.Height = 0;
+            firstVisibleIndex = lastVisibleIndex = -1;
+        }
+
         protected override void UpdateAfterChildren()
         {
             base.UpdateAfterChildren();
+            if (beatmapSets.Count == 0)
+                return;
+
             float width = resultsArea.DrawWidth;
-            if (width <= 0 || Math.Abs(width - gridWidth) < 0.1f) return;
+            if (width <= 0)
+                return;
+
+            int columns = Math.Max(1, (int)((width + card_spacing) / (BeatmapCard.WIDTH + card_spacing)));
+            float scale = Math.Min(1.25f, (width - (columns - 1) * card_spacing) / (columns * BeatmapCard.WIDTH));
+            float rowHeight = BeatmapCardNormal.HEIGHT * scale + card_spacing;
+            int rows = (beatmapSets.Count + columns - 1) / columns;
+            results.Width = columns * (BeatmapCard.WIDTH * scale + card_spacing) - card_spacing;
+            results.Height = rows * rowHeight - card_spacing;
+
+            var bounds = viewport.ScreenSpaceDrawQuad;
+            float top = results.ToLocalSpace(bounds.TopLeft).Y;
+            float bottom = results.ToLocalSpace(bounds.BottomLeft).Y;
+            int first = Math.Clamp((int)Math.Floor(top / rowHeight) - overscan_rows, 0, rows) * columns;
+            int last = Math.Min(beatmapSets.Count, Math.Clamp((int)Math.Ceiling(bottom / rowHeight) + overscan_rows, 0, rows) * columns);
+            if (first == firstVisibleIndex && last == lastVisibleIndex && width == gridWidth)
+                return;
+
+            firstVisibleIndex = first;
+            lastVisibleIndex = last;
             gridWidth = width;
-            int columns = Math.Max(1, (int)((width + 10) / (BeatmapCard.WIDTH + 10)));
-            float scale = Math.Min(1.25f, (width - (columns - 1) * 10) / (columns * BeatmapCard.WIDTH));
-            results.Width = columns * BeatmapCard.WIDTH * scale + (columns - 1) * 10 + 0.1f;
-            foreach (var card in results) card.Scale = new Vector2(scale);
+
+            foreach (int index in visibleCards.Keys.Where(index => index < first || index >= last).ToArray())
+            {
+                results.Remove(visibleCards[index], true);
+                visibleCards.Remove(index);
+            }
+
+            for (int index = first; index < last; index++)
+            {
+                if (!visibleCards.TryGetValue(index, out var card))
+                {
+                    var set = beatmapSets[index];
+                    card = new BeatmapCardNormal(set, allowExpansion: false);
+                    card.Action = () => _ = showDetailsAsync(set.OnlineID);
+                    visibleCards.Add(index, card);
+                    results.Add(card);
+                }
+
+                card.Position = new Vector2(index % columns * (BeatmapCard.WIDTH * scale + card_spacing), index / columns * rowHeight);
+                card.Scale = new Vector2(scale);
+            }
         }
 
         private async Task showDetailsAsync(int id)

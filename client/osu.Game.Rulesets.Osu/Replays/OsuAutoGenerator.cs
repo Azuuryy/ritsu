@@ -33,6 +33,8 @@ namespace osu.Game.Rulesets.Osu.Replays
         /// </summary>
         public bool DelayedMovements; // ModManager.CheckActive(Mods.Relax2);
 
+        public int Linearisation { get; set; }
+
         #endregion
 
         #region Constants
@@ -72,20 +74,18 @@ namespace osu.Game.Rulesets.Osu.Replays
                 return Replay;
 
             buttonIndex = 0;
-
             AddFrameToReplay(new OsuReplayFrame(Beatmap.HitObjects[0].StartTime - 1500, new Vector2(256, 500)));
 
-            for (int i = 0; i < Beatmap.HitObjects.Count; i++)
+            OsuHitObject? previous = null;
+            foreach (var h in Beatmap.HitObjects)
             {
-                OsuHitObject h = Beatmap.HitObjects[i];
-
-                if (DelayedMovements && i > 0)
-                {
-                    OsuHitObject prev = Beatmap.HitObjects[i - 1];
-                    addDelayedMovements(h, prev);
-                }
+                if (h is DecoyCircle)
+                    continue;
+                if (DelayedMovements && previous != null)
+                    addDelayedMovements(h, previous);
 
                 addHitObjectReplay(h);
+                previous = h;
             }
 
             return Replay;
@@ -254,16 +254,15 @@ namespace osu.Game.Rulesets.Osu.Replays
                 {
                     // [lastLastFrame] ... [lastFrame] ... [current frame]
                     // We want to find the cursor position at lastFrame, so interpolate between lastLastFrame and the new target position.
-                    lastFrame.Position = Interpolation.ValueAt(lastFrame.Time, lastFrame.Position, targetPos, lastLastFrame.Time, h.StartTime, easing);
+                    lastFrame.Position = interpolatePosition(lastFrame.Time, lastFrame.Position, targetPos, lastLastFrame.Time, h.StartTime, easing);
                 }
 
                 Vector2 lastPosition = lastFrame.Position;
 
-                // Perform the rest of the eased movement until the target position is reached.
                 for (double time = lastFrame.Time + GetFrameDelay(lastFrame.Time); time < h.StartTime; time += GetFrameDelay(time))
                 {
-                    Vector2 currentPosition = Interpolation.ValueAt(time, lastPosition, targetPos, lastFrame.Time, h.StartTime, easing);
-                    AddFrameToReplay(new OsuReplayFrame((int)time, new Vector2(currentPosition.X, currentPosition.Y)) { Actions = lastFrame.Actions });
+                    Vector2 currentPosition = interpolatePosition(time, lastPosition, targetPos, lastFrame.Time, h.StartTime, easing);
+                    AddFrameToReplay(new OsuReplayFrame(time, currentPosition) { Actions = lastFrame.Actions });
                 }
             }
 
@@ -277,10 +276,19 @@ namespace osu.Game.Rulesets.Osu.Replays
         /// <summary>
         /// Calculates the "reaction time" in ms between "seeing" a new hit object and moving to "react" to it.
         /// </summary>
-        /// <remarks>
-        /// Already superhuman, but still somewhat realistic.
-        /// </remarks>
-        private double getReactionTime(double timeInstant) => ApplyModsToRate(timeInstant, 100);
+        private double getReactionTime(double timeInstant)
+        {
+            return ApplyModsToRate(timeInstant, 100);
+        }
+
+        private Vector2 interpolatePosition(double time, Vector2 startPosition, Vector2 targetPosition, double startTime, double endTime, Easing easing)
+        {
+            float progress = endTime <= startTime ? 1 : (float)Math.Clamp((time - startTime) / (endTime - startTime), 0, 1);
+            Vector2 easedPosition = Interpolation.ValueAt(time, startPosition, targetPosition, startTime, endTime, easing);
+            Vector2 linearPosition = Vector2.Lerp(startPosition, targetPosition, progress);
+            float linearisation = Math.Clamp(Linearisation / 100f, 0, 1);
+            return Vector2.Lerp(easedPosition, linearPosition, linearisation);
+        }
 
         // Add frames to click the hitobject
         private void addHitObjectClickFrames(OsuHitObject h, Vector2 startPosition, float spinnerDirection)

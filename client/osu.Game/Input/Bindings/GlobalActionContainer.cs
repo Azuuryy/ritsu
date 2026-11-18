@@ -127,6 +127,7 @@ namespace osu.Game.Input.Bindings
             new KeyBinding(new[] { InputKey.Control, InputKey.O }, GlobalAction.ToggleSettings),
             new KeyBinding(new[] { InputKey.Control, InputKey.N }, GlobalAction.ToggleNotifications),
             new KeyBinding(new[] { InputKey.Control, InputKey.P }, GlobalAction.ToggleProfile),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.P }, GlobalAction.ToggleRitsuPalette),
         };
 
         private static IEnumerable<KeyBinding> editorKeyBindings => new[]
@@ -647,6 +648,9 @@ namespace osu.Game.Input.Bindings
 
         [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.DecreaseCursorSize))]
         DecreaseCursorSize,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.ToggleRitsuPalette))]
+        ToggleRitsuPalette,
     }
 
     public enum GlobalActionCategory

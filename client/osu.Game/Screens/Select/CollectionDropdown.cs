@@ -3,6 +3,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
@@ -13,6 +14,7 @@ using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Configuration;
@@ -21,6 +23,10 @@ using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Localisation;
+using osu.Game.Offline;
+using osu.Game.Overlays;
+using osu.Game.Overlays.Dialog;
+using osuTK.Input;
 using osuTK;
 using Realms;
 
@@ -47,6 +53,13 @@ namespace osu.Game.Screens.Select
 
         private IDisposable? realmSubscription;
         private bool reverseCollections;
+        private bool synchronising;
+
+        [Resolved(canBeNull: true)]
+        private RitsuLibrary? library { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private IDialogOverlay? dialogs { get; set; }
 
         private readonly CollectionFilterMenuItem allBeatmapsItem = new AllBeatmapsCollectionFilterMenuItem();
 
@@ -54,14 +67,13 @@ namespace osu.Game.Screens.Select
             : base(CollectionsStrings.Collection)
         {
             ItemSource = filters;
-
             Current.Value = allBeatmapsItem;
             AlwaysShowSearchBar = true;
             MiddleClickAction = () =>
             {
                 reverseCollections = !reverseCollections;
                 SetReversedSortIndicator(reverseCollections, CollectionsStrings.Collection);
-                subscribeToCollections();
+                refresh();
             };
         }
 
@@ -78,97 +90,133 @@ namespace osu.Game.Screens.Select
             subscribeToCollections();
 
             Current.BindValueChanged(selectionChanged);
+            configCollectionFilter.BindValueChanged(_ => refreshSelection());
+            if (library != null)
+                library.Changed += onLibraryChanged;
         }
 
-        private void subscribeToCollections()
+        private void subscribeToCollections() =>
+            realmSubscription = realm.RegisterForNotifications(r => r.All<BeatmapCollection>().OrderBy(c => c.Name),
+                (items, changes) => refresh(changes?.NewModifiedIndices.Select(index => items[index].ID).ToHashSet()));
+
+        private void onLibraryChanged() => Schedule(() => refresh());
+
+        private CollectionFilterMenuItem[] availableCollections()
         {
-            realmSubscription?.Dispose();
-            realmSubscription = realm.RegisterForNotifications(
-                r => reverseCollections ? r.All<BeatmapCollection>().OrderByDescending(c => c.Name) : r.All<BeatmapCollection>().OrderBy(c => c.Name),
-                collectionsChanged);
+            var native = realm.Realm.All<BeatmapCollection>().OrderBy(c => c.Name).AsEnumerable()
+                              .Select(c => new CollectionFilterMenuItem(c.ToLive(realm))).ToArray();
+            if (library == null)
+                return reverseCollections ? native.Reverse().ToArray() : native;
+
+            var ids = native.Select(item => item.Collection!.ID).ToHashSet();
+            var subgroups = library.Subgroups.Where(s => ids.Contains(s.CollectionId))
+                                   .Select(s => new RitsuCollectionFilterMenuItem(s.Id, $"↳ {s.Name}"));
+            var smart = library.SmartCollections.Select(c => new RitsuCollectionFilterMenuItem(c.Id, $"⚡ {c.Name}"));
+            var items = native.Concat(subgroups).Concat(smart);
+            if (reverseCollections)
+                items = items.Reverse();
+            return library.MenuOrder(RitsuMenuOrdering.Collections).Apply(items, scope, item => item.CollectionName.ToString());
         }
 
-        private void collectionsChanged(IRealmCollection<BeatmapCollection> collections, ChangeSet? changes)
+        private void refresh(IReadOnlySet<Guid>? modified = null)
         {
-            if (changes == null)
+            synchronising = true;
+            try
             {
-                filters.Clear();
-                filters.Add(allBeatmapsItem);
-                filters.AddRange(collections.Select(c => new CollectionFilterMenuItem(c.ToLive(realm))));
+                var entries = new List<CollectionFilterMenuItem> { allBeatmapsItem };
+                entries.AddRange(availableCollections());
                 if (ShowManageCollectionsItem)
-                    filters.Add(new ManageCollectionsFilterMenuItem());
+                    entries.Add(new ManageCollectionsFilterMenuItem());
 
-                Current.Value = filters.SingleOrDefault(item => item.Collection?.PerformRead(c => c.ID.ToString()) == configCollectionFilter.Value) ?? allBeatmapsItem;
-            }
-            else
-            {
-                foreach (int i in changes.DeletedIndices.OrderDescending())
-                    filters.RemoveAt(i + 1);
+                var selected = entries.FirstOrDefault(item => scope(item) == configCollectionFilter.Value) ?? allBeatmapsItem;
+                if (Current.Value?.Equals(selected) == true && Current.Value.CollectionName != selected.CollectionName)
+                    Current.Value = allBeatmapsItem;
 
-                foreach (int i in changes.InsertedIndices)
-                    filters.Insert(i + 1, new CollectionFilterMenuItem(collections[i].ToLive(realm)));
-
-                var selectedItem = SelectedItem?.Value;
-
-                foreach (int i in changes.NewModifiedIndices)
+                for (int i = filters.Count - 1; i >= 0; i--)
                 {
-                    var updatedItem = collections[i];
-
-                    // This is responsible for updating the state of the +/- button and the collection's name.
-                    // TODO: we can probably make the menu items update with changes to avoid this.
-                    filters.RemoveAt(i + 1);
-                    filters.Insert(i + 1, new CollectionFilterMenuItem(updatedItem.ToLive(realm)));
-
-                    if (updatedItem.ID == selectedItem?.Collection?.ID)
-                    {
-                        // This current update and schedule is required to work around dropdown headers not updating text even when the selected item
-                        // changes. It's not great but honestly the whole dropdown menu structure isn't great. This needs to be fixed, but I'll issue
-                        // a warning that it's going to be a frustrating journey.
-                        Current.Value = allBeatmapsItem;
-                        Schedule(() =>
-                        {
-                            // current may have changed before the scheduled call is run.
-                            if (Current.Value != allBeatmapsItem)
-                                return;
-
-                            Current.Value = filters.SingleOrDefault(f => f.Collection?.ID == selectedItem.Collection?.ID) ?? filters[0];
-                        });
-
-                        break;
-                    }
+                    if (!entries.Contains(filters[i]))
+                        filters.RemoveAt(i);
                 }
+
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    var entry = entries[i];
+                    int existingIndex = filters.IndexOf(entry);
+                    if (existingIndex == i && filters[i].CollectionName == entry.CollectionName
+                        && (entry.Collection is not { } collection || modified?.Contains(collection.ID) != true))
+                        continue;
+
+                    if (existingIndex >= 0)
+                        filters.RemoveAt(existingIndex);
+                    filters.Insert(i, entry);
+                }
+
+                Current.Value = selected;
+                if (ReferenceEquals(selected, allBeatmapsItem))
+                    configCollectionFilter.Value = string.Empty;
+            }
+            finally
+            {
+                synchronising = false;
             }
         }
+
+        private void refreshSelection()
+        {
+            if (synchronising)
+                return;
+
+            synchronising = true;
+            try
+            {
+                Current.Value = filters.FirstOrDefault(item => scope(item) == configCollectionFilter.Value) ?? allBeatmapsItem;
+            }
+            finally
+            {
+                synchronising = false;
+            }
+        }
+
+        private static string scope(CollectionFilterMenuItem item) => item switch
+        {
+            RitsuCollectionFilterMenuItem virtualCollection => virtualCollection.Id.ToString(),
+            _ => item.Collection?.ID.ToString() ?? string.Empty,
+        };
 
         private void selectionChanged(ValueChangedEvent<CollectionFilterMenuItem> filter)
         {
-            // May be null during .Clear().
-            if (filter.NewValue.IsNull())
+            if (synchronising || filter.NewValue.IsNull())
                 return;
 
-            switch (filter.NewValue)
+            if (filter.NewValue is ManageCollectionsFilterMenuItem)
             {
-                case ManageCollectionsFilterMenuItem:
-                    // Never select the manage collection filter - rollback to the previous filter.
-                    // This is done after the above since it is important that bindable is unbound from OldValue, which is lost after forcing it back to the old value.
-                    Current.Value = filter.OldValue;
-                    manageCollectionsDialog?.Show();
-                    break;
-
-                case CollectionFilterMenuItem collectionMenuItem when collectionMenuItem.Collection != null:
-                    configCollectionFilter.Value = collectionMenuItem.Collection.PerformRead(c => c.ID.ToString());
-                    break;
-
-                case AllBeatmapsCollectionFilterMenuItem:
-                    configCollectionFilter.Value = string.Empty;
-                    break;
+                Current.Value = filter.OldValue;
+                manageCollectionsDialog?.Show();
+                return;
             }
+
+            string selection = scope(filter.NewValue);
+            configCollectionFilter.Value = selection;
+            if (selection.Length > 0 && library != null && Menu.State == MenuState.Open)
+                RitsuMenuOrdering.RecordUse(library, RitsuMenuOrdering.Collections, selection);
+        }
+
+        protected override bool OnMouseDown(MouseDownEvent e)
+        {
+            if (e.Button != MouseButton.Right || library == null || dialogs == null)
+                return base.OnMouseDown(e);
+
+            dialogs.Push(new RitsuMenuOrdering.OrderDialog(RitsuMenuOrdering.Collections, library,
+                availableCollections().Select(item => new RitsuMenuOrdering.Entry(scope(item), item.CollectionName.ToString())).ToArray()));
+            return true;
         }
 
         protected override void Dispose(bool isDisposing)
         {
             base.Dispose(isDisposing);
             realmSubscription?.Dispose();
+            if (library != null)
+                library.Changed -= onLibraryChanged;
         }
 
         protected override LocalisableString GenerateItemText(CollectionFilterMenuItem item) => item.CollectionName;
@@ -269,9 +317,20 @@ namespace osu.Game.Screens.Select
                     addOrRemoveButton.Alpha = IsHovered || IsPreSelected || beatmapInCollection ? 1 : 0;
             }
 
+            [Resolved(canBeNull: true)]
+            private RitsuLibrary? library { get; set; }
+
+            [Resolved(canBeNull: true)]
+            private ManageCollectionsDialog? manager { get; set; }
+
             private void addOrRemove()
             {
                 Debug.Assert(collection != null);
+                if (library != null && manager != null && collection.PerformRead(c => c.BeatmapMD5Hashes.Contains(beatmap.Value.BeatmapInfo.MD5Hash)))
+                {
+                    manager.RemoveMembers(collection.ID, null, new[] { beatmap.Value.BeatmapInfo.MD5Hash });
+                    return;
+                }
 
                 Task.Run(() => collection.PerformWrite(c =>
                 {

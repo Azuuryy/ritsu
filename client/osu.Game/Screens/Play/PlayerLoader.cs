@@ -577,15 +577,20 @@ namespace osu.Game.Screens.Play
             return CurrentPlayer;
         }
 
+        private int? restartVariantSeed;
+
         private void prepareNewPlayer()
         {
             if (!this.IsCurrentScreen())
                 return;
 
             CurrentPlayer = createPlayer();
+            CurrentPlayer.RestartVariantSeed = restartVariantSeed;
+            restartVariantSeed = null;
             CurrentPlayer.Configuration.AutomaticallySkipIntro |= QuickRestart;
             CurrentPlayer.RestartCount = restartCount++;
             CurrentPlayer.PrepareLoaderForRestart = prepareForRestart;
+            CurrentPlayer.SetVariantSeedForRestart = seed => restartVariantSeed = seed;
 
             LoadTask = LoadComponentAsync(CurrentPlayer, _ =>
             {
@@ -764,7 +769,11 @@ namespace osu.Game.Screens.Play
                         if (consumedPlayer.LoadedBeatmapSuccessfully)
                             this.Push(consumedPlayer);
                         else
+                        {
+                            if (consumedPlayer.BeatmapLoadFailure is string failure)
+                                notificationOverlay?.Post(new SimpleNotification { Text = failure });
                             this.Exit();
+                        }
                     });
                 },
                 // When a quick restart is activated, the metadata content will display some time later if it's taking too long.

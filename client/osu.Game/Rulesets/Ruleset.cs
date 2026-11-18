@@ -442,7 +442,7 @@ namespace osu.Game.Rulesets
         {
             BeatmapDifficulty adjustedDifficulty = new BeatmapDifficulty(beatmapInfo.Difficulty);
 
-            foreach (var mod in mods.OfType<IApplicableToDifficulty>())
+            foreach (var mod in IApplicableToDifficulty.InApplicationOrder(mods))
                 mod.ApplyToDifficulty(adjustedDifficulty);
 
             return adjustedDifficulty;

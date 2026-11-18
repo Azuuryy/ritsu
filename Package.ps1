@@ -5,7 +5,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .\Package.ps1
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .\Package.ps1 -Platforms win-x64,linux-x64
 #
-# Requires the .NET 10 SDK and Python 3. Restoring packages requires Internet
+# Requires the .NET 11 SDK and Python 3. Restoring packages requires Internet
 # access unless the packages are already cached. The Windows package is the
 # only one that can be launched and validated on Windows; the Linux and macOS
 # packages are cross-published previews.

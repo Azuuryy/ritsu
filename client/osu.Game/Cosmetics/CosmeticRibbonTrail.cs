@@ -54,7 +54,7 @@ namespace osu.Game.Cosmetics
         /// <summary>Per-length colour/width/fade (vs one uniform band).</summary>
         public bool Segmented { get; set; }
 
-        public float Width { get; set; } = 10f;
+        public new float Width { get; set; } = 10f;
         public float HeadWidth { get; set; } = 12f;
         public float TailWidth { get; set; } = 4f;
         public bool FadeTail { get; set; } = true;

@@ -252,7 +252,16 @@ namespace osu.Game.Collections
                 return base.OnClick(e);
             }
 
-            private void deleteCollection() => collection.PerformWrite(c => c.Realm!.Remove(c));
+            [Resolved(canBeNull: true)]
+            private ManageCollectionsDialog? manager { get; set; }
+
+            private void deleteCollection()
+            {
+                if (manager != null)
+                    manager.DeleteCollection(collection.ID);
+                else
+                    collection.PerformWrite(c => c.Realm!.Remove(c));
+            }
         }
 
         public IEnumerable<LocalisableString> FilterTerms => Model.PerformRead(m => m.IsValid ? new[] { (LocalisableString)m.Name } : []);

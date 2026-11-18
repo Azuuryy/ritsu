@@ -82,7 +82,7 @@ namespace osu.Game.Rulesets.Osu.UI
         /// </summary>
         /// <param name="hitObject">The <see cref="HitObject"/> to test.</param>
         private static bool hitObjectCanBlockFutureHits(DrawableHitObject hitObject)
-            => hitObject is DrawableHitCircle;
+            => hitObject is DrawableHitCircle and not DrawableDecoyCircle;
 
         private IEnumerable<DrawableHitObject> enumerateHitObjectsUpTo(double targetTime)
         {

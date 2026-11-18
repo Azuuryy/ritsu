@@ -131,7 +131,7 @@ namespace osu.Game.Scoring.Legacy
                         score.ScoreInfo.OnlineID = readScore.OnlineID;
                         score.ScoreInfo.Statistics = readScore.Statistics;
                         score.ScoreInfo.MaximumStatistics = readScore.MaximumStatistics;
-                        score.ScoreInfo.Mods = readScore.Mods.Select(m => m.ToMod(currentRuleset)).ToArray();
+                        score.ScoreInfo.Mods = readScore.Mods.Select(m => ConvertConfiguredMod(m, currentRuleset)).ToArray();
                         score.ScoreInfo.ClientVersion = readScore.ClientVersion;
                         decodedRank = readScore.Rank;
                         if (readScore.UserID > 1)
@@ -164,6 +164,8 @@ namespace osu.Game.Scoring.Legacy
 
             return score;
         }
+
+        protected virtual Mod ConvertConfiguredMod(IConfiguredMod configuredMod, Ruleset ruleset) => configuredMod.ToMod(ruleset);
 
         private void readCompressedData(byte[] data, Action<StreamReader> readFunc)
         {

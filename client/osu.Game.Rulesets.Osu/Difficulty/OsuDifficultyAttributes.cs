@@ -48,6 +48,9 @@ namespace osu.Game.Rulesets.Osu.Difficulty
         [JsonProperty("reading_difficulty")]
         public double ReadingDifficulty { get; set; }
 
+        [JsonProperty("decoy_performance_bonus")]
+        public double DecoyPerformanceBonus { get; set; }
+
         /// <summary>
         /// Describes how much of <see cref="AimDifficulty"/> is contributed to by hitcircles or sliders.
         /// A value closer to 1.0 indicates most of <see cref="AimDifficulty"/> is contributed by hitcircles.

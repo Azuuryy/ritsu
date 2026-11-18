@@ -83,7 +83,7 @@ namespace osu.Game.Online.Server
     /// Lifecycle
     /// ---------
     /// Component is registered as a cacheable dependency in OsuGame and
-    /// kicks off polling on first load. <see cref="Component.Dispose"/>
+    /// kicks off polling on first load. <c>Dispose</c>
     /// cancels the in-flight scheduler delegate so we don't leak the
     /// timer when the game shuts down.
     ///
@@ -718,7 +718,7 @@ namespace osu.Game.Online.Server
 
         /// <summary>
         /// Apply the popover-only ("Group B") slice of a snapshot. Runs
-        /// on the update thread (always invoked via <see cref="Schedule"/>
+        /// on the update thread (always invoked via <c>Schedule</c>
         /// from either <see cref="applySnapshot"/> or
         /// <see cref="SetPopoverOpen"/>). Each bindable assign is gated
         /// by a structural-equality check against the current value,

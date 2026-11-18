@@ -55,7 +55,7 @@ namespace osu.Game.Online.API
                 Tags = rhythiaSet.Tags,
                 Status = BeatmapOnlineStatus.Ranked, // Set to ranked for SSPM maps
                 Source = string.Empty,
-                Beatmaps = new APIBeatmap[] { }
+                Beatmaps = System.Array.Empty<APIBeatmap>()
             };
 
             var beatmaps = new List<APIBeatmap>();

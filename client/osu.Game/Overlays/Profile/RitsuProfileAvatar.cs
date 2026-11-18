@@ -35,7 +35,7 @@ namespace osu.Game.Overlays.Profile
         private Guid selectedProfileId;
         private readonly Sprite portrait;
 
-        public LocalisableString TooltipText => "Click to choose a local profile picture.";
+        public override LocalisableString TooltipText => "Click to choose a local profile picture.";
 
         public RitsuProfileAvatar()
         {

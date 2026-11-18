@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using osu.Framework.Statistics;
 using osu.Game.Beatmaps;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Utils;
@@ -30,6 +31,7 @@ namespace osu.Game.Screens.Select
 
         public async Task<List<CarouselItem>> Run(IEnumerable<CarouselItem> items, CancellationToken cancellationToken) => await Task.Run(() =>
         {
+            using var measurement = FrameProfileCapture.Measure("SongSelect.Filter");
             var criteria = getCriteria();
 
             return matchItems(items, criteria, cancellationToken).ToList();
@@ -41,9 +43,12 @@ namespace osu.Game.Screens.Select
 
             // Created once per run, so the mods are prepared once rather than for every beatmap.
             var getEffectiveStarRating = criteria.CreateEffectiveStarRatingLookup(DifficultyCache);
+            var smart = criteria.SelectedBeatmapSet == null ? criteria.SmartCollectionCriteria : null;
+            var smartStarRating = smart?.CreateEffectiveStarRatingLookup(DifficultyCache);
 
             foreach (var item in items)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var beatmap = (BeatmapInfo)item.Model;
 
                 if (beatmap.Hidden)
@@ -52,19 +57,25 @@ namespace osu.Game.Screens.Select
                 if (!checkCriteriaMatch(beatmap, criteria, getEffectiveStarRating))
                     continue;
 
-                cancellationToken.ThrowIfCancellationRequested();
-                if (criteria.UserPerformance.HasFilter)
-                {
-                    var pp = criteria.PerformanceSession?.Get(beatmap) ?? new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
-                    if (pp.State == PerfectPerformanceState.Unavailable || (pp.State == PerfectPerformanceState.Available && !criteria.UserPerformance.IsInRange(pp.Value)))
-                        continue;
-                }
+                if (smart != null && (!checkCriteriaMatch(beatmap, smart, smartStarRating!) || !matchesPerformance(beatmap, smart)))
+                    continue;
+                if (criteria.SelectedBeatmapSet == null && !matchesPerformance(beatmap, criteria))
+                    continue;
 
                 countMatching++;
                 yield return item;
             }
 
             BeatmapItemsCount = countMatching;
+        }
+
+        private static bool matchesPerformance(BeatmapInfo beatmap, FilterCriteria criteria)
+        {
+            if (!criteria.UserPerformance.HasFilter)
+                return true;
+
+            var pp = criteria.PerformanceSession?.Get(beatmap) ?? new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+            return pp.State != PerfectPerformanceState.Unavailable && (pp.State != PerfectPerformanceState.Available || criteria.UserPerformance.IsInRange(pp.Value));
         }
 
         public static bool CheckCriteriaMatch(BeatmapInfo beatmap, FilterCriteria criteria, BeatmapDifficultyCache? difficultyCache = null)
@@ -81,6 +92,17 @@ namespace osu.Game.Screens.Select
             }
 
             if (!match) return false;
+
+            if (criteria.UsesProfileHistory)
+            {
+                var history = criteria.PlayHistory?.Value;
+                if (criteria.PersonalBestMisses.HasFilter
+                    && (history?.BestMisses(beatmap.Hash) is not int misses || !criteria.PersonalBestMisses.IsInRange(misses)))
+                    return false;
+
+                if (criteria.PlayedThisWeek is bool playedThisWeek && (history?.PlayedThisWeek(beatmap.Hash) ?? false) != playedThisWeek)
+                    return false;
+            }
 
             if (criteria.SearchTerms.Length > 0)
             {
@@ -114,7 +136,7 @@ namespace osu.Game.Screens.Select
             match &= !criteria.BPM.HasFilter || criteria.BPM.IsInRange(beatmap.BPM);
 
             match &= !criteria.BeatDivisor.HasFilter || criteria.BeatDivisor.IsInRange(beatmap.BeatDivisor);
-            match &= !criteria.OnlineStatus.HasFilter || criteria.OnlineStatus.IsInRange(beatmap.Status);
+            match &= !criteria.OnlineStatus.HasFilter || criteria.OnlineStatus.IsInRange(criteria.GetDisplayStatus(beatmap));
 
             if (!match) return false;
 

@@ -70,6 +70,13 @@ namespace osu.Game.Screens.Select
                 case "length":
                     return tryUpdateLengthRange(criteria, op, value);
 
+                case "pbmisses":
+                    return TryUpdateCriteriaRange(ref criteria.PersonalBestMisses, op, value, tryParseInt);
+                case "playedthisweek":
+                    if (op is not (Operator.Equal or Operator.NotEqual) || !tryParseBool(value, out bool playedThisWeek))
+                        return false;
+                    criteria.PlayedThisWeek = op == Operator.Equal ? playedThisWeek : !playedThisWeek;
+                    return true;
                 case "lastplayed":
                     return tryUpdateDateAgoRange(ref criteria.LastPlayed, op, value);
 
@@ -108,7 +115,19 @@ namespace osu.Game.Screens.Select
                     return TryUpdateCriteriaRange(ref criteria.BeatDivisor, op, value, tryParseInt);
 
                 case "status":
-                    return TryUpdateCriteriaSet(ref criteria.OnlineStatus, op, value);
+                    if (Offline.RitsuOffline.Enabled)
+                        value = string.Join(",", value.Split(',').Select(part => part.Trim().ToLowerInvariant() switch
+                        {
+                            "none" or "unknown" or "blacklisted" or "banned" => "unranked",
+                            _ => part.Trim(),
+                        }));
+                    bool statusParsed = TryUpdateCriteriaSet(ref criteria.OnlineStatus, op, value);
+                    if (statusParsed && Offline.RitsuOffline.Enabled)
+                    {
+                        criteria.OnlineStatus.Values.Remove(osu.Game.Beatmaps.BeatmapOnlineStatus.None);
+                        criteria.OnlineStatus.Values.Remove(osu.Game.Beatmaps.BeatmapOnlineStatus.Blacklisted);
+                    }
+                    return statusParsed;
 
                 case "creator":
                 case "author":

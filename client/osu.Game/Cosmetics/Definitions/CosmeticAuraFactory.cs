@@ -21,8 +21,7 @@ namespace osu.Game.Cosmetics.Definitions
         /// <summary>construye el aura (un <see cref="AuraPreset"/>) desde la definición.</summary>
         public static AuraPreset Create(CosmeticDefinition def)
         {
-            if (def == null)
-                throw new ArgumentNullException(nameof(def));
+            ArgumentNullException.ThrowIfNull(def);
             if (def.Type != CosmeticType.Aura)
                 throw new ArgumentException($"CosmeticDefinition '{def.Id}' no es un aura (Type={def.Type}).", nameof(def));
 

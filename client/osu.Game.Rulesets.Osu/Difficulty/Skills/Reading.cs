@@ -115,7 +115,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
             if (consistentTopNote == 0)
                 return 0;
 
-            return ObjectDifficulties.Sum(d => DifficultyCalculationUtils.Logistic(d / consistentTopNote, 1.15, 5, 1.1));
+            return ObjectDifficulties.Sum(d => DiffUtils.Logistic(d / consistentTopNote, 1.15, 5, 1.1));
         }
     }
 }

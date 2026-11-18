@@ -120,7 +120,7 @@ namespace osu.Game.Localisation
         public static LocalisableString AutoplayBeatmapShortcut => new TranslatableString(getKey(@"autoplay_beatmap_shortcut"), @"Ctrl-Enter at song select will start a beatmap in autoplay mode!");
 
         /// <summary>
-        /// "&quot;Lazer&quot; is not an English word. The correct spelling for the bright light is &quot;laser&quot;."
+        /// "Most hold-to-confirm buttons can be triggered instantly by double-clicking them."
         /// </summary>
         public static LocalisableString HoldToConfirmIsSkippable => new TranslatableString(getKey(@"hold_to_confirm_is_skippable"), @"Most hold-to-confirm buttons can be triggered instantly by double-clicking them.");
 

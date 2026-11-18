@@ -270,7 +270,7 @@ namespace osu.Game.Rulesets.Osu.HUD
 
             var mods = processor.Mods.Value;
 
-            foreach (var mod in mods.OfType<IApplicableToDifficulty>())
+            foreach (var mod in IApplicableToDifficulty.InApplicationOrder(mods))
                 mod.ApplyToDifficulty(newDifficulty);
 
             objectRadius = OsuHitObject.OBJECT_RADIUS * LegacyRulesetExtensions.CalculateScaleFromCircleSize(newDifficulty.CircleSize, true);

@@ -40,6 +40,36 @@ The client blocks framework requests before transport, does not instantiate an a
 - Interactive control was stopped with Escape after the reference launch. Later checks use automated scenarios and engine captures without window control.
 
 
+## Decoy performance measurements — 2026-11-18
+
+Measured a perfect play on the publicly available [shiho - ODDS & ENDS [Illumination]](https://osu.ppy.sh/beatmapsets/2203727#osu/4664676), at 192 BPM, using the locally decoded `.osu` file with SHA-256 `7f0ab67f59429e67a6f6b1f42e1a2534a776c0311effb2fcda3bb1682cbff790`. The beatmap file is not included in this repository. Ritsu calculated 467.534 PP and 6.7724 stars without Decoy Circles.
+
+| Minimum interval | Decoys | Real Fake PP | Grayscale PP |
+| --- | ---: | ---: | ---: |
+| 2 beats | 246 | 554.010 | 510.772 |
+| 4 beats | 166 | 550.986 | 509.260 |
+| 8 beats | 99 | 545.325 | 506.429 |
+| 16 beats | 54 | 535.768 | 501.651 |
+| 32 beats | 30 | 523.638 | 495.586 |
+
+At the default 8 beats, Real Fake adds 16.639% over the no-mod perfect estimate. Changing to 2 beats adds 147 decoys but only 8.685 PP because the current count-based bonus saturates. Grayscale uses half the bonus. At 2 beats, reducing minimum note spacing from half to a quarter beat increases the count from 246 to 275 and the Real Fake estimate from 554.010 to 554.701 PP. These are calculator outputs, not measurements of human difficulty or a justification for a particular rebalance. Reproduce locally with `dotnet run --project tools/Ritsu.Validation -- --measure-decoys <path-to-osu-file>`; it reads only the supplied map and does not access the network.
+
+## Repeated profile score saves — 2026-11-18
+
+An isolated Windows test saved 100 scores and read profile statistics and map ranks after each save, with four forced garbage collections, then reloaded the profile metadata successfully. It does not exercise gameplay, native audio or the Linux renderer and does not reproduce or resolve the reported Linux SIGSEGV.
+
+## Editor selection safety — 2026-11-18
+
+Two headless regression cases reproduced exceptions when selected circle and slider blueprints had no drawable. After applying the relevant upstream guards, those cases and the existing circle, slider and slider-control selection tests passed (29 tests). This does not verify every editor interaction or Aspire map.
+
+## Decoy marker rendering — 2026-11-18
+
+Headless gameplay tests checked the actual Argon and classic skin drawables for an empty marker, numbers 0, 7 and 99, and the corresponding cross visibility. The tests also exercised decoy judgements and half-beat patterns at 300 and 400 BPM. An additional 35-test run covered the configurable quarter-beat placement and its serialization, including gameplay at 300 and 400 BPM. Visual confirmation in the desktop client and the reported maps remain open.
+
+## Offline catalogue and replay import — 2026-11-18
+
+Seven targeted tests passed: catalogue search and media do not reach an injected HTTP transport; downloads are rejected through both offline API and direct entry; the catalogue displays its offline notice; and synthetic FSA, SA and RandomV2 replays retain their settings after import. Additional headless tests generated FSA, SA, RandomV2, No Sliding and Circle Generation replays using Ritsu transformations, imported them and played each to completion with maximum combo and no downgraded primary or tick judgements. `Ritsu.Validation --catalogue-checks` passed without HTTP transport, and `--checks` reported no HTTP, socket or DNS attempt during its rejected operations. These checks do not attest compatibility with an actual MOsu replay or another client. These transport rejection checks are historical. The Torii catalogue was subsequently restored and its unauthenticated cursor and media controls passed on an injected transport. This does not cover extended live pagination.
+
 ## Optional Torii catalogue — 2026-11-04
 
 Debug compilation, Bootstrap, catalogue transport checks and existing offline checks passed. An isolated game session displayed live catalogue covers, loaded and played a native audio preview, and downloaded and imported Kenji Ninuma - DISCO★PRINCE through Torii into a separate test library. This does not attest playback of every provider's preview or compatibility with every archive. Torii-exclusive maps without a preview URL have no audio-preview button. The catalogue intentionally uses the network; the offline checks concern the other disabled online services and local-play path.
@@ -48,3 +78,32 @@ Debug compilation, Bootstrap, catalogue transport checks and existing offline ch
 ## Catalogue layout and details — 2026-11-04
 
 An isolated game session verified centred and enlarged cards, context-menu entries for osu! and Torii links, loading of the native detail page from Torii, selection of a valid ruleset and difficulty, and both native download variants on a beatmap with video. This check verified the two choices in the UI; it did not download both variants of that video map. Existing download/import validation is recorded above.
+
+## Library and everyday play — 2026-11-08
+
+- The Windows desktop client built successfully and Bootstrap checked the bundled client and pinned framework and resources revisions.
+- 50 targeted tests passed. Coverage includes keyboard completion in both Song Select layouts, restoring a pinned search in one update, native collection removal and undo, smart collections based on the active profile's local week, private data persistence, queue selection, session preset restoration, replay seeking, and applying target BPM using a selected timing section.
+- The graphical smoke and restart scenarios passed in portable local storage and in a separate linked test directory. Each run imported the test map and skin, recorded a solo score, exported and re-imported its OSR, and opened the replay. Replay playback was verified again after restarting each instance. The audit recorded no HTTP, DNS or socket events in the game scenarios. The linked scenario uses a test directory through the shared storage path.
+- The broader filter tests reported one failure on the existing status range assertion for `status>=r`. The assertion expects four statuses and receives five, including Torii's extra ranked status.
+
+Run the local graphical scenario with `.\Verify.ps1 -IncludeGameScenarios`. Add `-LinkedLibrary` to use the linked test directory.
+
+## Beatmap variants — 2026-11-08
+
+- Targeted `ModosuSpacingTest` checks passed for selective No Sliding, settings round-trip and legacy defaults, as well as a capped jump followed by a rapid sequence. A rapid sequence is detected as at least three consecutive circles at intervals no longer than half a beat; this heuristic and edge clamping need gameplay validation on real charts.
+- These automated checks do not validate replay playback, compatibility with other clients, or behavior in a linked library for the new variant settings.
+- RandomV2 tests checked seeded pattern selection and settings round-trip, stable timings and phrase endpoints, and bounded exit distances at two note densities. The visual test checked that Custom angle reveals the multi-select control, two selections can be toggled together, and resetting clears the mask. Gameplay and replay playback of patterned maps remain to be tested.
+- The RandomV2 angle and pattern controls were checked together. The UI test selected Octagon and Ladder, verified that the base angle was hidden, and restored the previous 90-degree setting by clearing the selection. Targeted generation tests confirmed the octagon turns and settings round-trip.
+
+## RandomV2 and osu!standard variants — 2026-11-08
+
+- Bootstrap checked the synchronized client patch and the Windows desktop client compiled. The 35 targeted tests passed. Coverage includes seed retry and isolation from Song Select, preview-to-solo position equality, the RandomV2 pattern settings UI, and OSR round trips with no transformation version and with versions 1 and 2. An unsupported version is rejected. A native chart was checked for mutations while applying Swing to its playable copy.
+- The five conversion mods passed targeted generation checks. Gameplay test scenes checked Decoy Circles with Autoplay and a clicked decoy, and Directional Flicks with a recovered entry and an expired hit window.
+- `Verify.ps1 -IncludeGameScenarios` passed with isolated local storage and a separate linked test library. The scenario saved a RandomV2 v2 score, exported and re-imported its OSR, and reconstructed the same playable positions from the saved replay both before and after restarting. The scenario used a fixture with No Fail and no synthetic gameplay input. The audit recorded no HTTP, DNS or socket attempts in the game scenarios.
+- Playability on real charts and cross-client compatibility with Torii and osu!lazer remain checks for promotion to `main`.
+- 2026-11-09: 14 variant tests and the mod selection UI test passed. A variant with only a hidden setting keeps the customisation panel closed. Swing and Reversed Sliders produced the same chart in both orders. Bootstrap and the desktop build passed after synchronising the client patch.
+- On 2026-11-09, 17 variant tests and the mod settings UI test passed. Coverage includes decoy interval and appearance settings, both styles in judgement scenes, and the hidden Phrase Mirror identifier in legacy mod settings. Bootstrap and the desktop build passed.
+- On 2026-11-09, 35 osu!standard tests and the mod selection UI test passed after recategorisation. Half Read changed AR 9 to 4.5 on the playable chart and preserved OD. Tests checked the retired mod identifiers, new categories, origin badges and icon coverage for selectable osu!standard mods. Bootstrap and the desktop build passed with the bundled icon assets.
+- On 2026-11-09, 16 variant tests and the mod selection UI test passed with One Eye. Hard Rock and Difficulty Adjust produced the same final AR in both mod orders, in Song Select and on the playable chart. The previous HFR identifier remains readable. Bootstrap and the desktop build passed.
+- On 2026-11-09, 10 targeted tests passed. Decoy Circles loaded with the Classic skin and applied one miss on a decoy hit. An untouched decoy remained neutral. Directional Flicks remained visible in search and could not be activated by click, Enter or Select All. Bootstrap and the Windows desktop build passed.
+- On 2026-11-09, 27 targeted variant tests passed. Coverage includes both decoy appearances across Argon and Classic, hidden judgement feedback on ignored decoys, and star and PP calculations with zero, five or twenty decoys. Bootstrap and the Windows desktop build passed. The custom skin in the screenshot was not tested in a manual run.

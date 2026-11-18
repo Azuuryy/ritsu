@@ -23,7 +23,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
 {
     public class OsuDifficultyCalculator : DifficultyCalculator
     {
-        public override int Version => 20260621;
+        public override int Version => 20261109;
 
         public OsuDifficultyCalculator(IRulesetInfo ruleset, IWorkingBeatmap beatmap)
             : base(ruleset, beatmap)
@@ -80,11 +80,20 @@ namespace osu.Game.Rulesets.Osu.Difficulty
 
             double overallDifficulty = CalculateRateAdjustedOverallDifficulty(beatmap.Difficulty.OverallDifficulty, ModUtils.CalculateRateWithMods(mods));
 
-            int hitCircleCount = beatmap.HitObjects.Count(h => h is HitCircle);
+            int hitCircleCount = beatmap.HitObjects.Count(h => h is HitCircle and not DecoyCircle);
             int sliderCount = beatmap.HitObjects.Count(h => h is Slider);
             int spinnerCount = beatmap.HitObjects.Count(h => h is Spinner);
 
-            int totalHits = beatmap.HitObjects.Count;
+            int decoyCount = 0;
+            int weightedDecoyCount = 0;
+            foreach (var decoy in beatmap.HitObjects.OfType<DecoyCircle>())
+            {
+                decoyCount++;
+                weightedDecoyCount += decoy.Style == DecoyCircleStyle.Grayscale ? 1 : 2;
+            }
+
+            int totalHits = beatmap.HitObjects.Count - decoyCount;
+            double decoyPerformanceBonus = 0.1 * weightedDecoyCount / (20 + decoyCount);
 
             double sliderFactor = aimDifficultyValue > 0
                 ? OsuRatingCalculator.CalculateDifficultyRating(aimNoSlidersDifficultyValue) / OsuRatingCalculator.CalculateDifficultyRating(aimDifficultyValue)
@@ -113,13 +122,14 @@ namespace osu.Game.Rulesets.Osu.Difficulty
             double baseFlashlightPerformance = Flashlight.DifficultyToPerformance(flashlightRating);
             double baseCognitionPerformance = SumCognitionDifficulty(baseReadingPerformance, baseFlashlightPerformance);
 
-            double basePerformance = DifficultyCalculationUtils.Norm(OsuPerformanceCalculator.PERFORMANCE_NORM_EXPONENT, baseAimPerformance, baseSpeedPerformance, baseCognitionPerformance);
+            double basePerformance = DiffUtils.Norm(OsuPerformanceCalculator.PERFORMANCE_NORM_EXPONENT, baseAimPerformance, baseSpeedPerformance, baseCognitionPerformance);
 
-            double starRating = calculateStarRating(basePerformance);
+            double starRating = calculateStarRating(basePerformance * (1 + decoyPerformanceBonus));
 
             OsuDifficultyAttributes attributes = new OsuDifficultyAttributes
             {
                 StarRating = starRating,
+                DecoyPerformanceBonus = decoyPerformanceBonus,
                 Mods = mods,
                 AimDifficulty = aimRating,
                 AimDifficultSliderCount = difficultSliders,
@@ -154,7 +164,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
                 return reading;
 
             // Nerf flashlight value in cognition sum when reading is greater than flashlight
-            return DifficultyCalculationUtils.Norm(OsuPerformanceCalculator.PERFORMANCE_NORM_EXPONENT, reading, flashlight * Math.Clamp(flashlight / reading, 0.25, 1.0));
+            return DiffUtils.Norm(OsuPerformanceCalculator.PERFORMANCE_NORM_EXPONENT, reading, flashlight * Math.Clamp(flashlight / reading, 0.25, 1.0));
         }
 
         private double calculateStarRating(double basePerformance)
@@ -170,9 +180,14 @@ namespace osu.Game.Rulesets.Osu.Difficulty
 
             // The first jump is formed by the first two hitobjects of the map.
             // If the map has less than two OsuHitObjects, the enumerator will not return anything.
-            for (int i = 1; i < beatmap.HitObjects.Count; i++)
+            osu.Game.Rulesets.Objects.HitObject? previous = null;
+            foreach (var current in beatmap.HitObjects)
             {
-                objects.Add(new OsuDifficultyHitObject(beatmap.HitObjects[i], beatmap.HitObjects[i - 1], clockRate, objects, objects.Count));
+                if (current is DecoyCircle)
+                    continue;
+                if (previous != null)
+                    objects.Add(new OsuDifficultyHitObject(current, previous, clockRate, objects, objects.Count));
+                previous = current;
             }
 
             return objects;

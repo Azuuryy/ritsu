@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
+using osu.Framework.Statistics;
 using osu.Game.Beatmaps;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Screens.Select.Filter;
@@ -37,6 +38,7 @@ namespace osu.Game.Screens.Select
 
         public async Task<List<CarouselItem>> Run(IEnumerable<CarouselItem> items, CancellationToken cancellationToken) => await Task.Run(() =>
         {
+            using var measurement = FrameProfileCapture.Measure("SongSelect.Sort");
             var criteria = getCriteria();
 
             bool groupedSets = BeatmapCarouselFilterGrouping.ShouldGroupBeatmapsTogether(criteria);

@@ -11,7 +11,7 @@ namespace osu.Game.Graphics.Cursor
     /// reference on <c>osu.Game.Rulesets.Osu</c> (which would create a circular
     /// project dependency — the ruleset already references <c>osu.Game</c>).
     ///
-    /// The lookup mechanism is name-based: <see cref="LegacySkin.genericLookup"/>
+    /// The lookup mechanism is name-based: <c>genericLookup</c>
     /// keys the parsed <c>[General]</c> dictionary by the enum value's
     /// <see cref="object.ToString"/>. As long as the names here match the names
     /// in <c>OsuSkinConfiguration</c> exactly, the lookup resolves to the same
@@ -32,7 +32,7 @@ namespace osu.Game.Graphics.Cursor
         /// Whether the cursor should continuously spin in gameplay (and, in
         /// our case, in menus when the user opts into a gameplay cursor
         /// style). Defaults to <c>true</c> when unset, matching osu! stable
-        /// and lazer's <see cref="LegacyCursor"/> behaviour. Skins that ship
+        /// and lazer's <c>LegacyCursor</c> behaviour. Skins that ship
         /// a directional or asymmetric cursor explicitly set this to <c>0</c>
         /// to keep the visual upright.
         /// </summary>

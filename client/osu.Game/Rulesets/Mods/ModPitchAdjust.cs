@@ -159,7 +159,7 @@ namespace osu.Game.Rulesets.Mods
         /// </summary>
         /// <remarks>
         /// <para>
-        /// <see cref="APIMod.ToMod"/> iterates settings in property-declaration
+        /// <c>ToMod</c> iterates settings in property-declaration
         /// order. <see cref="PitchShift"/> is declared above <see cref="ExtendedLimits"/>,
         /// so when a replay carries <c>{pitch_shift: 3.0, extended_limits: true}</c>
         /// the framework sets PitchShift first — and because the bindable still

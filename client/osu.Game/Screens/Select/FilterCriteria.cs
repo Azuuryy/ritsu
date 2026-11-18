@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using osu.Game.Offline;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -38,7 +39,19 @@ namespace osu.Game.Screens.Select
         public OptionalRange<double> BPM;
         public OptionalRange<int> BeatDivisor;
         public OptionalSet<BeatmapOnlineStatus> OnlineStatus = new OptionalSet<BeatmapOnlineStatus>();
+        internal RitsuProfile? LocalProfile;
+
+        internal BeatmapOnlineStatus GetDisplayStatus(BeatmapInfo beatmap) => RitsuOffline.Enabled
+            ? RitsuLocalBeatmapStatus.ForBeatmap(beatmap, LocalProfile)
+            : beatmap.Status;
         public OptionalRange<DateTimeOffset> LastPlayed;
+        internal OptionalRange<int> PersonalBestMisses;
+        internal bool? PlayedThisWeek;
+        internal Lazy<RitsuPlayHistory>? PlayHistory;
+        internal FilterCriteria? SmartCollectionCriteria;
+
+        internal bool UsesProfileHistory => PersonalBestMisses.HasFilter || PlayedThisWeek.HasValue;
+        internal bool UsesPerformanceFilter => UserPerformance.HasFilter || SmartCollectionCriteria?.UserPerformance.HasFilter == true;
         public OptionalRange<DateTimeOffset> DateRanked;
         public OptionalRange<DateTimeOffset> DateSubmitted;
         public OptionalTextFilter Creator;

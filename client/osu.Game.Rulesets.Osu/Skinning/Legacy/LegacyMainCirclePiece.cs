@@ -418,7 +418,12 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
             }, true);
 
             if (hasNumber)
-                indexInCurrentCombo.BindValueChanged(index => hitCircleText.Text = (index.NewValue + 1).ToString(), true);
+            {
+                if (drawableObject is DrawableDecoyCircle decoy)
+                    decoy.NumberText.BindValueChanged(value => hitCircleText.Text = value.NewValue, true);
+                else
+                    indexInCurrentCombo.BindValueChanged(index => hitCircleText.Text = (index.NewValue + 1).ToString(), true);
+            }
 
             // Torii: swap to the per-combo variant texture for the active slot.
             // Fires once with the initial value (because BindValueChanged with

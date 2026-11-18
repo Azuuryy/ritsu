@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using osu.Framework.Allocation;
+using osu.Framework.Statistics;
 using osu.Framework.Audio;
 using osu.Framework.Audio.Sample;
 using osu.Framework.Bindables;
@@ -266,11 +267,10 @@ namespace osu.Game.Overlays.Mods
             // Search for an exact acronym or name match, or otherwise default to the first visible mod.
             ModState? matchingMod =
                 visibleMods.FirstOrDefault(m => m.Mod.Acronym.Equals(SearchTerm, StringComparison.OrdinalIgnoreCase) || m.Mod.Name.Equals(SearchTerm, StringComparison.OrdinalIgnoreCase))
-                ?? visibleMods.FirstOrDefault();
-            var preselectedMod = matchingMod;
+                ?? visibleMods.FirstOrDefault(m => m.CanActivate);
 
             foreach (var mod in AllAvailableMods)
-                mod.Preselected.Value = mod == preselectedMod && SearchTextBox.Current.Value.Length > 0;
+                mod.Preselected.Value = mod == matchingMod && mod.CanActivate && SearchTextBox.Current.Value.Length > 0;
         }
 
         private void clearPreselection()
@@ -278,6 +278,8 @@ namespace osu.Game.Overlays.Mods
             foreach (var mod in AllAvailableMods)
                 mod.Preselected.Value = false;
         }
+
+        internal Action? OpenRitsuSimulation { get; init; }
 
         public new ModSelectFooterContent? DisplayedFooterContent => base.DisplayedFooterContent as ModSelectFooterContent;
 
@@ -293,6 +295,7 @@ namespace osu.Game.Overlays.Mods
 
         protected override void Update()
         {
+            using var measurement = FrameProfileCapture.Measure("Mods.Overlay.Update");
             base.Update();
 
             SearchTextBox.PlaceholderText = SearchTextBox.HasFocus ? input_search_placeholder : tab_to_search_placeholder;
@@ -387,8 +390,12 @@ namespace osu.Game.Overlays.Mods
 
             foreach (var modState in AllAvailableMods)
             {
-                anyCustomisableModActive |= modState.Active.Value && modState.Mod.GetSettingsSourceProperties().Any();
-                anyModPendingConfiguration |= modState.PendingConfiguration;
+                if (modState.Active.Value && modState.Mod.GetSettingsSourceProperties().Any(setting => !setting.Item1.HideInSettings))
+                {
+                    anyCustomisableModActive = true;
+                    anyModPendingConfiguration |= modState.PendingConfiguration;
+                }
+
                 modState.PendingConfiguration = false;
             }
 
@@ -478,6 +485,7 @@ namespace osu.Game.Overlays.Mods
 
         protected override void PopIn()
         {
+            using var measurement = FrameProfileCapture.Measure("Mods.Overlay.Open");
             const double fade_in_duration = 400;
 
             base.PopIn();
@@ -538,6 +546,7 @@ namespace osu.Game.Overlays.Mods
 
         protected override void PopOut()
         {
+            using var measurement = FrameProfileCapture.Measure("Mods.Overlay.Close");
             const double fade_out_duration = 500;
 
             base.PopOut();

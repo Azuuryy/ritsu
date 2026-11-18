@@ -47,7 +47,7 @@ namespace osu.Game.Rulesets.Taiko.Difficulty
 
             var difficulty = score.BeatmapInfo!.Difficulty.Clone();
 
-            score.Mods.OfType<IApplicableToDifficulty>().ForEach(m => m.ApplyToDifficulty(difficulty));
+            IApplicableToDifficulty.InApplicationOrder(score.Mods).ForEach(m => m.ApplyToDifficulty(difficulty));
 
             HitWindows hitWindows = new TaikoHitWindows();
             hitWindows.SetDifficulty(difficulty.OverallDifficulty);

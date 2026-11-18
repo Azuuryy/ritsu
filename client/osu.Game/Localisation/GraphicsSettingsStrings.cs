@@ -170,7 +170,7 @@ namespace osu.Game.Localisation
         public static LocalisableString ForceSDL3 => new TranslatableString(getKey(@"force_sdl3"), @"Force SDL3 backend");
 
         /// <summary>
-        /// "Switch the windowing/input layer to SDL3 on Linux and macOS..."
+        /// "Switch the windowing/input layer to SDL3 on Linux and macOS. Windows already uses SDL3 unconditionally, so this is a no-op there. Requires a game restart to take effect."
         /// </summary>
         public static LocalisableString ForceSDL3Description => new TranslatableString(getKey(@"force_sdl3_description"), @"Switch the windowing/input layer to SDL3 on Linux and macOS. Windows already uses SDL3 unconditionally, so this is a no-op there. Requires a game restart to take effect.");
 

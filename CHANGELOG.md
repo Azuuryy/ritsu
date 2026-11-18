@@ -4,6 +4,38 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
+## [0.5.0] - 2026-11-18
+
+### Added
+
+- Song Select now has search history, favourites, named pinned searches and smart collections. Pinned searches preserve filters, collection, sort and group. Use **Ctrl+Left Alt** for inline filter suggestions. The sort, group, ranking scope and collection menus support pinning and reordering.
+- The shared collection menu supports search, multi-selection, subgroups and undo. Mark scores for analysis from Song Select, your profile or results. The `pbmisses` and `playedthisweek` filters use the active profile.
+- Open the local command palette with **Ctrl+Shift+P** and the play queue with **Tab**. Save session presets, simulate scores across all four rulesets, set a target BPM and add private difficulty memos with replay timestamps.
+- Assign a score from **All profiles** to an existing or new profile, transfer assigned scores between profiles and explicitly import `.osr` files or linked MOsu/Modosu replays. Standard replay exports use the destination profile name and the original replay can still be exported separately.
+- Added osu!standard variants Streamline, No Sliding, Reversed Sliders, One Eye and Decoy Circles. Directional Flicks, Echo, Swing and Phrase Mirror remain readable for existing replays. Variant replays preserve settings, transformation version and seed.
+- RandomV2 custom angles now support 15 optional patterns, mirrored responses and progressive spacing. Autoplay can show the numbered trajectory, and retries can reuse or replace the seed. No Sliding and Spacing Adjust offer additional targeting options.
+- Local frame diagnostics capture timings and allocations for performance investigation.
+
+### Changed
+
+- Desktop packages bundle **.NET 11**. Standard development and published launches share the selected library and `torii.ini`. Close one Ritsu instance before opening another against the same library.
+- Profile PP exclusions persist for future scores. Excluded maps display **Unranked** locally. Reincluding them restores their previous status, or **Approved** if already Unranked. The mod selector also reflects Autoplay, Cinema and the profile's Relax/Autopilot setting.
+- Decoy Circles can display a number from **0 to 99** instead of the cross. The minimum gap can be reduced to a quarter beat for dense patterns.
+- Shared difficulty calculations, background PP cache writes, lighter profile queries and a catalogue that loads only nearby cards reduce redundant work.
+
+### Fixed
+
+- Fixed the Realm crash when opening a beatmap set's PP menu, the profile score list getting stuck loading, profile scope resetting at restart and incorrect accuracy in `/profile`.
+- The Torii catalogue skips pages without new results while a new cursor is available. It remains accessible without signing in.
+- Fixed selecting circles and sliders in the editor when their drawable is temporarily unavailable.
+- Difficulty memos open replays at the saved timestamp and show an error when the map or replay is unavailable.
+
+### Security
+
+- Updated MessagePack and SignalR to address the advisories reported in the previous build.
+
+Playback of genuine MOsu replays and identity handling in other clients still need confirmation. The Linux crash reported after long sessions remains under investigation. See [VALIDATION.md](VALIDATION.md) for validation scope.
+
 ## [0.4.0] - 2026-11-05
 
 ### Added

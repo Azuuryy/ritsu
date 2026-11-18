@@ -14,7 +14,7 @@ Drag `.osz` maps, `.osk` skins and `.osr` replays into the window, or use **Sett
 
 ## Build from source
 
-Requirements: Windows x64, Git and the .NET 10 SDK (validated with 10.0.103; the packaged runtime is 10.0.3). Downloading source and dependencies requires Internet access on the first run; the resulting client works offline.
+Requirements: Windows x64, Git and the .NET 11 SDK (11.0.100 or newer in the 11.0 series). Downloading source and dependencies requires Internet access on the first run; the resulting client works offline.
 
 Run the full pipeline without opening the game:
 

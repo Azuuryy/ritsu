@@ -249,8 +249,11 @@ namespace osu.Game.Tests.Visual.UserInterface
             AddStep("select difficulty adjust via panel", () => getPanelForMod(typeof(OsuModDifficultyAdjust)).TriggerClick());
             assertCustomisationToggleState(disabled: false, active: true);
 
-            AddStep("select mod without configuration", () => SelectedMods.Value = new[] { new OsuModAutoplay() });
-            assertCustomisationToggleState(disabled: true, active: false); // config was dismissed without explicit user action.
+            AddStep("select variant with only a hidden version setting", () => SelectedMods.Value = new[] { new OsuModHalfStream() });
+            assertCustomisationToggleState(disabled: true, active: false);
+
+            AddStep("select decoys with visible settings", () => SelectedMods.Value = new[] { new OsuModDecoyCircles() });
+            assertCustomisationToggleState(disabled: false, active: false);
 
             AddStep("select mod preset with mod requiring configuration", () =>
             {
@@ -573,6 +576,28 @@ namespace osu.Game.Tests.Visual.UserInterface
             AddStep("clear search", () => modSelectOverlay.SearchTerm = string.Empty);
             AddStep("press enter", () => InputManager.Key(Key.Enter));
             AddAssert("mod select hidden", () => modSelectOverlay.State.Value == Visibility.Hidden);
+        }
+
+        [Test]
+        public void TestWorkInProgressModStaysVisibleButCannotBeSelected()
+        {
+            createScreen();
+
+            ModPanel flicks() => getPanelForMod(typeof(OsuModDirectionalFlicks));
+
+            AddStep("search for directional flicks", () => modSelectOverlay.SearchTerm = "DFK");
+            AddUntilStep("mod is visible", () => flicks().Visible && flicks().IsPresent);
+            AddAssert("mod is disabled", () => !flicks().Enabled.Value);
+            AddStep("click the mod", () =>
+            {
+                InputManager.MoveMouseTo(flicks());
+                InputManager.Click(MouseButton.Left);
+            });
+            AddAssert("click did not select mod", () => !flicks().Active.Value);
+            AddStep("press enter", () => InputManager.Key(Key.Enter));
+            AddAssert("enter did not select mod", () => !flicks().Active.Value);
+            AddStep("select all", modSelectOverlay.SelectAll);
+            AddAssert("select all did not select mod", () => !flicks().Active.Value);
         }
 
         [Test]

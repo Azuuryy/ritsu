@@ -15,7 +15,7 @@ namespace osu.Game.Rulesets.Taiko
     /// torii: mirror de <see cref="TaikoSettingsSubsection"/> en la seccion torii. mismos toggles,
     /// pero bajo Settings -> Torii -> Taiko ademas de la ubicacion nativa Settings -> Rulesets ->
     /// osu!taiko. las dos pantallas sacan sus bindables del mismo <see cref="TaikoRulesetConfigManager"/>
-    /// cacheado (via <see cref="Config"/>), asi tocar un toggle en cualquiera actualiza la otra en vivo.
+    /// cacheado (via <c>Config</c>), asi tocar un toggle en cualquiera actualiza la otra en vivo.
     /// vive en el assembly de taiko porque ahi estan el enum tipado y el config manager; referenciarlos
     /// desde osu.Game invertiria la direccion de dependencia. ToriiSection lo trae via el hook generico
     /// <see cref="Ruleset.CreateToriiSettingsSubsection"/>.

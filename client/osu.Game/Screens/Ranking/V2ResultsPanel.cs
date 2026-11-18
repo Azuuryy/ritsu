@@ -578,6 +578,7 @@ namespace osu.Game.Screens.Ranking
                     Position = new Vector2(146, 94),
                     Size = new Vector2(30, 27),
                     UseV2Style = true,
+                    Score = score,
                 },
                 new Container
                 {

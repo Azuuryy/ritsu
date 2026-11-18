@@ -1,6 +1,8 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using osu.Game.Graphics;
+using osu.Framework.Graphics.Sprites;
 using System;
 using System.Linq;
 using osu.Framework.Bindables;
@@ -10,12 +12,16 @@ using osu.Game.Configuration;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Osu.Beatmaps;
+using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Rulesets.Modosu.Utils;
 
 namespace osu.Game.Rulesets.Osu.Mods
 {
-    public class OsuModSpacingAdjust : Mod, IApplicableToBeatmap, IModosuMod
+    public class OsuModSpacingAdjust : Mod, IApplicableToBeatmap, IModosuMod, IBeatmapVariant
     {
+        [SettingSource("Transformation version", HideInSettings = true)]
+        public BindableInt TransformationVersion { get; } = new BindableInt();
+
         public override bool Ranked => false;
         public override bool AlwaysValidForSubmission => false;
         public override bool ValidForMultiplayer => false;
@@ -26,6 +32,7 @@ namespace osu.Game.Rulesets.Osu.Mods
         public override LocalisableString Description => "Adjust object spacing to your liking.";
 
 
+        public override IconUsage? Icon => OsuIcon.ModSpacingAdjust;
         public override string Acronym => "SA";
 
         public override ModType Type => ModType.Conversion;
@@ -46,6 +53,16 @@ namespace osu.Game.Rulesets.Osu.Mods
             Default = 1,
             Value = 1,
             Precision = 0.01f,
+        };
+
+        [SettingSource("Maximum jump distance", "Maximum distance between jumps; zero disables the limit.")]
+        public BindableNumber<float> MaximumJumpDistance { get; } = new BindableFloat
+        {
+            MinValue = 0,
+            MaxValue = 640,
+            Default = 0,
+            Value = 0,
+            Precision = 1,
         };
 
         public override string ExtendedIconInformation =>
@@ -82,6 +99,24 @@ namespace osu.Game.Rulesets.Osu.Mods
                     // When reducing jump distance, shorter jumps get a smaller reduction in distance
                     positionInfo.DistanceFromPrevious *= MathF.Pow(ObjectSpacing.Value, positionInfo.DistanceFromPrevious / 640f);
                 }
+
+                if (MaximumJumpDistance.Value > 0 && i > 0 && positionInfo.HitObject is not Spinner && positionInfos[i - 1].HitObject is not Spinner
+                    && !isStreamStep(i))
+                    positionInfo.DistanceFromPrevious = Math.Min(positionInfo.DistanceFromPrevious, MaximumJumpDistance.Value);
+            }
+
+            bool isStreamStep(int index)
+            {
+                bool fastPair(int left, int right)
+                {
+                    if (left < 0 || right >= positionInfos.Count || positionInfos[left].HitObject is not HitCircle || positionInfos[right].HitObject is not HitCircle)
+                        return false;
+
+                    double interval = positionInfos[right].HitObject.StartTime - positionInfos[left].HitObject.StartTime;
+                    return interval > 0 && interval <= beatmap.ControlPointInfo.TimingPointAt(positionInfos[left].HitObject.StartTime).BeatLength / 2;
+                }
+
+                return fastPair(index - 1, index) && (fastPair(index - 2, index - 1) || fastPair(index, index + 1));
             }
 
             osuBeatmap.HitObjects = ModosuHitObjectGenerationUtils.RepositionHitObjectsClampOnly(positionInfos);

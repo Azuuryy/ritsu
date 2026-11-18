@@ -1,7 +1,7 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-#nullable disable
+#nullable disable warnings
 
 using System;
 using System.Collections.Generic;
@@ -338,6 +338,11 @@ namespace osu.Game
 
             var ritsuProfiles = new Offline.RitsuProfileManager(Storage, realm);
             dependencies.Cache(ritsuProfiles);
+            if (Offline.RitsuOffline.Enabled)
+            {
+                var libraryStorage = Storage is OsuStorage osuStorage ? Host.GetStorage(osuStorage.DefaultStoragePath) : Storage;
+                dependencies.Cache(new Library.RitsuLibrary(libraryStorage));
+            }
             if (API is Offline.OfflineAPIProvider offlineProfilesApi)
             {
                 largeStore.AddTextureSource(Host.CreateTextureLoaderStore(new StorageBackedResourceStore(ritsuProfiles.AvatarStorage)));
@@ -350,7 +355,7 @@ namespace osu.Game
             dependencies.Cache(difficultyCache = new BeatmapDifficultyCache());
 
             // ordering is important here to ensure foreign keys rules are not broken in ModelStore.Cleanup()
-            dependencies.Cache(ScoreManager = new ScoreManager(RulesetStore, () => BeatmapManager, Storage, realm, API, LocalConfig));
+            dependencies.Cache(ScoreManager = new ScoreManager(RulesetStore, () => BeatmapManager, Storage, realm, API, LocalConfig, Offline.RitsuOffline.Enabled ? ritsuProfiles : null));
 
             dependencies.Cache(BeatmapManager = new BeatmapManager(Storage, realm, API, Audio, Resources, Host, defaultBeatmap, difficultyCache, performOnlineLookups: false));
             dependencies.CacheAs<IWorkingBeatmapCache>(BeatmapManager);
@@ -832,7 +837,7 @@ namespace osu.Game
             // may be non-null for certain tests
             Storage ??= host.Storage;
 
-            LocalConfig ??= UseDevelopmentServer
+            LocalConfig ??= UseDevelopmentServer && !Offline.RitsuOffline.Enabled
                 ? new DevelopmentOsuConfigManager(Storage)
                 : new OsuConfigManager(Storage);
 

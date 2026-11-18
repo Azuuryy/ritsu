@@ -32,7 +32,7 @@ namespace osu.Game.Tournament
         public const string BRACKET_FILENAME = @"bracket.json";
         private LadderInfo ladder = new LadderInfo();
         private TournamentStorage storage = null!;
-        private DependencyContainer dependencies = null!;
+        private new DependencyContainer dependencies = null!;
         private FileBasedIPC ipc = null!;
         private BeatmapLookupCache beatmapCache = null!;
 

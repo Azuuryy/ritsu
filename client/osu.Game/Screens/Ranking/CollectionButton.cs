@@ -17,6 +17,7 @@ using osu.Game.Database;
 using osu.Game.Graphics;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Localisation;
+using osu.Game.Scoring;
 using osuTK;
 using Realms;
 
@@ -25,6 +26,7 @@ namespace osu.Game.Screens.Ranking
     public partial class CollectionButton : GrayButton, IHasPopover
     {
         public bool UseV2Style { get; init; }
+        public ScoreInfo? Score { get; init; }
 
         private readonly BeatmapInfo beatmapInfo;
         private readonly Bindable<bool> isInAnyCollection;
@@ -87,6 +89,6 @@ namespace osu.Game.Screens.Ranking
             Background.FadeColour(isInAnyCollection.Value ? colours.Green : UseV2Style ? Colour4.FromHex("#293A35") : colours.Gray4, 500, Easing.InOutExpo);
         }
 
-        public Popover GetPopover() => new CollectionPopover(beatmapInfo);
+        public Popover GetPopover() => new CollectionPopover(beatmapInfo, Score);
     }
 }

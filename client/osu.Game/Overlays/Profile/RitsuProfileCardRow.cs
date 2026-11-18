@@ -124,6 +124,9 @@ namespace osu.Game.Overlays.Profile
 
         private partial class ProfilePill : CompositeDrawable, IHasContextMenu, IHasPopover, IHasTooltip
         {
+            [Resolved(canBeNull: true)]
+            private OsuGame? game { get; set; }
+
             private readonly RitsuProfile profile;
             private readonly bool active;
             private readonly bool canDelete;
@@ -174,6 +177,7 @@ namespace osu.Game.Overlays.Profile
                 {
                     var items = new List<MenuItem>
                     {
+                        new MenuItem("Import replay to this profile", () => game?.ShowRitsuReplayImport(profile.Id)),
                         new MenuItem("Rename profile", () =>
                         {
                             popover = new ProfileNamePopover("Rename profile", profile.Name, newName => profiles.RenameProfile(profile.Id, newName));
