@@ -295,7 +295,7 @@ namespace osu.Game.Skinning.Components.Mania
             private CustomizableManiaRatioCounter component => (CustomizableManiaRatioCounter)SettingSourceObject;
             protected override OsuDropdown<FontWeight> CreateDropdown() => new TypefaceAwareDropdownControl(this);
 
-            private new partial class TypefaceAwareDropdownControl : SettingsDropdown<FontWeight>.DropdownControl
+            private partial class TypefaceAwareDropdownControl : SettingsDropdown<FontWeight>.DropdownControl
             {
                 private readonly TypefaceAwareWeightDropdown settingsDropdown;
 

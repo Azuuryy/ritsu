@@ -378,7 +378,7 @@ namespace osu.Game.Overlays.Toolbar
         /// rato. Paso: la pildora decia 0 y el tooltip seguia diciendo "1 player in
         /// queue".
         /// </summary>
-        public LocalisableString TooltipText => describeState();
+        public override LocalisableString TooltipText => describeState();
 
         /// <summary>
         /// Lo que la pildora NO dibuja. El numero de la cola se ve y el punto verde

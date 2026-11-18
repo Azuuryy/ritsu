@@ -232,7 +232,7 @@ namespace osu.Game.Screens.Play
         /// Arranca la coreografia completa. Idempotente: una llamada re-entrante
         /// (retry rapido) resetea todo estado y re-coreografia desde cero.
         /// </summary>
-        public void Show()
+        public new void Show()
         {
             // FASE 0: reset explicito, nunca dos timelines peleando.
             cancelDelegates();

@@ -100,7 +100,7 @@ namespace osu.Game.Screens.OnlinePlay.Multiplayer
             }
         }
 
-        public partial class Button : OsuClickableContainer
+        public new partial class Button : OsuClickableContainer
         {
             private const float chevron_y = 0.4f;
             private const float secondary_y = 0.7f;

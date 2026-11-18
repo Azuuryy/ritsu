@@ -64,7 +64,7 @@ namespace osu.Game.Graphics.Cursor
     /// One Container + at most two Sprites for the legacy-skin path,
     /// or three primitive shapes for the fallback. No per-frame work,
     /// no allocations after construction. The continuous rotation
-    /// uses a single <see cref="osu.Framework.Graphics.Transforms.TransformSequenceExtensions"/>
+    /// uses a single <c>TransformSequenceExtensions</c>
     /// loop registered at LoadComplete — same approach upstream uses.
     ///
     /// What's intentionally NOT here yet
@@ -247,7 +247,7 @@ namespace osu.Game.Graphics.Cursor
         /// matching what the playfield cursor sees.
         ///
         /// Defaults to <c>true</c> when the skin doesn't declare a value, matching
-        /// upstream <see cref="LegacyCursor.load"/>: <c>?? true</c>.
+        /// upstream <c>load</c>: <c>?? true</c>.
         /// </summary>
         private bool shouldRotate()
             => skinSource?.GetConfig<LegacyCursorSkinConfiguration, bool>(LegacyCursorSkinConfiguration.CursorRotate)?.Value ?? true;

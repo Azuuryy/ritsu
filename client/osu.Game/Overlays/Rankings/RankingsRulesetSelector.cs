@@ -13,7 +13,7 @@ namespace osu.Game.Overlays.Rankings
     /// <summary>
     /// torii: el selector de ruleset de la pagina de rankings, con los modos exclusivos del server
     /// (osu!relax, osu!autopilot, taiko relax) como tabs propios intercalados despues de su ruleset base
-    /// — igual que en los perfiles. Al elegir un variant, <see cref="Online.API.Requests.GetRankingsRequest"/>
+    /// — igual que en los perfiles. Al elegir un variant, <c>GetRankingsRequest</c>
     /// pega a rankings/{ShortName} (osurx/osuap/taikorx) y g0v0 devuelve el ranking de ese modo. Reusa el
     /// registry de variants y el tab item con label del perfil. NUNCA asigna al ruleset global del juego:
     /// el RankingsOverlay tiene su propio bindable local.

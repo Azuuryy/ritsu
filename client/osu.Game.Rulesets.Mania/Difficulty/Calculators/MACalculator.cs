@@ -1134,10 +1134,7 @@ namespace osu.Game.Rulesets.Mania.Difficulty.Calculators
             Dictionary<int, int> counts = new Dictionary<int, int>();
             foreach (int v in valList)
             {
-                if (counts.ContainsKey(v))
-                    counts[v]++;
-                else
-                    counts[v] = 1;
+                counts[v] = counts.GetValueOrDefault(v) + 1;
             }
 
             // Create arrays for the unique values and their corresponding relative frequencies.

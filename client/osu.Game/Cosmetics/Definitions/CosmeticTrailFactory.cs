@@ -21,8 +21,7 @@ namespace osu.Game.Cosmetics.Definitions
         /// <summary>construye el trail (implementa <see cref="ICosmeticTrail"/>) desde la definicion.</summary>
         public static Drawable Create(CosmeticDefinition def)
         {
-            if (def == null)
-                throw new ArgumentNullException(nameof(def));
+            ArgumentNullException.ThrowIfNull(def);
             if (def.Type != CosmeticType.Trail)
                 throw new ArgumentException($"CosmeticDefinition '{def.Id}' no es un trail (Type={def.Type}).", nameof(def));
 

@@ -278,7 +278,7 @@ namespace osu.Game.Configuration
 
         /// <summary>
         /// Generic enum applicator. Reflection is needed because
-        /// <see cref="ConfigManager{TLookup}.SetValue{TBindable}"/> is
+        /// <c>SetValue{TBindable}</c> is
         /// generic on the value type and we don't know the enum type
         /// at compile time. The cost is one method-handle lookup per
         /// applied setting at startup; negligible compared to disk I/O.

@@ -324,7 +324,7 @@ namespace osu.Game.Overlays.Cosmetics
             foreach (string part in reasonRef.Split('|'))
             {
                 if (part.StartsWith(tag, StringComparison.Ordinal)
-                    && int.TryParse(part.Substring(tag.Length), out int v))
+                    && int.TryParse(part.AsSpan(tag.Length), out int v))
                     return v;
             }
 

@@ -48,7 +48,7 @@ namespace osu.Game.Cosmetics.Definitions
             }
         }
 
-        private static object Convert(JToken token, Type target)
+        private static object? Convert(JToken token, Type target)
         {
             if (target == typeof(Color4))
                 return ParseColour(token);
@@ -80,8 +80,8 @@ namespace osu.Game.Cosmetics.Definitions
             {
                 // TryParse en vez de Parse: un nombre invalido (data de otra familia/version) cae al
                 // default del enum en vez de tirar. tambien aceptamos el enum como entero.
-                string name = token.Value<string>();
-                if (!string.IsNullOrEmpty(name) && Enum.TryParse(target, name, true, out object parsed))
+                string? name = token.Value<string>();
+                if (!string.IsNullOrEmpty(name) && Enum.TryParse(target, name, true, out object? parsed))
                     return parsed;
                 if (token.Type == JTokenType.Integer)
                     return Enum.ToObject(target, token.Value<int>());
@@ -137,7 +137,7 @@ namespace osu.Game.Cosmetics.Definitions
             return $"#{r:X2}{g:X2}{b:X2}{a:X2}";
         }
 
-        private static Color4 HexToColour(string hex)
+        private static Color4 HexToColour(string? hex)
         {
             if (string.IsNullOrWhiteSpace(hex))
                 return Color4.White;
@@ -152,13 +152,13 @@ namespace osu.Game.Cosmetics.Definitions
             if (hex.Length != 6 && hex.Length != 8)
                 return Color4.White;
 
-            if (!byte.TryParse(hex.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte r)
-                || !byte.TryParse(hex.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte g)
-                || !byte.TryParse(hex.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte b))
+            if (!byte.TryParse(hex.AsSpan(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte r)
+                || !byte.TryParse(hex.AsSpan(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte g)
+                || !byte.TryParse(hex.AsSpan(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte b))
                 return Color4.White;
 
             byte a = 255;
-            if (hex.Length >= 8 && byte.TryParse(hex.Substring(6, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte parsedA))
+            if (hex.Length >= 8 && byte.TryParse(hex.AsSpan(6, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte parsedA))
                 a = parsedA;
 
             return new Color4(r / 255f, g / 255f, b / 255f, a / 255f);

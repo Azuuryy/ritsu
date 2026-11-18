@@ -1367,7 +1367,7 @@ namespace osu.Game
                 // sale vacio, que es lo que paso en el primer intento.
                 Scheduler.AddDelayed(() =>
                 {
-                    string ruta = osu.Framework.Graphics.Rendering.TextureBindTrace.Dump("torii-" + pantalla);
+                    var ruta = osu.Framework.Graphics.Rendering.TextureBindTrace.Dump("torii-" + pantalla);
 
                     if (ruta != null)
                         Logger.Log($@"[TextureTrace] {ruta}", LoggingTarget.Runtime, LogLevel.Debug);

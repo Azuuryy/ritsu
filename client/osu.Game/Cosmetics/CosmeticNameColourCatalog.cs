@@ -71,7 +71,7 @@ namespace osu.Game.Cosmetics
 
         /// <summary>The halo role colour matching one of the user's groups (e.g.
         /// the admin red). Earned, never sold, swappable like any cosmetic.</summary>
-        public static CosmeticNameColour GroupColourFor(APIUserGroup group)
+        public static CosmeticNameColour? GroupColourFor(APIUserGroup group)
         {
             if (group?.Identifier == null || string.IsNullOrEmpty(group.Colour))
                 return null;
@@ -110,7 +110,7 @@ namespace osu.Game.Cosmetics
         /// beats dev beats mod, etc. Null if they belong to no prioritised group with a colour.
         /// Used as the fallback when no bought colour is equipped, so an admin's name glows red
         /// wherever it appears without them having to equip anything.</summary>
-        public static CosmeticNameColour GetTopEarned(APIUser? user)
+        public static CosmeticNameColour? GetTopEarned(APIUser? user)
         {
             if (user?.Groups == null || user.Groups.Length == 0)
                 return null;
@@ -131,7 +131,7 @@ namespace osu.Game.Cosmetics
 
         /// <summary>Resolve any colour id (a buyable one, or a role colour
         /// derived from the user's groups).</summary>
-        public static CosmeticNameColour GetById(string id, APIUser user)
+        public static CosmeticNameColour? GetById(string? id, APIUser? user)
         {
             if (string.IsNullOrEmpty(id))
                 return null;

@@ -42,7 +42,7 @@ namespace osu.Game.Overlays.Toolbar
         private const float pill_height = 32f;
         private const float pill_corner_radius = 12f;
 
-        public LocalisableString TooltipText => "Your Torii points. click for history";
+        public override LocalisableString TooltipText => "Your Torii points. click for history";
 
         [Resolved(canBeNull: true)]
         private ToriiCosmeticsManager cosmetics { get; set; }

@@ -17,6 +17,7 @@ namespace osu.Game.Mapperatorinator
     /// </summary>
     public class MapperatorinatorSidecar
     {
+        private static readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions { WriteIndented = true };
         public const string FILENAME = @"mapperatorinator.json";
 
         [JsonPropertyName("model")]
@@ -118,7 +119,7 @@ namespace osu.Game.Mapperatorinator
             return request;
         }
 
-        public string Serialize() => JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+        public string Serialize() => JsonSerializer.Serialize(this, jsonOptions);
 
         public static MapperatorinatorSidecar? Deserialize(string json)
         {

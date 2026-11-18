@@ -479,6 +479,7 @@ namespace osu.Game.Graphics
             switch (status)
             {
                 case BeatmapOnlineStatus.None:
+                case BeatmapOnlineStatus.Unranked:
                     return IsGrayscaleTheme ? Gray(0.5f) : Color4.RosyBrown;
 
                 case BeatmapOnlineStatus.LocallyModified:

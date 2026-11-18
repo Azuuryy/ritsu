@@ -98,7 +98,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
             // We compare flow to combined snap and agility because snap by itself doesn't have enough difficulty to be above flow on streams
             // Agility on the other hand is supposed to measure the rate of cursor velocity changes while snapping
             // So snapping every circle on a stream requires an enormous amount of agility at which point it's easier to flow
-            double combinedSnapDifficulty = DifficultyCalculationUtils.Norm(combinedSnapNormExponent, snapDifficulty, agilityDifficulty);
+            double combinedSnapDifficulty = DiffUtils.Norm(combinedSnapNormExponent, snapDifficulty, agilityDifficulty);
 
             double pSnap = calculateSnapFlowProbability(flowDifficulty / combinedSnapDifficulty);
             double pFlow = 1 - pSnap;
@@ -107,7 +107,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
             {
                 // we don't adjust agility here since agility represents TD difficulty in a decent enough way
                 snapDifficulty = Math.Pow(snapDifficulty, 0.89);
-                combinedSnapDifficulty = DifficultyCalculationUtils.Norm(combinedSnapNormExponent, snapDifficulty, agilityDifficulty);
+                combinedSnapDifficulty = DiffUtils.Norm(combinedSnapNormExponent, snapDifficulty, agilityDifficulty);
             }
 
             if (Mods.Any(m => m is OsuModRelax))
@@ -140,7 +140,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
             if (double.IsNaN(ratio))
                 return 1;
 
-            return DifficultyCalculationUtils.Logistic(-k * Math.Log(ratio));
+            return DiffUtils.Logistic(-k * Math.Log(ratio));
         }
 
         public double GetDifficultSliders()
@@ -167,7 +167,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
                 return 0;
 
             // Use a weighted sum of all strains. Constants are arbitrary and give nice values
-            return sliderStrains.Sum(s => DifficultyCalculationUtils.Logistic(s / consistentTopStrain, 0.88, 10, 1.1));
+            return sliderStrains.Sum(s => DiffUtils.Logistic(s / consistentTopStrain, 0.88, 10, 1.1));
         }
 
         public override double DifficultyValue()

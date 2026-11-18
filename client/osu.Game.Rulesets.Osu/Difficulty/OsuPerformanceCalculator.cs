@@ -158,7 +158,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
             double flashlightValue = computeFlashlightValue(score, osuAttributes);
             double cognitionValue = OsuDifficultyCalculator.SumCognitionDifficulty(readingValue, flashlightValue);
 
-            double totalValue = DifficultyCalculationUtils.Norm(PERFORMANCE_NORM_EXPONENT, aimValue, speedValue, accuracyValue, cognitionValue) * multiplier;
+            double totalValue = DiffUtils.Norm(PERFORMANCE_NORM_EXPONENT, aimValue, speedValue, accuracyValue, cognitionValue) * multiplier;
 
             return new OsuPerformanceAttributes
             {
@@ -259,7 +259,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
             double effectiveHitWindow = 20 * Math.Pow(4 / attributes.SpeedDifficulty, 0.35);
 
             // Find the proportion of 300s on speed notes assuming the hit window was the effective hit window.
-            double effectiveAccuracy = DifficultyCalculationUtils.Erf(effectiveHitWindow / (double)speedDeviation);
+            double effectiveAccuracy = DiffUtils.Erf(effectiveHitWindow / (double)speedDeviation);
 
             // Scale speed value by normalized accuracy.
             speedValue *= Math.Pow(effectiveAccuracy, 2);
@@ -302,7 +302,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
             else if (score.Mods.Any(m => m is OsuModTraceable))
             {
                 // Decrease bonus for AR > 10
-                accuracyValue *= 1 + 0.08 * DifficultyCalculationUtils.ReverseLerp(approachRate, 11.5, 10);
+                accuracyValue *= 1 + 0.08 * DiffUtils.ReverseLerp(approachRate, 11.5, 10);
             }
 
             return accuracyValue;
@@ -403,9 +403,9 @@ namespace osu.Game.Rulesets.Osu.Difficulty
             double nonMissMistakeAdjustment = (nonMissMistakes - estimatedSliderBreaks + 4.5) / (nonMissMistakes + 4);
 
             // There is a low probability of extra slider breaks on effective miss counts close to 1, as score based calculations are good at indicating if only a single break occurred.
-            estimatedSliderBreaks *= DifficultyCalculationUtils.Smoothstep(effectiveMissCount, 1, 2);
+            estimatedSliderBreaks *= DiffUtils.Smoothstep(effectiveMissCount, 1, 2);
 
-            return estimatedSliderBreaks * nonMissMistakeAdjustment * DifficultyCalculationUtils.Logistic(missedComboPercent, 0.33, 15);
+            return estimatedSliderBreaks * nonMissMistakeAdjustment * DiffUtils.Logistic(missedComboPercent, 0.33, 15);
         }
 
         /// <summary>
@@ -457,12 +457,12 @@ namespace osu.Game.Rulesets.Osu.Difficulty
             if (pLowerBound > 0.01)
             {
                 // Compute deviation assuming greats and oks are normally distributed.
-                deviation = greatHitWindow / (Math.Sqrt(2) * DifficultyCalculationUtils.ErfInv(pLowerBound));
+                deviation = greatHitWindow / (Math.Sqrt(2) * DiffUtils.ErfInv(pLowerBound));
 
                 // Subtract the deviation provided by tails that land outside the ok hit window from the deviation computed above.
                 // This is equivalent to calculating the deviation of a normal distribution truncated at +-okHitWindow.
                 double okHitWindowTailAmount = Math.Sqrt(2 / Math.PI) * okHitWindow * Math.Exp(-0.5 * Math.Pow(okHitWindow / deviation, 2))
-                                               / (deviation * DifficultyCalculationUtils.Erf(okHitWindow / (Math.Sqrt(2) * deviation)));
+                                               / (deviation * DiffUtils.Erf(okHitWindow / (Math.Sqrt(2) * deviation)));
 
                 deviation *= Math.Sqrt(1 - okHitWindowTailAmount);
             }
@@ -500,7 +500,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
             double adjustedSpeedValue = scale * (Math.Log((speedValue - excessSpeedDifficultyCutoff) / scale + 1) + excessSpeedDifficultyCutoff / scale);
 
             // 220 UR and less are considered tapped correctly to ensure that normal scores will be punished as little as possible
-            double lerp = 1 - DifficultyCalculationUtils.ReverseLerp(speedDeviation.Value, 22.0, 27.0);
+            double lerp = 1 - DiffUtils.ReverseLerp(speedDeviation.Value, 22.0, 27.0);
             adjustedSpeedValue = double.Lerp(adjustedSpeedValue, speedValue, lerp);
 
             return adjustedSpeedValue / speedValue;

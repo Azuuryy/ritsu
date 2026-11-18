@@ -36,7 +36,7 @@ namespace osu.Game.Graphics.UserEffects
     {
         /// <summary>
         /// Fired after the server has accepted a new equipped-aura value for
-        /// <paramref name="userId"/>. <paramref name="newEffectiveAuraId"/>
+        /// <c>userId</c>. <c>newEffectiveAuraId</c>
         /// is the RESOLVED aura id (what the server says should actually
         /// render, sentinels already collapsed) — listeners can hand it
         /// straight to <see cref="AuraRegistry.GetById"/>.
