@@ -105,15 +105,28 @@ namespace osu.Game.Rulesets.Osu.Tests
         public void DecoySettingsRoundTripAndControlPlacement(int interval, int expectedCount)
         {
             var source = createBeatmap(Enumerable.Range(0, 9).Select(i => circle(i * 1000)).ToArray());
-            var selected = new OsuModDecoyCircles { IntervalBeats = { Value = interval }, Style = { Value = DecoyCircleStyle.Grayscale } };
+            var selected = new OsuModDecoyCircles { IntervalBeats = { Value = interval }, Style = { Value = DecoyCircleStyle.Grayscale }, Number = { Value = 7 } };
             var restored = (OsuModDecoyCircles)new APIMod(selected).ToMod(new OsuRuleset());
             Assert.That(restored.IntervalBeats.Value, Is.EqualTo(interval));
+            Assert.That(restored.Number.Value, Is.EqualTo(7));
             ((IApplicableToBeatmap)restored).ApplyToBeatmap(source);
 
             var decoys = source.HitObjects.OfType<DecoyCircle>().ToArray();
             Assert.That(decoys, Has.Length.EqualTo(expectedCount));
             Assert.That(decoys.Select(decoy => decoy.Style), Is.All.EqualTo(DecoyCircleStyle.Grayscale));
+            Assert.That(decoys.Select(decoy => decoy.Number), Is.All.EqualTo(7));
             Assert.That(decoys.Zip(decoys.Skip(1), (left, right) => right.StartTime - left.StartTime), Is.All.GreaterThanOrEqualTo(interval * 500));
+        }
+
+        [Test]
+        public void DecoyNoteSpacingAllowsDensePatternsAndRoundTrips()
+        {
+            var source = createBeatmap(Enumerable.Range(0, 20).Select(i => circle(1000 + i * 125, i % 2 == 0 ? 100 : 260)).ToArray());
+            var selected = new OsuModDecoyCircles { IntervalBeats = { Value = 2 }, MinimumNoteSpacing = { Value = 0.25 } };
+            var restored = (OsuModDecoyCircles)new APIMod(selected).ToMod(new OsuRuleset());
+            Assert.That(restored.MinimumNoteSpacing.Value, Is.EqualTo(0.25));
+            ((IApplicableToBeatmap)restored).ApplyToBeatmap(source);
+            Assert.That(source.HitObjects.OfType<DecoyCircle>().Count(), Is.GreaterThan(0));
         }
 
         [TestCase(1000, 2, DecoyCircleStyle.Grayscale, 20, 0.05)]

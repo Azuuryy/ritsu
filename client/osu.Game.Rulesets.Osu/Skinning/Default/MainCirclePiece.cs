@@ -66,8 +66,8 @@ namespace osu.Game.Rulesets.Osu.Skinning.Default
                 circle.Colour = colour.NewValue;
             }, true);
 
-            if (drawableObject is DrawableDecoyCircle)
-                number.Text = string.Empty;
+            if (drawableObject is DrawableDecoyCircle decoy)
+                decoy.NumberText.BindValueChanged(value => number.Text = value.NewValue, true);
             else
                 indexInCurrentCombo.BindValueChanged(index => number.Text = (index.NewValue + 1).ToString(), true);
 

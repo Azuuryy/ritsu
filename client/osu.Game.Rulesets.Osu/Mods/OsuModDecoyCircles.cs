@@ -33,8 +33,23 @@ namespace osu.Game.Rulesets.Osu.Mods
             MaxValue = 32,
         };
 
+        [SettingSource("Minimum note spacing (beats)", "Lower this to allow decoys in denser patterns, when there is enough room.")]
+        public BindableDouble MinimumNoteSpacing { get; } = new BindableDouble(0.5)
+        {
+            MinValue = 0.25,
+            MaxValue = 1,
+            Precision = 0.25,
+        };
+
         [SettingSource("Decoy appearance", "Use the skin's colours or grayscale.")]
         public Bindable<DecoyCircleStyle> Style { get; } = new Bindable<DecoyCircleStyle>(DecoyCircleStyle.RealFake);
+
+        [SettingSource("Decoy number", "Use -1 for the cross, or choose a number from 0 to 99.")]
+        public BindableInt Number { get; } = new BindableInt(-1)
+        {
+            MinValue = -1,
+            MaxValue = 99,
+        };
 
         protected override void ApplyVariant(OsuBeatmap beatmap)
         {
@@ -50,7 +65,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             for (int i = 0; i < osuBeatmap.HitObjects.Count; i++)
             {
                 var anchor = osuBeatmap.HitObjects[i];
-                if (anchor.StartTime < nextEligibleTime || !IsIsolatedCircle(osuBeatmap, i)
+                if (anchor.StartTime < nextEligibleTime || !IsIsolatedCircle(osuBeatmap, i, MinimumNoteSpacing.Value)
                     || FindAdjacentPosition(osuBeatmap, i) is not Vector2 position)
                     continue;
 
@@ -59,6 +74,7 @@ namespace osu.Game.Rulesets.Osu.Mods
                     StartTime = anchor.StartTime,
                     Position = position,
                     Style = Style.Value,
+                    Number = Number.Value,
                     ComboIndex = anchor.ComboIndex,
                     ComboIndexWithOffsets = anchor.ComboIndexWithOffsets,
                 };

@@ -12,6 +12,8 @@ namespace osu.Game.Rulesets.Osu.Objects
     {
         public DecoyCircleStyle Style { get; init; }
 
+        public int Number { get; init; } = -1;
+
         public override Judgement CreateJudgement() => new DecoyJudgement();
 
         private class DecoyJudgement : OsuJudgement

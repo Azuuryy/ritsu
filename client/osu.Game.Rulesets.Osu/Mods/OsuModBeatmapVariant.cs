@@ -73,15 +73,15 @@ namespace osu.Game.Rulesets.Osu.Mods
                 slider.ApplyDefaults(beatmap.ControlPointInfo, beatmap.Difficulty);
         }
 
-        internal static bool IsIsolatedCircle(OsuBeatmap beatmap, int index)
+        internal static bool IsIsolatedCircle(OsuBeatmap beatmap, int index, double minimumBeats = 0.5)
         {
             var objects = beatmap.HitObjects;
             if (objects[index] is not HitCircle circle)
                 return false;
 
-            double halfBeat = beatmap.ControlPointInfo.TimingPointAt(circle.StartTime).BeatLength / 2;
-            return (index == 0 || circle.StartTime - objects[index - 1].GetEndTime() + 1 >= halfBeat)
-                   && (index == objects.Count - 1 || objects[index + 1].StartTime - circle.StartTime + 1 >= halfBeat);
+            double minimumInterval = beatmap.ControlPointInfo.TimingPointAt(circle.StartTime).BeatLength * minimumBeats;
+            return (index == 0 || circle.StartTime - objects[index - 1].GetEndTime() + 1 >= minimumInterval)
+                   && (index == objects.Count - 1 || objects[index + 1].StartTime - circle.StartTime + 1 >= minimumInterval);
         }
 
         internal static Vector2? FindAdjacentPosition(OsuBeatmap beatmap, int index)
