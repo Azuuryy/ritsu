@@ -76,7 +76,10 @@ namespace osu.Game.Beatmaps
         private readonly object performanceCacheLock = new object();
         private Dictionary<string, double> performanceCache = new Dictionary<string, double>();
         private Storage performanceCacheStorage = null!;
+        private const int performance_save_threshold = 200;
+        private readonly object performanceCacheWriteLock = new object();
         private int performanceCacheChanges;
+        private bool performanceSaveQueued;
 
         [BackgroundDependencyLoader]
         private void load(Storage storage)
@@ -171,7 +174,7 @@ namespace osu.Game.Beatmaps
                         FrameProfileCapture.Count("PerfectPP.hit", 1);
                         owner.performanceCache[stable] = value;
                         FrameProfileCapture.Count("PerfectPP.size", owner.performanceCache.Count);
-                        if (++owner.performanceCacheChanges >= 200) owner.savePerformanceCache();
+                        owner.performanceCacheChanged();
                         return true;
                     }
                 }
@@ -194,32 +197,75 @@ namespace osu.Game.Beatmaps
                     {
                         owner.performanceCache[stable] = pp.Value;
                         FrameProfileCapture.Count("PerfectPP.size", owner.performanceCache.Count);
-                        if (++owner.performanceCacheChanges >= 200) owner.savePerformanceCache();
+                        owner.performanceCacheChanged();
                     }
                 }
                 return pp;
             }
         }
 
-        internal void FlushPerfectPerformanceCache()
+        private void performanceCacheChanged()
         {
-            lock (performanceCacheLock)
-                savePerformanceCache();
+            performanceCacheChanges++;
+            queuePerformanceSave();
         }
 
-        private void savePerformanceCache()
+        private void queuePerformanceSave()
         {
-            if (performanceCacheChanges == 0)
+            if (performanceSaveQueued || performanceCacheChanges < performance_save_threshold)
                 return;
-            try
+
+            performanceSaveQueued = true;
+            _ = Task.Run(() =>
             {
-                WritePerformanceCache(performanceCacheStorage, performance_cache_file, performanceCache);
-                performanceCacheChanges = 0;
-                Logger.Log($"Ritsu PP cache saved: {performanceCache.Count} entries");
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                bool saved = false;
+                try
+                {
+                    saved = savePerformanceCache();
+                }
+                finally
+                {
+                    lock (performanceCacheLock)
+                    {
+                        performanceSaveQueued = false;
+                        if (saved)
+                            queuePerformanceSave();
+                    }
+                }
+            });
+        }
+
+        internal void FlushPerfectPerformanceCache() => savePerformanceCache();
+
+        private bool savePerformanceCache()
+        {
+            lock (performanceCacheWriteLock)
             {
-                Logger.Error(e, "Failed to save Ritsu perfect PP cache");
+                Dictionary<string, double> snapshot;
+                int changes;
+                lock (performanceCacheLock)
+                {
+                    changes = performanceCacheChanges;
+                    if (changes == 0)
+                        return true;
+
+                    snapshot = new Dictionary<string, double>(performanceCache);
+                }
+
+                try
+                {
+                    WritePerformanceCache(performanceCacheStorage, performance_cache_file, snapshot);
+                    lock (performanceCacheLock)
+                        performanceCacheChanges -= changes;
+
+                    Logger.Log($"Ritsu PP cache saved: {snapshot.Count} entries");
+                    return true;
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    Logger.Error(e, "Failed to save Ritsu perfect PP cache");
+                    return false;
+                }
             }
         }
 
@@ -413,6 +459,8 @@ namespace osu.Game.Beatmaps
 
         protected override bool CacheNullValues => false;
 
+        protected override bool SharePendingComputations => true;
+
         public Task<List<TimedDifficultyAttributes>> GetTimedDifficultyAttributesAsync(IWorkingBeatmap beatmap, Ruleset ruleset, Mod[] mods, CancellationToken cancellationToken = default)
         {
             return Task.Factory.StartNew(() => ruleset.CreateDifficultyCalculator(beatmap).CalculateTimed(mods, cancellationToken),
@@ -600,7 +648,10 @@ namespace osu.Game.Beatmaps
             modSettingChangeTracker?.Dispose();
 
             cancelTrackedBindableUpdate();
+            Clear();
             updateScheduler.Dispose();
+            if (isDisposing)
+                FlushPerfectPerformanceCache();
         }
 
         public readonly struct DifficultyCacheLookup : IEquatable<DifficultyCacheLookup>

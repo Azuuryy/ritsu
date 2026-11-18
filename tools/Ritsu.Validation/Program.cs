@@ -2,14 +2,36 @@ using System.Reflection;
 using osu.Framework;
 using osu.Framework.Platform;
 
-if (args.Contains("--catalogue-live"))
+if (args is ["--measure-profile-writes"])
 {
-    using var catalogue = new osu.Game.Overlays.BeatmapListing.RitsuCatalogueClient();
-    var first = await catalogue.SearchAsync("", null, CancellationToken.None);
-    if (first.BeatmapSets.Count == 0 || string.IsNullOrEmpty(first.Cursor)) throw new Exception("Torii returned no results or cursor");
-    var second = await catalogue.SearchAsync("", first.Cursor, CancellationToken.None);
-    if (second.BeatmapSets.Count == 0) throw new Exception("Torii returned no second page");
-    Console.WriteLine($"PASS: Torii returned {first.BeatmapSets.Count} and {second.BeatmapSets.Count} beatmapsets");
+    ProfileWriteMeasurements.Run();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--measure-decoys")
+{
+    if (args.Length != 2)
+    {
+        Console.Error.WriteLine("Usage: --measure-decoys <path-to-osu-file>");
+        Environment.ExitCode = 2;
+        return;
+    }
+
+    try
+    {
+        DecoyMeasurements.Run(args[1]);
+    }
+    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+    {
+        Console.Error.WriteLine($"Cannot measure beatmap: {exception.Message}");
+        Environment.ExitCode = 1;
+    }
+    return;
+}
+
+if (args.Contains("--catalogue-live") || args.Contains("--catalogue-ui"))
+{
+    Console.WriteLine("The online catalogue is disabled in the offline milestone.");
     return;
 }
 
@@ -38,12 +60,6 @@ if (args.Contains("--checks"))
     return;
 }
 
-if (args.Length == 2 && args[0] == "--catalogue-ui")
-{
-    using DesktopGameHost catalogueHost = Host.GetSuitableDesktopHost("ritsu-catalogue-validation", new HostOptions { PortableInstallation = true });
-    catalogueHost.Run(new CatalogueSmokeGame(Path.GetFullPath(args[1])));
-    return;
-}
 // Run the original desktop game in a fresh portable host. In particular, do not
 // execute Torii's Program.Main(), which reads the existing Torii user storage.
 using DesktopGameHost host = Host.GetSuitableDesktopHost("ritsu-validation", new HostOptions

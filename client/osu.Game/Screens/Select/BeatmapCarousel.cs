@@ -915,8 +915,12 @@ namespace osu.Game.Screens.Select
             if (difficultyCache != null && (criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability || criteria.Group == GroupMode.PerformancePoints100 || criteria.UsesPerformanceFilter))
                 performanceSession = new PerfectPerformanceSession(difficultyCache, criteria.Ruleset, criteria.Mods, performanceChanged, criteria.CalculateMapPerformance || criteria.SmartCollectionCriteria?.CalculateMapPerformance == true);
             criteria.PerformanceSession = performanceSession;
+            criteria.LocalProfile = ritsuProfiles?.GetActiveProfile();
             if (criteria.SmartCollectionCriteria != null)
+            {
                 criteria.SmartCollectionCriteria.PerformanceSession = performanceSession;
+                criteria.SmartCollectionCriteria.LocalProfile = criteria.LocalProfile;
+            }
             Criteria = criteria;
             PerformanceProgressChanged?.Invoke();
 
