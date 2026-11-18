@@ -4,47 +4,37 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
-### Added
-
-- A Spotify-style queue panel opens with Tab in solo Song Select, with local covers, queue controls, and shared session queue actions.
-- The command palette and local library are split into dedicated modules. Local map, score, profile, collection, and session actions are available through the command registry.
-- A dedicated score simulator uses lazer performance calculators for osu!standard, taiko, catch, and mania, with native mod selection and configurable judgements.
-- Local frame profiling can export bounded frame and operation traces, with benchmark scenarios for baseline and instrumented runs.
-- Documentation inventories GuraBot and Bathbot commands, maps local equivalents and service dependencies, and records the client/framework audit and Ronnia feasibility study.
-
-### Changed
-
-- `/bpm` can preserve the map's unmodded AR while changing playback speed, and `/compare`, `/simulate`, and `/visualize` expose local score and map workflows.
-- Beatmap queue and simulator entry points are shared between the command palette, Song Select, and mod selection.
-
-
-## [0.5.0] - 2026-11-12
+## [0.5.0] - 2026-11-18
 
 ### Added
 
-- Song Select search history, favourites and named pinned searches are available from the search bar, with a slanted popover aligned to the bar and a clear action beside recent searches. Pinned searches restore their filters, collection, sort and group; right-click one to rename it, replace its settings or create a smart collection.
-- Filter suggestions appear at the search cursor with **Ctrl+Left Alt** and can be chosen with the arrow keys, Tab or the mouse.
-- Pin entries and reorder the sort, group, ranking scope and collection menus, using manual, alphabetical or most-used order.
-- A shared collection menu in Song Select, profile scores and results supports search, multi-selection, user-created subgroups and undo for removal. Scores can be marked for analysis and appear in the active profile's score page.
-- Smart collections refresh from a saved search. The `pbmisses` and `playedthisweek` filters use the active profile's personal bests and play history, with weeks starting on Monday in local time.
-- A command palette (**Ctrl+Shift+P**) offers `/recent`, `/mods`, `/queue`, `/session` and `/bpm` actions, alongside a session play queue and session presets that restore mods, speed, skin, HUD settings and the starting search.
-- Per-difficulty private memos can link a local replay at a timestamp. A target BPM dialog applies a playback rate from a chosen timing section on maps with changing tempo.
-- Transfer a local score to another profile from either leaderboard; PP inclusion follows the score and the destination profile's beatmap exclusions still apply.
-- osu!standard beatmap variants: Streamline (formerly Half-Stream), No Sliding, Reversed Sliders, One Eye, Decoy Circles and the work-in-progress Directional Flicks. Echo, Swing and Phrase Mirror are no longer selectable but remain readable for existing replays.
-- RandomV2 custom angle offers 15 optional patterns, separate jump, stream and burst selections, mirrored responses and progressive spacing. A numbered trajectory is available in the Autoplay preview, and pause or fail offers **Retry same seed** and **New seed**.
-- Variant scores and OSR exports store their settings, transformation version and seed. Unsupported versions are rejected with a notification.
-- Decoy Circles uses the skin's circle with a centered white cross, and its local difficulty and PP bonus scale with the number of placed decoys.
-- No Sliding and Spacing Adjust can target short, long or repeating sliders, including streams, head-only taps, head-and-tail taps and a maximum jump distance.
+- Song Select now has search history, favourites, named pinned searches and smart collections. Pinned searches preserve filters, collection, sort and group. Use **Ctrl+Left Alt** for inline filter suggestions. The sort, group, ranking scope and collection menus support pinning and reordering.
+- The shared collection menu supports search, multi-selection, subgroups and undo. Mark scores for analysis from Song Select, your profile or results. The `pbmisses` and `playedthisweek` filters use the active profile.
+- Open the local command palette with **Ctrl+Shift+P** and the play queue with **Tab**. Save session presets, simulate scores across all four rulesets, set a target BPM and add private difficulty memos with replay timestamps.
+- Assign a score from **All profiles** to an existing or new profile, transfer assigned scores between profiles and explicitly import `.osr` files or linked MOsu/Modosu replays. Standard replay exports use the destination profile name and the original replay can still be exported separately.
+- Added osu!standard variants Streamline, No Sliding, Reversed Sliders, One Eye and Decoy Circles. Directional Flicks, Echo, Swing and Phrase Mirror remain readable for existing replays. Variant replays preserve settings, transformation version and seed.
+- RandomV2 custom angles now support 15 optional patterns, mirrored responses and progressive spacing. Autoplay can show the numbered trajectory, and retries can reuse or replace the seed. No Sliding and Spacing Adjust offer additional targeting options.
+- Local frame diagnostics capture timings and allocations for performance investigation.
 
 ### Changed
 
-- A beatmap set's PP inclusion state is resolved from its local difficulties.
+- Desktop packages bundle **.NET 11**. Standard development and published launches share the selected library and `torii.ini`. Close one Ritsu instance before opening another against the same library.
+- Profile PP exclusions persist for future scores. Excluded maps display **Unranked** locally. Reincluding them restores their previous status, or **Approved** if already Unranked. The mod selector also reflects Autoplay, Cinema and the profile's Relax/Autopilot setting.
+- Decoy Circles can display a number from **0 to 99** instead of the cross. The minimum gap can be reduced to a quarter beat for dense patterns.
+- Shared difficulty calculations, background PP cache writes, lighter profile queries and a catalogue that loads only nearby cards reduce redundant work.
 
 ### Fixed
 
-- A replay opened from a difficulty memo starts at the linked timestamp, and an unavailable replay or beatmap is reported in a notification.
+- Fixed the Realm crash when opening a beatmap set's PP menu, the profile score list getting stuck loading, profile scope resetting at restart and incorrect accuracy in `/profile`.
+- The Torii catalogue skips pages without new results while a new cursor is available. It remains accessible without signing in.
+- Fixed selecting circles and sliders in the editor when their drawable is temporarily unavailable.
+- Difficulty memos open replays at the saved timestamp and show an error when the map or replay is unavailable.
 
-The library, variant and profile changes still require the manual in-game checks listed in [VALIDATION.md](VALIDATION.md). Compatibility of the variant mods, scores and replays with other clients has not been verified.
+### Security
+
+- Updated MessagePack and SignalR to address the advisories reported in the previous build.
+
+Playback of genuine MOsu replays and identity handling in other clients still need confirmation. The Linux crash reported after long sessions remains under investigation. See [VALIDATION.md](VALIDATION.md) for validation scope.
 
 ## [0.4.0] - 2026-11-05
 

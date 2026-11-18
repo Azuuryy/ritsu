@@ -40,6 +40,36 @@ The client blocks framework requests before transport, does not instantiate an a
 - Interactive control was stopped with Escape after the reference launch. Later checks use automated scenarios and engine captures without window control.
 
 
+## Decoy performance measurements — 2026-11-18
+
+Measured a perfect play on the publicly available [shiho - ODDS & ENDS [Illumination]](https://osu.ppy.sh/beatmapsets/2203727#osu/4664676), at 192 BPM, using the locally decoded `.osu` file with SHA-256 `7f0ab67f59429e67a6f6b1f42e1a2534a776c0311effb2fcda3bb1682cbff790`. The beatmap file is not included in this repository. Ritsu calculated 467.534 PP and 6.7724 stars without Decoy Circles.
+
+| Minimum interval | Decoys | Real Fake PP | Grayscale PP |
+| --- | ---: | ---: | ---: |
+| 2 beats | 246 | 554.010 | 510.772 |
+| 4 beats | 166 | 550.986 | 509.260 |
+| 8 beats | 99 | 545.325 | 506.429 |
+| 16 beats | 54 | 535.768 | 501.651 |
+| 32 beats | 30 | 523.638 | 495.586 |
+
+At the default 8 beats, Real Fake adds 16.639% over the no-mod perfect estimate. Changing to 2 beats adds 147 decoys but only 8.685 PP because the current count-based bonus saturates. Grayscale uses half the bonus. At 2 beats, reducing minimum note spacing from half to a quarter beat increases the count from 246 to 275 and the Real Fake estimate from 554.010 to 554.701 PP. These are calculator outputs, not measurements of human difficulty or a justification for a particular rebalance. Reproduce locally with `dotnet run --project tools/Ritsu.Validation -- --measure-decoys <path-to-osu-file>`; it reads only the supplied map and does not access the network.
+
+## Repeated profile score saves — 2026-11-18
+
+An isolated Windows test saved 100 scores and read profile statistics and map ranks after each save, with four forced garbage collections, then reloaded the profile metadata successfully. It does not exercise gameplay, native audio or the Linux renderer and does not reproduce or resolve the reported Linux SIGSEGV.
+
+## Editor selection safety — 2026-11-18
+
+Two headless regression cases reproduced exceptions when selected circle and slider blueprints had no drawable. After applying the relevant upstream guards, those cases and the existing circle, slider and slider-control selection tests passed (29 tests). This does not verify every editor interaction or Aspire map.
+
+## Decoy marker rendering — 2026-11-18
+
+Headless gameplay tests checked the actual Argon and classic skin drawables for an empty marker, numbers 0, 7 and 99, and the corresponding cross visibility. The tests also exercised decoy judgements and half-beat patterns at 300 and 400 BPM. An additional 35-test run covered the configurable quarter-beat placement and its serialization, including gameplay at 300 and 400 BPM. Visual confirmation in the desktop client and the reported maps remain open.
+
+## Offline catalogue and replay import — 2026-11-18
+
+Seven targeted tests passed: catalogue search and media do not reach an injected HTTP transport; downloads are rejected through both offline API and direct entry; the catalogue displays its offline notice; and synthetic FSA, SA and RandomV2 replays retain their settings after import. Additional headless tests generated FSA, SA, RandomV2, No Sliding and Circle Generation replays using Ritsu transformations, imported them and played each to completion with maximum combo and no downgraded primary or tick judgements. `Ritsu.Validation --catalogue-checks` passed without HTTP transport, and `--checks` reported no HTTP, socket or DNS attempt during its rejected operations. These checks do not attest compatibility with an actual MOsu replay or another client. These transport rejection checks are historical. The Torii catalogue was subsequently restored and its unauthenticated cursor and media controls passed on an injected transport. This does not cover extended live pagination.
+
 ## Optional Torii catalogue — 2026-11-04
 
 Debug compilation, Bootstrap, catalogue transport checks and existing offline checks passed. An isolated game session displayed live catalogue covers, loaded and played a native audio preview, and downloaded and imported Kenji Ninuma - DISCO★PRINCE through Torii into a separate test library. This does not attest playback of every provider's preview or compatibility with every archive. Torii-exclusive maps without a preview URL have no audio-preview button. The catalogue intentionally uses the network; the offline checks concern the other disabled online services and local-play path.
