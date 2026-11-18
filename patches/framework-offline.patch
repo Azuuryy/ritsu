@@ -369,3 +369,38 @@ index 91232dfb7..efa431617 100644
              }
              catch (Exception e)
              {
+diff --git a/osu.Framework/Graphics/Containers/FlowContainer.cs b/osu.Framework/Graphics/Containers/FlowContainer.cs
+index 78f9f40d0..d0aabb84c 100644
+--- a/osu.Framework/Graphics/Containers/FlowContainer.cs
++++ b/osu.Framework/Graphics/Containers/FlowContainer.cs
+@@ -165,7 +165,7 @@ private void performLayout()
+         {
+             OnLayout?.Invoke();
+ 
+-            if (!Children.Any())
++            if (Children.Count == 0)
+                 return;
+ 
+             int processedCount = 0;
+diff --git a/osu.Framework/Graphics/Rendering/TextureBindTrace.cs b/osu.Framework/Graphics/Rendering/TextureBindTrace.cs
+index 1d95eca8d..fc225f633 100644
+--- a/osu.Framework/Graphics/Rendering/TextureBindTrace.cs
++++ b/osu.Framework/Graphics/Rendering/TextureBindTrace.cs
+@@ -55,7 +55,7 @@ public static class TextureBindTrace
+         /// es justamente de orden: saber que las mismas dos texturas se alternan no alcanza,
+         /// hace falta saber que drawable se mete en el medio y parte el lote.
+         /// </remarks>
+-        public static string CurrentSource;
++        public static string? CurrentSource;
+ 
+         /// <summary>Empieza a grabar. Se detiene sola al llegar al tope.</summary>
+         public static void Start()
+@@ -114,7 +114,7 @@ public static void RecordWrap(string motivo)
+         }
+ 
+         /// <summary>Escribe lo grabado y para. Devuelve la ruta, o null si no habia nada.</summary>
+-        public static string Dump(string label)
++        public static string? Dump(string label)
+         {
+             List<string> copia;
+ 
