@@ -115,7 +115,19 @@ namespace osu.Game.Screens.Select
                     return TryUpdateCriteriaRange(ref criteria.BeatDivisor, op, value, tryParseInt);
 
                 case "status":
-                    return TryUpdateCriteriaSet(ref criteria.OnlineStatus, op, value);
+                    if (Offline.RitsuOffline.Enabled)
+                        value = string.Join(",", value.Split(',').Select(part => part.Trim().ToLowerInvariant() switch
+                        {
+                            "none" or "unknown" or "blacklisted" or "banned" => "unranked",
+                            _ => part.Trim(),
+                        }));
+                    bool statusParsed = TryUpdateCriteriaSet(ref criteria.OnlineStatus, op, value);
+                    if (statusParsed && Offline.RitsuOffline.Enabled)
+                    {
+                        criteria.OnlineStatus.Values.Remove(osu.Game.Beatmaps.BeatmapOnlineStatus.None);
+                        criteria.OnlineStatus.Values.Remove(osu.Game.Beatmaps.BeatmapOnlineStatus.Blacklisted);
+                    }
+                    return statusParsed;
 
                 case "creator":
                 case "author":

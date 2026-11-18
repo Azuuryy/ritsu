@@ -714,6 +714,9 @@ namespace osu.Game.Screens.Select
                 if (ShowReplay != null)
                     items.Add(new OsuMenuItem(SongSelectStrings.WatchReplay, MenuItemType.Standard, () => ShowReplay.Invoke(Score)));
                 items.Add(new OsuMenuItem(CommonStrings.Export, MenuItemType.Standard, () => scoreManager.Export(Score)));
+                var profileExport = RitsuScoreExportMenu.Create(ritsuProfiles, dialogOverlay, scoreManager, Score);
+                if (profileExport != null)
+                    items.Add(profileExport);
                 items.Add(new OsuMenuItem(Resources.Localisation.Web.CommonStrings.ButtonsDelete, MenuItemType.Destructive, () => dialogOverlay?.Push(new LocalScoreDeleteDialog(Score))));
 
                 return items.ToArray();

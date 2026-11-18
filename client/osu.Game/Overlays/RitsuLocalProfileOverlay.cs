@@ -177,7 +177,7 @@ namespace osu.Game.Overlays
                 var ppByProfile = new Dictionary<Guid, double> { [id] = statistics.PP };
                 foreach (var profile in allProfiles.Where(p => p.Id != id))
                 {
-                    try { ppByProfile[profile.Id] = profiles.GetStatistics(profile.Id, mode.ShortName).PP; }
+                    try { ppByProfile[profile.Id] = profiles.GetPerformancePoints(profile.Id, mode.ShortName); }
                     catch (Exception ex) { Logger.Error(ex, "Could not load a local profile's PP for the profile selector."); }
                 }
                 int? localRank = statistics.BestScores.Count > 0

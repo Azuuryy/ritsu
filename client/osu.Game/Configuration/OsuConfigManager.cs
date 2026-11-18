@@ -25,6 +25,7 @@ using osu.Game.Overlays.Settings.Sections.Maintenance;
 using osu.Game.Screens.Edit.Compose.Components;
 using osu.Game.Screens.OnlinePlay.Lounge.Components;
 using osu.Game.Screens.Select;
+using osu.Game.Screens.Play.Leaderboards;
 using osu.Game.Screens.Select.Filter;
 using osu.Game.Skinning;
 using osu.Game.Users;
@@ -118,6 +119,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.Skin, SkinInfo.ARGON_SKIN.ToString());
             SetDefault(OsuSetting.CycleSkinsThroughFavoritesOnly, false);
 
+            SetDefault(OsuSetting.RitsuLeaderboardScope, BeatmapLeaderboardScope.Local);
             SetDefault(OsuSetting.BeatmapDetailTab, BeatmapDetailTab.Local);
             SetDefault(OsuSetting.BeatmapLeaderboardSortMode, LeaderboardSortMode.Score);
             SetDefault(OsuSetting.BeatmapDetailModsFilter, false);
@@ -791,5 +793,6 @@ namespace osu.Game.Configuration
         RitsuCalculateMapPerformance,
         RitsuLastVersion,
         RitsuPlaytimeMode,
+        RitsuLeaderboardScope,
     }
 }

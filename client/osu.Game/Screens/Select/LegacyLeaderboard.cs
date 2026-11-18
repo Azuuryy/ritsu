@@ -219,7 +219,13 @@ namespace osu.Game.Screens.Select
 
             // como stable: si estas logueado arrancamos mostrando el ranking Global en los mapas
             // que tienen leaderboard online; sin login queda Local.
-            preferredScope = api.IsLoggedIn ? BeatmapLeaderboardScope.Global : BeatmapLeaderboardScope.Local;
+            if (RitsuOffline.Enabled)
+            {
+                Scope.BindTo(config.GetBindable<BeatmapLeaderboardScope>(OsuSetting.RitsuLeaderboardScope));
+                preferredScope = Scope.Value;
+            }
+            else
+                preferredScope = api.IsLoggedIn ? BeatmapLeaderboardScope.Global : BeatmapLeaderboardScope.Local;
 
             beatmap.BindValueChanged(_ =>
             {
@@ -608,6 +614,9 @@ namespace osu.Game.Screens.Select
                         items.Add(new OsuMenuItem(SongSelectStrings.WatchReplay, MenuItemType.Standard, () => songSelect.PresentScore(score, ScorePresentType.Gameplay)));
 
                     items.Add(new OsuMenuItem(CommonStrings.Export, MenuItemType.Standard, () => scoreManager.Export(score)));
+                    var profileExport = RitsuScoreExportMenu.Create(ritsuProfiles, dialogOverlay, scoreManager, score);
+                    if (profileExport != null)
+                        items.Add(profileExport);
                     items.Add(new OsuMenuItem(osu.Game.Resources.Localisation.Web.CommonStrings.ButtonsDelete, MenuItemType.Destructive, () => dialogOverlay?.Push(new LocalScoreDeleteDialog(score))));
 
                     return items.ToArray();

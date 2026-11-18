@@ -54,7 +54,7 @@ namespace osu.Game
             }
 
             postRitsuNotice(top ? $"{profile.Name} has no best scores in this mode."
-                : $"{profile.Name} · {Ruleset.Value.ShortName} · {statistics.PlayCount:N0} plays · {statistics.PP:0.##} PP · {statistics.Accuracy:P2}");
+                : $"{profile.Name} · {Ruleset.Value.ShortName} · {statistics.PlayCount:N0} plays · {statistics.PP:0.##} PP · {statistics.DisplayAccuracy}");
         }
     }
 }

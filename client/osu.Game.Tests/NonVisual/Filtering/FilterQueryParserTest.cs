@@ -272,6 +272,19 @@ namespace osu.Game.Tests.NonVisual.Filtering
             ClassicAssert.True(filterCriteria.BeatDivisor.IsUpperInclusive);
         }
 
+        [TestCase("unranked")]
+        [TestCase("unknown")]
+        [TestCase("none")]
+        [TestCase("banned")]
+        [TestCase("blacklisted")]
+        public void TestLocalUnrankedStatusAliases(string query)
+        {
+            var criteria = new FilterCriteria();
+            FilterQueryParser.ApplyQueries(criteria, $"status={query}");
+            Assert.That(criteria.OnlineStatus.Values, Is.EquivalentTo(new[] { BeatmapOnlineStatus.Unranked }));
+            Assert.That(criteria.SearchText.Trim(), Is.Empty);
+        }
+
         [Test]
         public void TestPartialStatusMatch()
         {

@@ -16,6 +16,7 @@ using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.IO.Archives;
 using osu.Game.Online.API;
+using osu.Game.Offline;
 using osu.Game.Overlays.Notifications;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Scoring;
@@ -29,6 +30,8 @@ namespace osu.Game.Scoring
         private readonly OsuConfigManager? configManager;
         private readonly ScoreImporter scoreImporter;
         private readonly LegacyScoreExporter scoreExporter;
+        private readonly Storage storage;
+        private readonly RitsuProfileManager? profiles;
 
         public override bool PauseImports
         {
@@ -41,9 +44,11 @@ namespace osu.Game.Scoring
         }
 
         public ScoreManager(RulesetStore rulesets, Func<BeatmapManager> beatmaps, Storage storage, RealmAccess realm, IAPIProvider api,
-                            OsuConfigManager? configManager = null)
+                            OsuConfigManager? configManager = null, RitsuProfileManager? profiles = null)
             : base(storage, realm)
         {
+            this.storage = storage;
+            this.profiles = profiles;
             this.beatmaps = beatmaps;
             this.configManager = configManager;
 
@@ -212,11 +217,17 @@ namespace osu.Game.Scoring
         /// The <see cref="IScoreInfo"/> is re-retrieved from the database to ensure all the required data
         /// for exporting a replay are present (may have missing properties if it was retrieved from online data).
         /// </remarks>
-        public Task Export(ScoreInfo scoreInfo)
+        public Task Export(ScoreInfo scoreInfo, string? profileName = null, bool original = false)
         {
             ScoreInfo? databasedScoreInfo = getDatabasedScoreInfo(scoreInfo);
-
-            return databasedScoreInfo == null ? Task.CompletedTask : scoreExporter.ExportAsync(databasedScoreInfo.ToLive(Realm));
+            if (databasedScoreInfo == null)
+                return Task.CompletedTask;
+            profileName = original ? null : profileName ?? profiles?.GetScoreProfileName(databasedScoreInfo.ID);
+            var exporter = profileName == null ? scoreExporter : new LegacyScoreExporter(storage, profileName)
+            {
+                PostNotification = obj => PostNotification?.Invoke(obj)
+            };
+            return exporter.ExportAsync(databasedScoreInfo.ToLive(Realm));
         }
 
         public Task<Live<ScoreInfo>?> ImportAsUpdate(ProgressNotification notification, ImportTask task, ScoreInfo original) => scoreImporter.ImportAsUpdate(notification, task, original);

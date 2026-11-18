@@ -136,7 +136,7 @@ namespace osu.Game.Screens.Select
             match &= !criteria.BPM.HasFilter || criteria.BPM.IsInRange(beatmap.BPM);
 
             match &= !criteria.BeatDivisor.HasFilter || criteria.BeatDivisor.IsInRange(beatmap.BeatDivisor);
-            match &= !criteria.OnlineStatus.HasFilter || criteria.OnlineStatus.IsInRange(beatmap.Status);
+            match &= !criteria.OnlineStatus.HasFilter || criteria.OnlineStatus.IsInRange(criteria.GetDisplayStatus(beatmap));
 
             if (!match) return false;
 

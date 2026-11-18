@@ -11,6 +11,7 @@ using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Localisation;
+using osu.Framework.Input.Events;
 using osu.Game.Library;
 using osu.Game.Collections;
 using osu.Game.Database;
@@ -94,7 +95,7 @@ namespace osu.Game.Overlays.Profile
             Children = new Drawable[]
             {
                 items = new FillFlowContainer { RelativeSizeAxes = Axes.X, AutoSizeAxes = Axes.Y, Direction = FillDirection.Vertical, Spacing = new Vector2(0, 2) },
-                more = new ShowMoreButton { Anchor = Anchor.TopCentre, Origin = Anchor.TopCentre, Margin = new MarginPadding { Top = 10 }, Action = () => { shown += 50; refresh(); } },
+                more = new ImmediateShowMoreButton { Anchor = Anchor.TopCentre, Origin = Anchor.TopCentre, Margin = new MarginPadding { Top = 10 }, Action = () => { shown += 50; refresh(); } },
                 missing = new OsuSpriteText { Text = "No local scores yet.", Font = OsuFont.GetFont(size: 14), Margin = new MarginPadding { Vertical = 4 } },
             },
         };
@@ -111,6 +112,21 @@ namespace osu.Game.Overlays.Profile
             scores = value;
             shown = 5;
             if (ready) refresh();
+        }
+
+        private partial class ImmediateShowMoreButton : ShowMoreButton
+        {
+            protected override bool OnClick(ClickEvent e)
+            {
+                try
+                {
+                    return base.OnClick(e);
+                }
+                finally
+                {
+                    IsLoading = false;
+                }
+            }
         }
 
         private void refresh()
@@ -147,6 +163,12 @@ namespace osu.Game.Overlays.Profile
         [Resolved(canBeNull: true)]
         private RitsuLibrary? library { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private IDialogOverlay? dialogs { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private ScoreManager? scoreManager { get; set; }
+
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
@@ -160,7 +182,7 @@ namespace osu.Game.Overlays.Profile
             Height = 48;
         }
 
-        public LocalisableString TooltipText => "Right-click to include or exclude this score from profile PP.";
+        public override LocalisableString TooltipText => "Right-click to include or exclude this score from profile PP.";
 
         public MenuItem[] ContextMenuItems
         {
@@ -175,6 +197,13 @@ namespace osu.Game.Overlays.Profile
 
                 if (library != null && score.BeatmapInfo is { } beatmap)
                     items.Add(new OsuMenuItem("Collections") { Items = RitsuCollectionMenu.Create(realm, collections, beatmap, library, profiles, score) });
+
+                var profileExport = RitsuScoreExportMenu.Create(profiles, dialogs, scoreManager, score);
+                if (profileExport != null)
+                {
+                    items.Add(new OsuMenuItem("Export replay", MenuItemType.Standard, () => scoreManager!.Export(score)));
+                    items.Add(profileExport);
+                }
 
                 return items.ToArray();
             }

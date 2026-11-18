@@ -10,6 +10,7 @@ using NUnit.Framework;
 using NUnit.Framework.Legacy;
 using osu.Framework.Bindables;
 using osu.Game.Beatmaps;
+using osu.Game.Offline;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Filter;
@@ -58,6 +59,27 @@ namespace osu.Game.Tests.NonVisual.Filtering
             BeatDivisor = 12,
             Status = BeatmapOnlineStatus.Loved
         };
+
+        [Test]
+        public void TestLocalStatusFilterUsesActiveProfileExclusions()
+        {
+            var beatmap = getExampleBeatmap();
+            beatmap.Status = BeatmapOnlineStatus.Ranked;
+            var profile = new RitsuProfile();
+            var criteria = new FilterCriteria { LocalProfile = profile };
+            FilterQueryParser.ApplyQueries(criteria, "status=unranked");
+            Assert.That(BeatmapCarouselFilterMatching.CheckCriteriaMatch(beatmap, criteria), Is.False);
+
+            profile.ExcludedBeatmapIds.Add(beatmap.ID);
+            Assert.That(BeatmapCarouselFilterMatching.CheckCriteriaMatch(beatmap, criteria), Is.True);
+            criteria.LocalProfile = new RitsuProfile();
+            Assert.That(BeatmapCarouselFilterMatching.CheckCriteriaMatch(beatmap, criteria), Is.False);
+
+            beatmap.Status = BeatmapOnlineStatus.Blacklisted;
+            Assert.That(BeatmapCarouselFilterMatching.CheckCriteriaMatch(beatmap, criteria), Is.True);
+            beatmap.Status = BeatmapOnlineStatus.None;
+            Assert.That(BeatmapCarouselFilterMatching.CheckCriteriaMatch(beatmap, criteria), Is.True);
+        }
 
         [Test]
         public void TestCriteriaMatchingNoRuleset()

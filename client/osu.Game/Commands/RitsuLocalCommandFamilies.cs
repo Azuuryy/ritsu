@@ -181,8 +181,8 @@ namespace osu.Game
 
                 showRitsuInformation($"Local profiles · {mode}", new[]
                 {
-                    $"{current.Name}: {first.PP:0.##} PP · {first.Accuracy:P2} · {first.PlayCount} plays",
-                    $"{other.Name}: {second.PP:0.##} PP · {second.Accuracy:P2} · {second.PlayCount} plays",
+                    $"{current.Name}: {first.PP:0.##} PP · {first.DisplayAccuracy} · {first.PlayCount} plays",
+                    $"{other.Name}: {second.PP:0.##} PP · {second.DisplayAccuracy} · {second.PlayCount} plays",
                 });
             }));
         }

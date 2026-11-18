@@ -39,6 +39,11 @@ namespace osu.Game.Screens.Select
         public OptionalRange<double> BPM;
         public OptionalRange<int> BeatDivisor;
         public OptionalSet<BeatmapOnlineStatus> OnlineStatus = new OptionalSet<BeatmapOnlineStatus>();
+        internal RitsuProfile? LocalProfile;
+
+        internal BeatmapOnlineStatus GetDisplayStatus(BeatmapInfo beatmap) => RitsuOffline.Enabled
+            ? RitsuLocalBeatmapStatus.ForBeatmap(beatmap, LocalProfile)
+            : beatmap.Status;
         public OptionalRange<DateTimeOffset> LastPlayed;
         internal OptionalRange<int> PersonalBestMisses;
         internal bool? PlayedThisWeek;

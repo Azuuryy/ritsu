@@ -17,6 +17,9 @@ namespace osu.Game.Beatmaps
         [LocalisableDescription(typeof(SongSelectStrings), nameof(SongSelectStrings.LocallyModified))]
         LocallyModified = -4,
 
+        [Description("Unranked")]
+        Unranked = -5,
+
         [LocalisableDescription(typeof(SongSelectStrings), nameof(SongSelectStrings.StatusUnknown))]
         None = -3,
 
@@ -48,6 +51,6 @@ namespace osu.Game.Beatmaps
     public static class BeatmapSetOnlineStatusExtensions
     {
         public static bool GrantsPerformancePoints(this BeatmapOnlineStatus status)
-            => status == BeatmapOnlineStatus.Ranked || status == BeatmapOnlineStatus.Approved;
+            => Offline.RitsuOffline.Enabled || status == BeatmapOnlineStatus.Ranked || status == BeatmapOnlineStatus.Approved;
     }
 }

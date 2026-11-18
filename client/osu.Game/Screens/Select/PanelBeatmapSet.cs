@@ -225,7 +225,16 @@ namespace osu.Game.Screens.Select
             titleText.Text = new RomanisableString(beatmapSet.Metadata.TitleUnicode, beatmapSet.Metadata.Title);
             artistText.Text = new RomanisableString(beatmapSet.Metadata.ArtistUnicode, beatmapSet.Metadata.Artist);
             updateButton.BeatmapSet = beatmapSet;
-            statusPill.Status = beatmapSet.Status;
+            if (groupedBeatmapSet.Group is RankedStatusGroupDefinition statusGroup)
+            {
+                statusPill.LocalBeatmapSet = null;
+                statusPill.Status = statusGroup.Status;
+            }
+            else
+            {
+                statusPill.LocalBeatmapSet = beatmapSet;
+                statusPill.Status = beatmapSet.Status;
+            }
             spreadDisplay.BeatmapSet.Value = beatmapSet;
         }
 
@@ -237,6 +246,7 @@ namespace osu.Game.Screens.Select
             scheduledBackgroundRetrieval = null;
             setBackground.Beatmap = null;
             updateButton.BeatmapSet = null;
+            statusPill.LocalBeatmapSet = null;
             spreadDisplay.BeatmapSet.Value = null;
         }
 

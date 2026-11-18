@@ -4,11 +4,20 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
+using osu.Framework.Allocation;
+using osu.Framework.Graphics.Containers;
 using osu.Framework.Screens;
 using osu.Framework.Testing;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Online.API;
+using osu.Game.Offline;
+using osu.Game.Overlays;
+using osu.Game.Overlays.Profile;
+using osu.Game.Overlays.ToriiBriefing;
+using osu.Game.Graphics.Containers;
+using osu.Game.Graphics.UserInterface;
+using osuTK.Input;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Catch;
 using osu.Game.Rulesets.Mania;
@@ -164,13 +173,62 @@ namespace osu.Game.Tests.Visual.Navigation
             AddUntilStep("original beatmap selected", () => Game.Beatmap.Value.BeatmapInfo.ID == previousBeatmap.ID);
             AddUntilStep("carousel selection synchronized", () => ((SoloSongSelect)Game.ScreenStack.CurrentScreen).ChildrenOfType<BeatmapCarousel>().Single().CurrentBeatmap?.ID == previousBeatmap.ID);
             AddStep("present local profile score", () => Game.PresentScoreFromLocalProfile(score()));
-            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.Score?.ID == score().ID);
+            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.IsCurrentScreen() && results.Score?.ID == score().ID);
             AddAssert("score results stay above song select", () => Game.ScreenStack.CurrentScreen.GetParentScreen() is SoloSongSelect);
 
             AddStep("back from score", () => Game.ScreenStack.CurrentScreen.Exit());
             AddUntilStep("return to song select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
             AddUntilStep("score beatmap selected", () => Game.Beatmap.Value.BeatmapInfo.ID == scoreBeatmap.ID);
             AddUntilStep("carousel selection restored", () => ((SoloSongSelect)Game.ScreenStack.CurrentScreen).ChildrenOfType<BeatmapCarousel>().Single().CurrentBeatmap?.ID == scoreBeatmap.ID);
+        }
+
+        [Test]
+        public void TestExpandLocalScoresAndOpenScore()
+        {
+            AddStep("dismiss welcome overlay", () => Game.ChildrenOfType<ToriiBriefingOverlay>().FirstOrDefault()?.Hide());
+            AddStep("select osu ruleset", () => Game.Ruleset.Value = new OsuRuleset().RulesetInfo);
+            AddStep("enter song select", () => Game.ChildrenOfType<ButtonSystem>().Single().OnSolo?.Invoke());
+            AddUntilStep("song select is current", () => Game.ScreenStack.CurrentScreen is SoloSongSelect select && select.CarouselItemsPresented);
+            var scores = Enumerable.Range(0, 6).Select(i => importScore(100 + i, totalScore: 1000 + i)).ToArray();
+            AddStep("associate scores with local profile", () =>
+            {
+                var profiles = Game.Dependencies.Get<RitsuProfileManager>();
+                foreach (var score in scores)
+                    profiles.AssociateNewScore(score().ID, profiles.ActiveProfileId, "osu", 0, "[]");
+            });
+            AddAssert("scores associated", () =>
+            {
+                var profiles = Game.Dependencies.Get<RitsuProfileManager>();
+                return profiles.GetScores(profiles.ActiveProfileId, "osu").Count == 6;
+            });
+            AddUntilStep("welcome overlay is loaded", () => Game.ChildrenOfType<ToriiBriefingOverlay>().Any(o => o.IsLoaded));
+            AddStep("close welcome overlay", () => Game.ChildrenOfType<ToriiBriefingOverlay>().Single().Hide());
+            AddUntilStep("welcome overlay is closed", () => !Game.ChildrenOfType<ToriiBriefingOverlay>().Single().IsPresent);
+            AddStep("open local profile", () => Game.ToggleLocalProfile());
+            RitsuLocalProfileOverlay overlay() => Game.ChildrenOfType<RitsuLocalProfileOverlay>().Single();
+            RitsuScoreSubsection recent() => overlay().ChildrenOfType<RitsuScoreSubsection>().First(section => section.ChildrenOfType<RitsuProfileScore>().Any());
+            AddUntilStep("wait for profile to open", () => overlay().State.Value == Visibility.Visible);
+            AddUntilStep("wait for profile scores", () => overlay().ChildrenOfType<RitsuScoreSubsection>().Any(section => section.ChildrenOfType<RitsuProfileScore>().Count() == 5));
+            AddStep("scroll to show more", () => overlay().ChildrenOfType<SectionsContainer<ProfileSection>>().Single().ScrollTo(recent().ChildrenOfType<ShowMoreButton>().Single()));
+            AddUntilStep("show more is clickable", () => recent().ChildrenOfType<ShowMoreButton>().Single().IsHovered || recent().ChildrenOfType<ShowMoreButton>().Single().ScreenSpaceDrawQuad.Centre.Y < DrawHeight);
+            AddStep("click show more", () =>
+            {
+                InputManager.MoveMouseTo(recent().ChildrenOfType<ShowMoreButton>().Single());
+                InputManager.Click(MouseButton.Left);
+            });
+            AddUntilStep("more scores are shown", () => recent().ChildrenOfType<RitsuProfileScore>().Count() == 6);
+            AddAssert("show more is not stuck loading", () => !recent().ChildrenOfType<ShowMoreButton>().Single().IsLoading);
+            AddStep("scroll to score", () => overlay().ChildrenOfType<SectionsContainer<ProfileSection>>().Single().ScrollTo(recent().ChildrenOfType<RitsuProfileScore>().First()));
+            AddStep("open score", () =>
+            {
+                InputManager.MoveMouseTo(recent().ChildrenOfType<RitsuProfileScore>().First());
+                InputManager.Click(MouseButton.Left);
+            });
+            AddUntilStep("score opens", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen);
+            AddStep("return from score", () => Game.ScreenStack.CurrentScreen.Exit());
+            AddUntilStep("return to song select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
+            AddStep("reopen local profile", () => Game.ToggleLocalProfile());
+            AddUntilStep("profile scores load again", () => overlay().State.Value == Visibility.Visible && overlay().ChildrenOfType<RitsuScoreSubsection>().Any(section => section.ChildrenOfType<RitsuProfileScore>().Count() == 5));
         }
 
         [Test]
@@ -183,7 +241,7 @@ namespace osu.Game.Tests.Visual.Navigation
             AddStep("select score beatmap", () => Game.Beatmap.Value = Game.BeatmapManager.GetWorkingBeatmap(score().BeatmapInfo, true));
             AddUntilStep("score beatmap selected", () => Game.Beatmap.Value.BeatmapInfo.ID == score().BeatmapInfo.ID);
             AddStep("present score", () => Game.PresentScore(score()));
-            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.Score?.ID == score().ID);
+            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.IsCurrentScreen() && results.Score?.ID == score().ID);
             AddStep("back from score", () => Game.ScreenStack.CurrentScreen.Exit());
             AddUntilStep("return to song select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
             AddUntilStep("selected beatmap restored", () => Game.Beatmap.Value.BeatmapInfo.ID == score().BeatmapInfo.ID);
@@ -196,11 +254,11 @@ namespace osu.Game.Tests.Visual.Navigation
             AddStep("enter song select", () => Game.ChildrenOfType<ButtonSystem>().Single().OnSolo?.Invoke());
             AddUntilStep("song select is current", () => Game.ScreenStack.CurrentScreen is SoloSongSelect songSelect && songSelect.CarouselItemsPresented);
 
-            Func<ScoreInfo> score = importScore(10, scoreBeatmap: beatmap.Beatmaps.Last());
+            Func<ScoreInfo> score = importScore(10, getBeatmap: () => beatmap.Beatmaps.Last());
             AddStep("select another beatmap", () => Game.Beatmap.Value = Game.BeatmapManager.GetWorkingBeatmap(beatmap.Beatmaps.First(), true));
             AddUntilStep("selected beatmap is current", () => Game.Beatmap.Value.BeatmapInfo.ID == beatmap.Beatmaps.First().ID);
             AddStep("present score", () => Game.PresentScore(score()));
-            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.Score?.ID == score().ID);
+            AddUntilStep("wait for score results", () => Game.ScreenStack.CurrentScreen is SoloResultsScreen results && results.IsCurrentScreen() && results.Score?.ID == score().ID);
             AddStep("back from score", () => Game.ScreenStack.CurrentScreen.Exit());
             AddUntilStep("return to main menu", () => Game.ScreenStack.CurrentScreen is MainMenu);
         }
@@ -252,7 +310,7 @@ namespace osu.Game.Tests.Visual.Navigation
             AddUntilStep("wait for menu", () => Game.ScreenStack.CurrentScreen is MainMenu);
         }
 
-        private Func<ScoreInfo> importScore(int i, RulesetInfo? ruleset = null, string? hash = null, BeatmapInfo? scoreBeatmap = null, Func<BeatmapInfo>? getBeatmap = null)
+        private Func<ScoreInfo> importScore(int i, RulesetInfo? ruleset = null, string? hash = null, BeatmapInfo? scoreBeatmap = null, Func<BeatmapInfo>? getBeatmap = null, long totalScore = 0)
         {
             ScoreInfo? imported = null;
             AddStep($"import score {i}", () =>
@@ -261,6 +319,7 @@ namespace osu.Game.Tests.Visual.Navigation
                 {
                     Hash = hash ?? Guid.NewGuid().ToString(),
                     OnlineID = i,
+                    TotalScore = totalScore,
                     BeatmapInfo = getBeatmap?.Invoke() ?? scoreBeatmap ?? beatmap.Beatmaps.First(),
                     Ruleset = ruleset ?? new OsuRuleset().RulesetInfo,
                     User = new GuestUser(),

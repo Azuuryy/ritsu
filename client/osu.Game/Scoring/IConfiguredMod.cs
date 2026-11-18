@@ -41,7 +41,8 @@ namespace osu.Game.Scoring
             if (configuredMod is Mod modAlready)
                 return modAlready;
 
-            Mod? resultMod = ruleset.CreateModFromAcronym(configuredMod.Acronym);
+            string acronym = Offline.RitsuOffline.Enabled ? Legacy.RitsuLegacyScoreDecoder.MapLegacyAcronym(configuredMod.Acronym, ruleset) : configuredMod.Acronym;
+            Mod? resultMod = ruleset.CreateModFromAcronym(acronym);
 
             if (resultMod == null)
             {

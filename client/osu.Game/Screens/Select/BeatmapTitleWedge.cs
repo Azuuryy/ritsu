@@ -219,6 +219,7 @@ namespace osu.Game.Screens.Select
             var metadata = working.Value.Metadata;
             var beatmapInfo = working.Value.BeatmapInfo;
 
+            statusPill.LocalBeatmap = beatmapInfo;
             statusPill.Status = beatmapInfo.Status;
 
             var titleText = new RomanisableString(metadata.TitleUnicode, metadata.Title);

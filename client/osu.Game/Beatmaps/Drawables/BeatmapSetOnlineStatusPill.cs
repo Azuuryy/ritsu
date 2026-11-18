@@ -14,6 +14,7 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Localisation;
 using osu.Game.Overlays;
+using osu.Game.Offline;
 using osuTK.Graphics;
 
 namespace osu.Game.Beatmaps.Drawables
@@ -46,6 +47,45 @@ namespace osu.Game.Beatmaps.Drawables
         }
 
         private BeatmapOnlineStatus status;
+        private BeatmapInfo? localBeatmap;
+        private BeatmapSetInfo? localBeatmapSet;
+
+        [Resolved(CanBeNull = true)]
+        private RitsuProfileManager? profiles { get; set; }
+
+        public BeatmapInfo? LocalBeatmap
+        {
+            set
+            {
+                localBeatmap = value;
+                localBeatmapSet = null;
+                if (IsLoaded) updateState();
+            }
+        }
+
+        public BeatmapSetInfo? LocalBeatmapSet
+        {
+            set
+            {
+                localBeatmapSet = value;
+                localBeatmap = null;
+                if (IsLoaded) updateState();
+            }
+        }
+
+        private BeatmapOnlineStatus displayStatus
+        {
+            get
+            {
+                if (!RitsuOffline.Enabled)
+                    return Status;
+                if (localBeatmap != null)
+                    return RitsuLocalBeatmapStatus.ForBeatmap(localBeatmap, profiles?.GetActiveProfile());
+                if (localBeatmapSet != null)
+                    return RitsuLocalBeatmapStatus.ForSet(localBeatmapSet, profiles?.GetActiveProfile());
+                return Status;
+            }
+        }
 
         public float TextSize
         {
@@ -98,15 +138,25 @@ namespace osu.Game.Beatmaps.Drawables
         {
             base.LoadComplete();
 
+            if (profiles != null) profiles.Changed += onProfileChanged;
             updateState();
             FinishTransforms(true);
+        }
+
+        private void onProfileChanged() => Schedule(() => { if (!IsDisposed) updateState(); });
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (isDisposing && profiles != null) profiles.Changed -= onProfileChanged;
+            base.Dispose(isDisposing);
         }
 
         private void updateState()
         {
             double duration = Animated ? animation_duration : 0;
+            var displayed = displayStatus;
 
-            if (Status == BeatmapOnlineStatus.None && !ShowUnknownStatus)
+            if (displayed == BeatmapOnlineStatus.None && !ShowUnknownStatus)
             {
                 this.FadeOut(duration, Easing.OutQuint);
                 return;
@@ -130,7 +180,7 @@ namespace osu.Game.Beatmaps.Drawables
 
             Color4 statusTextColour;
 
-            if (Status == BeatmapOnlineStatus.Blacklisted)
+            if (displayed == BeatmapOnlineStatus.Blacklisted)
             {
                 statusTextColour = Color4Extensions.FromHex(@"ff3b3b");
                 BorderThickness = 1.5f;
@@ -141,23 +191,25 @@ namespace osu.Game.Beatmaps.Drawables
                 BorderThickness = 0;
 
                 if (colourProvider != null)
-                    statusTextColour = status == BeatmapOnlineStatus.Graveyard ? colourProvider.Background1 : colourProvider.Background3;
+                    statusTextColour = displayed == BeatmapOnlineStatus.Graveyard ? colourProvider.Background1 : colourProvider.Background3;
                 else
-                    statusTextColour = status == BeatmapOnlineStatus.Graveyard ? colours.GreySeaFoamLight : Color4.Black;
+                    statusTextColour = displayed == BeatmapOnlineStatus.Graveyard ? colours.GreySeaFoamLight : Color4.Black;
             }
 
             statusText.FadeColour(statusTextColour, duration, Easing.OutQuint);
-            background.FadeColour(OsuColour.ForBeatmapSetOnlineStatus(Status) ?? colourProvider?.Light1 ?? colours.GreySeaFoamLighter, duration, Easing.OutQuint);
+            background.FadeColour(OsuColour.ForBeatmapSetOnlineStatus(displayed) ?? colourProvider?.Light1 ?? colours.GreySeaFoamLighter, duration, Easing.OutQuint);
 
-            statusText.Text = Status.GetLocalisableDescription().ToUpper();
+            statusText.Text = displayed.GetLocalisableDescription().ToUpper();
         }
 
         public LocalisableString TooltipText
         {
             get
             {
-                switch (Status)
+                switch (displayStatus)
                 {
+                    case BeatmapOnlineStatus.Unranked:
+                        return "Local status. PP inclusion is controlled by the active profile's exclusions.";
                     case BeatmapOnlineStatus.LocallyModified:
                         return SongSelectStrings.LocallyModifiedTooltip;
 

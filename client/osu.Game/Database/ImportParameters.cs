@@ -27,5 +27,9 @@ namespace osu.Game.Database
         /// This is useful for cases where an import <em>must</em> complete even if gameplay is in progress.
         /// </summary>
         public bool ImportImmediately { get; set; }
+
+        public bool PreserveExisting { get; set; }
+
+        public string? ModelHashOverride { get; set; }
     }
 }

@@ -117,6 +117,7 @@ namespace osu.Game
                 simple("osu.simulate", "/simulate", "Simulate PP", () => !Beatmap.IsDefault, () => ShowRitsuMap(true)),
                 simple("osu.visualize", "/visualize", "Simulate PP", () => !Beatmap.IsDefault, () => ShowRitsuMap(true)),
                 simple("osu.profile", "/profile", "Show active local profile statistics", () => true, () => showRitsuProfile(false)),
+                simple("osu.import-replay", "/import replay", "Import a replay into a local profile", () => true, () => ShowRitsuReplayImport()),
                 simple("osu.top", "/top", "Browse best scores of the active profile", () => true, () => showRitsuProfile(true)),
                 simple("recent", "/recent", "Open last local score", () => true, openRitsuRecent),
                 simple("compare", "/compare", "Compare local scores", () => selectedDifficulty() != null, () =>

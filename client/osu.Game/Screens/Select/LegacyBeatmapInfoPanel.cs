@@ -13,6 +13,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
 using osu.Game.Beatmaps;
+using osu.Game.Offline;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Rulesets;
@@ -49,6 +50,9 @@ namespace osu.Game.Screens.Select
 
         [Resolved]
         private SkinManager skins { get; set; } = null!;
+
+        [Resolved(CanBeNull = true)]
+        private RitsuProfileManager? profiles { get; set; }
 
         private Sprite statusIcon = null!;
         private SpriteIcon statusGlyph = null!;
@@ -186,6 +190,7 @@ namespace osu.Game.Screens.Select
         protected override void LoadComplete()
         {
             base.LoadComplete();
+            if (profiles != null) profiles.Changed += onProfileChanged;
             beatmap.BindValueChanged(_ => updateDisplay(), true);
             // mods y ruleset afectan la linea de length/BPM y la de stats; el bindable de star
             // rating de abajo ya trackea los cambios de mod/ruleset por su cuenta.
@@ -269,7 +274,14 @@ namespace osu.Game.Screens.Select
                 }, cts.Token);
             }
 
-            var status = info.BeatmapSet?.Status ?? info.Status;
+            updateStatus(info);
+        }
+
+        private void onProfileChanged() => Schedule(() => { if (!IsDisposed) updateStatus(beatmap.Value.BeatmapInfo); });
+
+        private void updateStatus(BeatmapInfo info)
+        {
+            var status = RitsuOffline.Enabled ? RitsuLocalBeatmapStatus.ForBeatmap(info, profiles?.GetActiveProfile()) : info.BeatmapSet?.Status ?? info.Status;
 
             var tex = skin.GetTexture(statusTextureName(status)) ?? skins.DefaultClassicSkin.GetTexture(statusTextureName(status));
             statusIcon.Texture = tex;
@@ -367,6 +379,7 @@ namespace osu.Game.Screens.Select
 
         protected override void Dispose(bool isDisposing)
         {
+            if (isDisposing && profiles != null) profiles.Changed -= onProfileChanged;
             countsCancellation?.Cancel();
             starCancellation?.Cancel();
             baselineCancellation?.Cancel();

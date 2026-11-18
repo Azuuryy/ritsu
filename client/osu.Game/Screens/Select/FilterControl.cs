@@ -913,7 +913,7 @@ namespace osu.Game.Screens.Select
 
         private partial class PerformanceCalculationButton : ShearedToggleButton, IHasTooltip
         {
-            public LocalisableString TooltipText => "Calculate PP for maps. When disabled, only cached values are used.";
+            public override LocalisableString TooltipText => "Calculate PP for maps. When disabled, only cached values are used.";
         }
 
         private partial class GroupModeDropdown : ShearedDropdown<GroupModeDropdownItem>
