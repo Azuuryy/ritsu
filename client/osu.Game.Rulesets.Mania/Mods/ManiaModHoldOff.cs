@@ -15,7 +15,7 @@ using osu.Game.Rulesets.Mania.Beatmaps;
 
 namespace osu.Game.Rulesets.Mania.Mods
 {
-    public class ManiaModHoldOff : Mod, IApplicableAfterBeatmapConversion
+    public class ManiaModHoldOff : Mod, IApplicableAfterBeatmapConversion, IAffectsDifficulty
     {
         public override string Name => "Hold Off";
 

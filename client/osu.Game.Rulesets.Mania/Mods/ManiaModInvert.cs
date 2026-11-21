@@ -15,7 +15,7 @@ using osu.Game.Rulesets.Mods;
 
 namespace osu.Game.Rulesets.Mania.Mods
 {
-    public class ManiaModInvert : Mod, IApplicableAfterBeatmapConversion
+    public class ManiaModInvert : Mod, IApplicableAfterBeatmapConversion, IAffectsDifficulty
     {
         public override string Name => "Invert";
 

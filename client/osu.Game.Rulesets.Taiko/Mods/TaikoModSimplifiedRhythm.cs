@@ -17,7 +17,7 @@ using osu.Game.Rulesets.Taiko.Objects;
 
 namespace osu.Game.Rulesets.Taiko.Mods
 {
-    public class TaikoModSimplifiedRhythm : Mod, IApplicableToBeatmap
+    public class TaikoModSimplifiedRhythm : Mod, IApplicableToBeatmap, IAffectsDifficulty
     {
         public override string Name => "Simplified Rhythm";
         public override string Acronym => "SR";

@@ -1304,7 +1304,7 @@ index 0000000000..bbf93084d6
 +    }
 +}
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModCircleGeneration.cs b/osu.Game.Rulesets.Osu/Mods/OsuModCircleGeneration.cs
-index d4cad241be..8b03b41636 100644
+index d4cad24..5e70135 100644
 --- a/osu.Game.Rulesets.Osu/Mods/OsuModCircleGeneration.cs
 +++ b/osu.Game.Rulesets.Osu/Mods/OsuModCircleGeneration.cs
 @@ -1,6 +1,8 @@
@@ -1316,7 +1316,16 @@ index d4cad241be..8b03b41636 100644
  using System;
  using System.Collections.Generic;
  using System.Linq;
-@@ -31,6 +33,7 @@ public partial class OsuModCircleGeneration : Mod, IApplicableToBeatmap, IModosu
+@@ -23,7 +25,7 @@ namespace osu.Game.Rulesets.Osu.Mods
+     /// <summary>
+     /// Generates hit circles in a square spiral pattern.
+     /// </summary>
+-    public partial class OsuModCircleGeneration : Mod, IApplicableToBeatmap, IModosuMod
++    public partial class OsuModCircleGeneration : Mod, IApplicableToBeatmap, IModosuMod, IAffectsDifficulty
+     {
+         public override bool Ranked => false;
+         public override bool AlwaysValidForSubmission => false;
+@@ -31,6 +33,7 @@ namespace osu.Game.Rulesets.Osu.Mods
          public override bool ValidForMultiplayerAsFreeMod => false;
  
          public override string Name => "Circle Generation";
@@ -2632,7 +2641,7 @@ index 50e39e05bc..7c0c375e8e 100644
  
              osuBeatmap.HitObjects = ModosuHitObjectGenerationUtils.RepositionHitObjectsClampOnly(positionInfos);
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModSpacingOvertime.cs b/osu.Game.Rulesets.Osu/Mods/OsuModSpacingOvertime.cs
-index 506e67a7d7..b14c5a3203 100644
+index 506e67a..62aebc6 100644
 --- a/osu.Game.Rulesets.Osu/Mods/OsuModSpacingOvertime.cs
 +++ b/osu.Game.Rulesets.Osu/Mods/OsuModSpacingOvertime.cs
 @@ -1,6 +1,8 @@
@@ -2644,7 +2653,16 @@ index 506e67a7d7..b14c5a3203 100644
  using System;
  using System.Linq;
  using osu.Framework.Bindables;
-@@ -25,6 +27,7 @@ public class OsuModSpacingOvertime : Mod, IApplicableToBeatmap, IRitsuExclusiveM
+@@ -14,7 +16,7 @@ using osu.Game.Rulesets.Modosu.Utils;
+ 
+ namespace osu.Game.Rulesets.Osu.Mods
+ {
+-    public class OsuModSpacingOvertime : Mod, IApplicableToBeatmap, IRitsuExclusiveMod
++    public class OsuModSpacingOvertime : Mod, IApplicableToBeatmap, IRitsuExclusiveMod, IAffectsDifficulty
+     {
+         public override bool Ranked => false;
+         public override bool AlwaysValidForSubmission => false;
+@@ -25,6 +27,7 @@ namespace osu.Game.Rulesets.Osu.Mods
  
          public override LocalisableString Description => "Spacing grows/shrinks over time.";
  
@@ -14182,7 +14200,7 @@ index 42b520ab26..6e381153a1 100644
          /// </summary>
 diff --git a/osu.Game/Rulesets/Mods/IBeatmapVariant.cs b/osu.Game/Rulesets/Mods/IBeatmapVariant.cs
 new file mode 100644
-index 0000000000..3edae007de
+index 0000000..3ce432a
 --- /dev/null
 +++ b/osu.Game/Rulesets/Mods/IBeatmapVariant.cs
 @@ -0,0 +1,27 @@
@@ -14194,7 +14212,7 @@ index 0000000000..3edae007de
 +
 +namespace osu.Game.Rulesets.Mods
 +{
-+    public interface IBeatmapVariant
++    public interface IBeatmapVariant : IAffectsDifficulty
 +    {
 +        BindableInt TransformationVersion { get; }
 +        int DefaultTransformationVersion => 1;
@@ -14684,10 +14702,134 @@ index b6c2114b45..67a7fe2d7a 100644
          }
  
 diff --git a/osu.Game/Screens/Ranking/V2ResultsPanel.cs b/osu.Game/Screens/Ranking/V2ResultsPanel.cs
-index 4379cf944e..d9d0d46d66 100644
+index 4379cf9..debcaf2 100644
 --- a/osu.Game/Screens/Ranking/V2ResultsPanel.cs
 +++ b/osu.Game/Screens/Ranking/V2ResultsPanel.cs
-@@ -578,6 +578,7 @@ private void load(ResultsScreen? resultsScreen, OsuColour colours, AudioManager
+@@ -4,10 +4,13 @@
+ using System;
+ using System.Collections.Generic;
+ using System.Linq;
++using System.Threading;
++using System.Threading.Tasks;
+ using osu.Framework.Allocation;
+ using osu.Framework.Bindables;
+ using osu.Framework.Audio;
+ using osu.Framework.Audio.Sample;
++using osu.Framework.Extensions;
+ using osu.Framework.Extensions.Color4Extensions;
+ using osu.Framework.Graphics;
+ using osu.Framework.Graphics.Colour;
+@@ -20,6 +23,7 @@ using osu.Framework.Input.Bindings;
+ using osu.Framework.Input.Events;
+ using osu.Game.Beatmaps;
+ using osu.Game.Beatmaps.Drawables;
++using osu.Game.Database;
+ using osu.Game.Graphics;
+ using osu.Game.Graphics.Containers;
+ using osu.Game.Graphics.Sprites;
+@@ -66,6 +70,7 @@ namespace osu.Game.Screens.Ranking
+ 
+         private readonly ScoreInfo score;
+         private readonly bool withFlair;
++        private readonly CancellationTokenSource difficultyCancellation = new CancellationTokenSource();
+         public readonly Bindable<ScoreInfo?> ComparisonScore = new Bindable<ScoreInfo?>();
+         public readonly BindableBool DetailsVisible = new BindableBool();
+         public readonly BindableBool LeaderboardVisible = new BindableBool();
+@@ -89,6 +94,7 @@ namespace osu.Game.Screens.Ranking
+         private Container footerStrip = null!;
+         private Container rightColumn = null!;
+         private Container detailsPanel = null!;
++        private ScoreProgressionGraph progression = null!;
+         private bool detailsVisible;
+         private Sample? appearanceSample;
+         private V2ResultsScoreButton scoreButton = null!;
+@@ -137,6 +143,7 @@ namespace osu.Game.Screens.Ranking
+ 
+             if (detailsVisible)
+             {
++                progression.Start();
+                 rightColumn.MoveToX(760, details_transition_duration, Easing.OutQuint)
+                            .FadeOut(details_transition_duration * 0.7, Easing.OutQuint);
+ 
+@@ -185,7 +192,7 @@ namespace osu.Game.Screens.Ranking
+         }
+ 
+         [BackgroundDependencyLoader]
+-        private void load(ResultsScreen? resultsScreen, OsuColour colours, AudioManager audio)
++        private void load(ResultsScreen? resultsScreen, OsuColour colours, AudioManager audio, BeatmapDifficultyCache difficultyCache, RealmAccess realm)
+         {
+             appearanceSample = audio.Samples.Get(@"Results/score-panel-top-appear");
+ 
+@@ -207,9 +214,21 @@ namespace osu.Game.Screens.Ranking
+             var beatmap = score.BeatmapInfo!;
+             var metadata = beatmap.BeatmapSet?.Metadata ?? beatmap.Metadata;
+             var ruleset = score.Ruleset.CreateInstance();
++            var scoreMods = score.Mods;
++            var cancellationToken = difficultyCancellation.Token;
++            var storedDifficulty = new StarDifficulty(beatmap.StarRating, 0);
++            var difficultyTask = realm.Run(r => r.Find<BeatmapInfo>(beatmap.ID) != null)
++                ? difficultyCache.GetDifficultyAsync(beatmap, score.Ruleset, scoreMods, cancellationToken)
++                : null;
++            var initialDifficulty = difficultyTask switch
++            {
++                null => storedDifficulty,
++                { IsCompletedSuccessfully: true } => difficultyTask.GetResultSafely() ?? storedDifficulty,
++                _ => new StarDifficulty(-1, 0),
++            };
+ 
+             // Theme colours: everything comes from the provider / star rating, nothing is hard-coded except semantic colours.
+-            var difficultyColour = colours.ForStarDifficulty(beatmap.StarRating);
++            var difficultyColour = colours.ForStarDifficulty(initialDifficulty.Stars);
+             var titleBackground = colourProvider.Background3;
+             var stripBackground = colourProvider.Background5;
+             var scoreBackground = colourProvider.Background6;
+@@ -302,13 +321,23 @@ namespace osu.Game.Screens.Ranking
+                     {
+                         RelativeSizeAxes = Axes.Both,
+                         Padding = new MarginPadding { Top = 48, Bottom = 12 },
+-                        Child = new StatisticsPanel(embedded: true)
++                        Child = new FillFlowContainer
+                         {
+                             RelativeSizeAxes = Axes.X,
+                             AutoSizeAxes = Axes.Y,
+-                            Score = { Value = score },
+-                            AchievedScore = resultsScreen?.Score,
+-                            State = { Value = Visibility.Visible },
++                            Direction = FillDirection.Vertical,
++                            Children = new Drawable[]
++                            {
++                                new StatisticsPanel(embedded: true)
++                                {
++                                    RelativeSizeAxes = Axes.X,
++                                    AutoSizeAxes = Axes.Y,
++                                    Score = { Value = score },
++                                    AchievedScore = resultsScreen?.Score,
++                                    State = { Value = Visibility.Visible },
++                                },
++                                new StatisticItemContainer(new StatisticItem("Play progression", () => progression = new ScoreProgressionGraph(score))),
++                            },
+                         },
+                     },
+                 },
+@@ -448,6 +477,9 @@ namespace osu.Game.Screens.Ranking
+             // Left column content.
+             // ------------------------------------------------------------------------------------------------
+ 
++            Drawable difficultyIcon;
++            StarRatingDisplay difficultyRating;
++            TruncatingSpriteText difficultyName;
+             leftColumn.AddRange(new Drawable[]
+             {
+                 // Two independent wedges (title + score) separated by a 4px gap, like song select.
+@@ -545,6 +577,7 @@ namespace osu.Game.Screens.Ranking
+                         {
+                             AutoSizeAxes = Axes.Both,
+                             Status = beatmap.Status,
++                            LocalBeatmap = beatmap,
+                             TextSize = 10,
+                             TextPadding = new MarginPadding { Horizontal = 6, Vertical = 1 },
+                         },
+@@ -578,6 +611,7 @@ namespace osu.Game.Screens.Ranking
                      Position = new Vector2(146, 94),
                      Size = new Vector2(30, 27),
                      UseV2Style = true,
@@ -14695,6 +14837,70 @@ index 4379cf944e..d9d0d46d66 100644
                  },
                  new Container
                  {
+@@ -586,14 +620,14 @@ namespace osu.Game.Screens.Ranking
+                     Size = new Vector2(78, 34),
+                     Children = new Drawable[]
+                     {
+-                        ruleset.CreateIcon().With(d =>
++                        difficultyIcon = ruleset.CreateIcon().With(d =>
+                         {
+                             d.Name = "Difficulty ruleset icon";
+                             d.Anchor = d.Origin = Anchor.CentreLeft;
+                             d.Size = new Vector2(20);
+                             d.Colour = difficultyColour;
+                         }),
+-                        new StarRatingDisplay(new StarDifficulty(beatmap.StarRating, 0), StarRatingDisplaySize.Small)
++                        difficultyRating = new StarRatingDisplay(initialDifficulty, StarRatingDisplaySize.Small)
+                         {
+                             Name = "Difficulty rating",
+                             Anchor = Anchor.CentreLeft,
+@@ -602,7 +636,7 @@ namespace osu.Game.Screens.Ranking
+                         },
+                     },
+                 },
+-                new TruncatingSpriteText
++                difficultyName = new TruncatingSpriteText
+                 {
+                     Position = new Vector2(144, 131),
+                     MaxWidth = 407,
+@@ -710,13 +744,26 @@ namespace osu.Game.Screens.Ranking
+                 });
+             }
+ 
+-            if (score.Mods.Length > 0)
++            if (difficultyTask != null && initialDifficulty.Stars < 0)
++            {
++                _ = difficultyTask.ContinueWith(task => Schedule(() =>
++                {
++                    if (cancellationToken.IsCancellationRequested)
++                        return;
++
++                    var difficulty = task.GetResultSafely() ?? storedDifficulty;
++                    difficultyRating.Current.Value = difficulty;
++                    difficultyName.Colour = difficultyIcon.Colour = colours.ForStarDifficulty(difficulty.Stars);
++                }), cancellationToken, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
++            }
++
++            if (scoreMods.Length > 0)
+             {
+                 mods.Add(new ModDisplay(false)
+                 {
+                     Scale = new Vector2(0.87f),
+                     ExpansionMode = ExpansionMode.ExpandOnHover,
+-                    Current = { Value = score.Mods },
++                    Current = { Value = scoreMods },
+                 });
+             }
+ 
+@@ -912,6 +959,8 @@ namespace osu.Game.Screens.Ranking
+         protected override void Dispose(bool isDisposing)
+         {
+             metadataRequest?.Cancel();
++            difficultyCancellation.Cancel();
++            difficultyCancellation.Dispose();
+             base.Dispose(isDisposing);
+         }
+ 
 diff --git a/osu.Game/Screens/Select/BeatmapCarousel.cs b/osu.Game/Screens/Select/BeatmapCarousel.cs
 index 513ce31439..793e86f31b 100644
 --- a/osu.Game/Screens/Select/BeatmapCarousel.cs
@@ -14938,10 +15144,22 @@ index 11ebd111f9..d82e63c82e 100644
                          ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
                          : Enum.GetValues<BeatmapLeaderboardScope>();
 diff --git a/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs b/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs
-index 6aef162db2..32f8f5f6e6 100644
+index 6aef162..1545100 100644
 --- a/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs
 +++ b/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs
-@@ -16,6 +16,9 @@ using osu.Framework.Graphics.Shapes;
+@@ -4,8 +4,11 @@
+ using System;
+ using System.Collections.Generic;
+ using System.Linq;
++using System.Threading;
++using System.Threading.Tasks;
+ using osu.Framework.Allocation;
+ using osu.Framework.Bindables;
++using osu.Framework.Extensions;
+ using osu.Framework.Extensions.Color4Extensions;
+ using osu.Framework.Extensions.LocalisationExtensions;
+ using osu.Framework.Graphics;
+@@ -16,6 +19,9 @@ using osu.Framework.Graphics.Shapes;
  using osu.Framework.Graphics.UserInterface;
  using osu.Framework.Input.Events;
  using osu.Framework.Localisation;
@@ -14951,7 +15169,7 @@ index 6aef162db2..32f8f5f6e6 100644
  using osu.Game.Beatmaps;
  using osu.Game.Beatmaps.Drawables;
  using osu.Game.Configuration;
-@@ -30,6 +33,7 @@ using osu.Game.Localisation;
+@@ -30,6 +36,7 @@ using osu.Game.Localisation;
  using osu.Game.Online;
  using osu.Game.Online.API;
  using osu.Game.Online.Leaderboards;
@@ -14959,7 +15177,7 @@ index 6aef162db2..32f8f5f6e6 100644
  using osu.Game.Overlays;
  using osu.Game.Resources.Localisation.Web;
  using osu.Game.Rulesets.Mods;
-@@ -76,6 +80,18 @@ namespace osu.Game.Screens.Select
+@@ -76,6 +83,18 @@ namespace osu.Game.Screens.Select
          [Resolved]
          private ScoreManager scoreManager { get; set; } = null!;
  
@@ -14978,7 +15196,102 @@ index 6aef162db2..32f8f5f6e6 100644
          [Resolved]
          private OsuConfigManager config { get; set; } = null!;
  
-@@ -673,6 +689,20 @@ namespace osu.Game.Screens.Select
+@@ -119,6 +138,8 @@ namespace osu.Game.Screens.Select
+         private Container centreContent = null!;
+         private Container rightContent = null!;
+ 
++        private FillFlowContainer scoreIdentity = null!;
++        private CancellationTokenSource? starBadgeCancellation;
+         private FillFlowContainer<Drawable> modsContainer = null!;
+ 
+         private Box totalScoreBackground = null!;
+@@ -269,7 +290,7 @@ namespace osu.Game.Screens.Select
+                                                     }
+                                                 },
+                                             },
+-                                            new FillFlowContainer
++                                            scoreIdentity = new FillFlowContainer
+                                             {
+                                                 Anchor = Anchor.CentreLeft,
+                                                 Origin = Anchor.CentreLeft,
+@@ -323,7 +344,6 @@ namespace osu.Game.Screens.Select
+                                                         Font = OsuFont.Style.Heading2,
+                                                         Colour = ToriiColourHelper.GetTopColour(Score.User) ?? Colour4.White,
+                                                     }),
+-                                                    createModdedStarBadge(),
+                                                 }
+                                             },
+                                             new Container
+@@ -497,22 +517,35 @@ namespace osu.Game.Screens.Select
+             innerAvatar.OnLoadComplete += d => d.FadeInFromZero(200);
+         }
+ 
+-        private Drawable createModdedStarBadge()
++        private void loadModdedStarBadge()
+         {
+             var beatmap = Score.BeatmapInfo;
+-            if (beatmap == null || Score.Mods.Length == 0)
+-                return new Container();
++            var mods = Score.Mods;
++            if (beatmap == null || !ModUtils.FlattenMods(mods).Any(StarRatingApproximator.ModAffectsDifficulty))
++                return;
+ 
+-            double noModStars = beatmap.StarRating;
+-            double moddedStars = difficultyCache.GetEffectiveStarRating(beatmap, Score.Ruleset, Score.Mods);
++            var token = (starBadgeCancellation = new CancellationTokenSource()).Token;
++            var noModTask = difficultyCache.GetDifficultyAsync(beatmap, Score.Ruleset, cancellationToken: token);
++            var moddedTask = difficultyCache.GetDifficultyAsync(beatmap, Score.Ruleset, mods, token);
+ 
+-            if (noModStars < 0 || Math.Abs(moddedStars - noModStars) < 0.01)
+-                return new Container();
+-
+-            return new StarRatingDisplay(new StarDifficulty(moddedStars, 0), StarRatingDisplaySize.Small)
++            Task.WhenAll(noModTask, moddedTask).ContinueWith(task =>
+             {
+-                Scale = new Vector2(0.875f),
+-            };
++                var difficulties = task.GetResultSafely();
++                if (difficulties[0] is not { Stars: >= 0 } noMod || difficulties[1] is not { Stars: >= 0 } modded
++                    || noMod.Stars.FloorToDecimalDigits(2) == modded.Stars.FloorToDecimalDigits(2))
++                    return;
++
++                Schedule(() =>
++                {
++                    if (token.IsCancellationRequested)
++                        return;
++
++                    scoreIdentity.Add(new StarRatingDisplay(modded, StarRatingDisplaySize.Small)
++                    {
++                        Scale = new Vector2(0.875f),
++                    });
++                });
++            }, token, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+         }
+ 
+         private ColourInfo getHighlightColour(HighlightType? highlightType, float lightenAmount = 0)
+@@ -534,6 +567,7 @@ namespace osu.Game.Screens.Select
+         {
+             base.LoadComplete();
+ 
++            loadModdedStarBadge();
+             scoringMode = config.GetBindable<ScoringMode>(OsuSetting.ScoreDisplayMode);
+             scoringMode.BindValueChanged(s =>
+             {
+@@ -552,6 +586,13 @@ namespace osu.Game.Screens.Select
+             }, true);
+         }
+ 
++        protected override void Dispose(bool isDisposing)
++        {
++            starBadgeCancellation?.Cancel();
++            starBadgeCancellation?.Dispose();
++            base.Dispose(isDisposing);
++        }
++
+         private void updateModDisplay()
+         {
+             if (Score.Mods.Length > 0)
+@@ -673,6 +714,20 @@ namespace osu.Game.Screens.Select
                  if (copyableMods.Length > 0)
                      items.Add(new OsuMenuItem(SongSelectStrings.UseTheseMods, MenuItemType.Highlighted, () => SelectedMods.Value = copyableMods));
  
@@ -14999,7 +15312,7 @@ index 6aef162db2..32f8f5f6e6 100644
                  if (Score.OnlineID > 0)
                      items.Add(new OsuMenuItem(CommonStrings.CopyLink, MenuItemType.Standard, () => game?.CopyToClipboard($@"{api.Endpoints.WebsiteUrl}/scores/{Score.OnlineID}")));
  
-@@ -684,6 +714,9 @@ namespace osu.Game.Screens.Select
+@@ -684,6 +739,9 @@ namespace osu.Game.Screens.Select
                  if (ShowReplay != null)
                      items.Add(new OsuMenuItem(SongSelectStrings.WatchReplay, MenuItemType.Standard, () => ShowReplay.Invoke(Score)));
                  items.Add(new OsuMenuItem(CommonStrings.Export, MenuItemType.Standard, () => scoreManager.Export(Score)));
@@ -21593,6 +21906,709 @@ index 099806d320..b9f7f99804 100644
                  }
                  else
                      base.Value = value;
+diff --git a/osu.Game/Screens/Ranking/LegacyHealthGraph.cs b/osu.Game/Screens/Ranking/LegacyHealthGraph.cs
+index d60461bdc8..5503eb23af 100644
+--- a/osu.Game/Screens/Ranking/LegacyHealthGraph.cs
++++ b/osu.Game/Screens/Ranking/LegacyHealthGraph.cs
+@@ -129,85 +129,91 @@ private void load()
+                 if (gameplayEnd <= drainStart)
+                     return fallbackData();
+ 
+-                // el processor posta, como lo arma Player (mods tipo Classic traen el suyo).
+-                var processor = score.Mods.OfType<IApplicableHealthProcessor>().FirstOrDefault()?.CreateHealthProcessor(drainStart)
+-                                ?? score.Ruleset.CreateInstance().CreateHealthProcessor(drainStart);
++                double[] samples = SampleHealth(score, playable, drainStart, gameplayEnd, samples_count, token);
++                return new GraphData(samples, buildMarkers(drainStart, gameplayEnd));
++            }
++            catch (OperationCanceledException)
++            {
++                return null;
++            }
++            catch
++            {
++                // beatmap corrupto / conversion fallida: mejor una simulacion barata que
++                // un marco vacio.
++                return fallbackData();
++            }
++        }
+ 
+-                // sin esto el primer 0 HP prende HasFailed y ApplyResult ignora el resto:
+-                // el graph quedaria plano despues del primer casi-muerto.
+-                processor.Failed += () => false;
+-                processor.ApplyBeatmap(playable);
++        internal static double[] SampleHealth(ScoreInfo score, IBeatmap playable, double drainStart, double gameplayEnd, int sampleCount, CancellationToken token)
++        {
++            // el processor posta, como lo arma Player (mods tipo Classic traen el suyo).
++            var processor = score.Mods.OfType<IApplicableHealthProcessor>().FirstOrDefault()?.CreateHealthProcessor(drainStart)
++                            ?? score.Ruleset.CreateInstance().CreateHealthProcessor(drainStart);
+ 
+-                double drainRate = (processor as DrainingHealthProcessor)?.DrainRate ?? 0;
++            // sin esto el primer 0 HP prende HasFailed y ApplyResult ignora el resto:
++            // el graph quedaria plano despues del primer casi-muerto.
++            processor.Failed += () => false;
++            processor.ApplyBeatmap(playable);
+ 
+-                // los mismos periodos sin drain que arma DrainingHealthProcessor (breaks:
+-                // del fin del ultimo objeto previo al arranque del siguiente).
+-                var noDrain = new PeriodTracker(playable.Breaks.Select(b => new Period(
+-                    playable.HitObjects.Select(h => h.GetEndTime()).Where(t => t <= b.StartTime).DefaultIfEmpty(double.MinValue).Last(),
+-                    playable.HitObjects.Select(h => h.StartTime).Where(t => t >= b.EndTime).DefaultIfEmpty(double.MaxValue).First())));
++            double drainRate = (processor as DrainingHealthProcessor)?.DrainRate ?? 0;
+ 
+-                double[] samples = new double[samples_count];
+-                Array.Fill(samples, double.MaxValue);
++            // los mismos periodos sin drain que arma DrainingHealthProcessor (breaks:
++            // del fin del ultimo objeto previo al arranque del siguiente).
++            var noDrain = new PeriodTracker(playable.Breaks.Select(b => new Period(
++                playable.HitObjects.Select(h => h.GetEndTime()).Where(t => t <= b.StartTime).DefaultIfEmpty(double.MinValue).Last(),
++                playable.HitObjects.Select(h => h.StartTime).Where(t => t >= b.EndTime).DefaultIfEmpty(double.MaxValue).First())));
+ 
+-                double cursor = drainStart;
++            double[] samples = new double[sampleCount];
++            Array.Fill(samples, double.MaxValue);
+ 
+-                void record(double time)
+-                {
+-                    int i = (int)Math.Clamp((time - drainStart) / (gameplayEnd - drainStart) * (samples_count - 1), 0, samples_count - 1);
+-                    // minimo por bucket: preserva las V de los miss que un sampleo comun se come.
+-                    samples[i] = Math.Min(samples[i], processor.Health.Value);
+-                }
++            double cursor = drainStart;
+ 
+-                void drainTo(double target)
+-                {
+-                    target = Math.Clamp(target, drainStart, gameplayEnd);
++            void record(double time)
++            {
++                int i = (int)Math.Clamp((time - drainStart) / (gameplayEnd - drainStart) * (sampleCount - 1), 0, sampleCount - 1);
++                // minimo por bucket: preserva las V de los miss que un sampleo comun se come.
++                samples[i] = Math.Min(samples[i], processor.Health.Value);
++            }
+ 
+-                    while (cursor < target)
+-                    {
+-                        double next = Math.Min(cursor + 50, target);
++            void drainTo(double target)
++            {
++                target = Math.Clamp(target, drainStart, gameplayEnd);
+ 
+-                        if (drainRate > 0 && !noDrain.IsInAny((cursor + next) / 2))
+-                            processor.Health.Value -= drainRate * (next - cursor);
++                while (cursor < target)
++                {
++                    double next = Math.Min(cursor + 50, target);
++
++                    if (drainRate > 0 && !noDrain.IsInAny((cursor + next) / 2))
++                        processor.Health.Value -= drainRate * (next - cursor);
+ 
+-                        record(next);
+-                        cursor = next;
+-                    }
++                    record(next);
++                    cursor = next;
+                 }
++            }
+ 
+-                record(drainStart);
++            record(drainStart);
+ 
+-                // re-jugamos los judgements EN ORDEN DE LISTA (el orden real de aplicacion:
+-                // los bonus de fin de combo del processor dependen de el, no reordenar).
+-                foreach (var e in score.HitEvents)
+-                {
+-                    token.ThrowIfCancellationRequested();
++            // re-jugamos los judgements EN ORDEN DE LISTA (el orden real de aplicacion:
++            // los bonus de fin de combo del processor dependen de el, no reordenar).
++            foreach (var e in score.HitEvents)
++            {
++                token.ThrowIfCancellationRequested();
+ 
+-                    // los replays legacy convertidos pueden traer este result y ApplyResult tira.
+-                    if (e.Result == HitResult.LegacyComboIncrease)
+-                        continue;
++                // los replays legacy convertidos pueden traer este result y ApplyResult tira.
++                if (e.Result == HitResult.LegacyComboIncrease)
++                    continue;
+ 
+-                    double eventTime = e.HitObject.GetEndTime() + e.TimeOffset;
++                double eventTime = e.HitObject.GetEndTime() + e.TimeOffset;
+ 
+-                    drainTo(eventTime);
+-                    processor.ApplyResult(new JudgementResult(e.HitObject, e.HitObject.Judgement) { Type = e.Result });
+-                    record(Math.Clamp(eventTime, drainStart, gameplayEnd));
+-                }
++                drainTo(eventTime);
++                processor.ApplyResult(new JudgementResult(e.HitObject, e.HitObject.Judgement) { Type = e.Result });
++                record(Math.Clamp(eventTime, drainStart, gameplayEnd));
++            }
+ 
+-                drainTo(gameplayEnd);
+-                fillEmpty(samples);
++            drainTo(gameplayEnd);
++            fillEmpty(samples);
+ 
+-                return new GraphData(samples, buildMarkers(drainStart, gameplayEnd));
+-            }
+-            catch (OperationCanceledException)
+-            {
+-                return null;
+-            }
+-            catch
+-            {
+-                // beatmap corrupto / conversion fallida: mejor una simulacion barata que
+-                // un marco vacio.
+-                return fallbackData();
+-            }
++            return samples;
+         }
+ 
+         /// <summary>
+diff --git a/osu.Game/Screens/Ranking/Statistics/ScoreProgressionGraph.cs b/osu.Game/Screens/Ranking/Statistics/ScoreProgressionGraph.cs
+new file mode 100644
+index 0000000000..3dc6121e0b
+--- /dev/null
++++ b/osu.Game/Screens/Ranking/Statistics/ScoreProgressionGraph.cs
+@@ -0,0 +1,464 @@
++// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
++
++using System;
++using System.Collections.Generic;
++using System.Linq;
++using System.Threading;
++using System.Threading.Tasks;
++using osu.Framework.Allocation;
++using osu.Framework.Graphics;
++using osu.Framework.Graphics.Containers;
++using osu.Framework.Graphics.Lines;
++using osu.Framework.Graphics.Shapes;
++using osu.Framework.Input.Events;
++using osu.Framework.Localisation;
++using osu.Framework.Logging;
++using osu.Framework.Extensions.Color4Extensions;
++using osu.Game.Beatmaps;
++using osu.Game.Graphics;
++using osu.Game.Graphics.Containers;
++using osu.Game.Graphics.Sprites;
++using osu.Game.Graphics.UserInterfaceV2;
++using osu.Game.Rulesets.Difficulty;
++using osu.Game.Rulesets.Judgements;
++using osu.Game.Rulesets.Mods;
++using osu.Game.Rulesets.Objects;
++using osu.Game.Rulesets.Scoring;
++using osu.Game.Scoring;
++using osuTK;
++using osuTK.Graphics;
++
++namespace osu.Game.Screens.Ranking.Statistics
++{
++    internal partial class ScoreProgressionGraph : CompositeDrawable
++    {
++        private const int sample_count = 161;
++
++        private static readonly Color4[] series_colours =
++        {
++            new Color4(111, 204, 250, 255),
++            new Color4(106, 229, 187, 255),
++            new Color4(218, 172, 255, 255),
++            new Color4(240, 130, 184, 255),
++            new Color4(254, 122, 116, 255),
++            new Color4(174, 220, 100, 255),
++            new Color4(255, 204, 103, 255),
++        };
++
++        [Resolved]
++        private BeatmapManager beatmapManager { get; set; } = null!;
++
++        private readonly ScoreInfo score;
++        private readonly FillFlowContainer view;
++        private readonly OsuSpriteText status;
++        private readonly bool[] visible = { true, true, false, false, false, false };
++        private readonly List<Plot> plots = new List<Plot>();
++        private readonly LocalisableString[] labels;
++        private readonly RoundedButton[] toggles = new RoundedButton[6];
++        private CancellationTokenSource? cancellation;
++        private Progression? progression;
++        private OsuTextFlowContainer? readout;
++        private bool started;
++
++        public ScoreProgressionGraph(ScoreInfo score)
++        {
++            this.score = score;
++            var ruleset = score.Ruleset.CreateInstance();
++            labels = new LocalisableString[]
++            {
++                "Accuracy", "PP", "HP", "Misses",
++                ruleset.GetDisplayNameForHitResult(HitResult.Ok),
++                ruleset.GetDisplayNameForHitResult(HitResult.Meh),
++            };
++
++            RelativeSizeAxes = Axes.X;
++            AutoSizeAxes = Axes.Y;
++            InternalChild = view = new FillFlowContainer
++            {
++                RelativeSizeAxes = Axes.X,
++                AutoSizeAxes = Axes.Y,
++                Direction = FillDirection.Vertical,
++                Spacing = new Vector2(0, 9),
++                Child = status = new OsuSpriteText { Text = "Loading play progression…" },
++            };
++        }
++
++        public async void Start()
++        {
++            if (started)
++                return;
++
++            started = true;
++            if (score.HitEvents.Count == 0)
++            {
++                status.Text = "Play progression data unavailable.";
++                return;
++            }
++
++            var token = (cancellation = new CancellationTokenSource()).Token;
++            try
++            {
++                var snapshot = score.DeepClone();
++                var working = beatmapManager.GetWorkingBeatmap(snapshot.BeatmapInfo);
++                var prepared = await Task.Run(() => Compute(working, snapshot, token), token).ConfigureAwait(false);
++                if (!token.IsCancellationRequested)
++                    Schedule(() =>
++                    {
++                        if (!token.IsCancellationRequested)
++                            showProgression(prepared);
++                    });
++            }
++            catch (OperationCanceledException) when (token.IsCancellationRequested)
++            {
++            }
++            catch (Exception error)
++            {
++                Logger.Error(error, "Could not calculate play progression.");
++                if (!token.IsCancellationRequested)
++                    Schedule(() => status.Text = "Play progression data unavailable.");
++            }
++        }
++
++        internal static Progression Compute(WorkingBeatmap working, ScoreInfo snapshot, CancellationToken token)
++        {
++            var ruleset = snapshot.Ruleset.CreateInstance();
++            var mods = snapshot.Mods;
++            var playable = working.GetPlayableBeatmap(snapshot.Ruleset, mods, token);
++            var events = snapshot.HitEvents;
++            double start = Math.Min(playable.HitObjects.First().StartTime, eventTime(events[0]));
++            double end = Math.Max(start + 1, events.Max(eventTime));
++            if (snapshot.Passed)
++                end = Math.Max(end, playable.HitObjects.Max(hit => hit.GetEndTime()));
++
++            var calculator = ruleset.CreatePerformanceCalculator();
++            var difficulty = calculator == null ? null : ruleset.CreateDifficultyCalculator(working).CalculateTimed(mods, token);
++            bool fullCombo = snapshot.Passed && snapshot.GetMaximumAchievableCombo() > 0 && snapshot.IsPerfect();
++
++            double[]?[] values =
++            {
++                new double[sample_count],
++                difficulty?.Count > 0 ? new double[sample_count] : null,
++                !fullCombo && snapshot.Passed && difficulty?.Count > 0 && FullComboScoreInfo.Create(snapshot) != null ? new double[sample_count] : null,
++                LegacyHealthGraph.SampleHealth(snapshot, playable, start, end, sample_count, token),
++                new double[sample_count],
++                ruleset.GetHitResultsForDisplay().Any(item => item.result == HitResult.Ok) ? new double[sample_count] : null,
++                ruleset.GetHitResultsForDisplay().Any(item => item.result == HitResult.Meh) ? new double[sample_count] : null,
++            };
++
++            using var processor = ruleset.CreateScoreProcessor();
++            processor.TrackHitEvents = false;
++            processor.Mods.Value = mods;
++            processor.ScoreV1Active |= snapshot.IsLegacyScore;
++            foreach (var mod in mods.OfType<IApplicableToScoreProcessor>())
++                mod.ApplyToScoreProcessor(processor);
++            processor.ApplyBeatmap(playable);
++
++            var prefix = new ScoreInfo(snapshot.BeatmapInfo, snapshot.Ruleset) { Mods = mods };
++            var maximum = new Dictionary<HitResult, int>();
++            double[] times = new double[sample_count];
++            int nextEvent = 0;
++            double lastObjectTime = double.NegativeInfinity;
++
++            for (int i = 0; i < sample_count; i++)
++            {
++                token.ThrowIfCancellationRequested();
++                double time = times[i] = i == sample_count - 1 ? end : start + (end - start) * i / (sample_count - 1);
++                while (nextEvent < events.Count && eventTime(events[nextEvent]) <= time)
++                {
++                    var hit = events[nextEvent++];
++#pragma warning disable CS0618
++                    if (hit.Result == HitResult.LegacyComboIncrease)
++                        continue;
++#pragma warning restore CS0618
++
++                    var judgement = new JudgementResult(hit.HitObject, hit.HitObject.Judgement) { Type = hit.Result, TimeOffset = hit.TimeOffset };
++                    processor.ApplyResult(judgement);
++                    lastObjectTime = judgement.HitObject.GetEndTime();
++                    HitResult best = judgement.Judgement.MaxResult;
++                    maximum[best] = maximum.GetValueOrDefault(best) + 1;
++                }
++
++                values[0]![i] = processor.Accuracy.Value * 100;
++                values[4]![i] = processor.Statistics.GetValueOrDefault(HitResult.Miss);
++                if (values[5] is { } ok) ok[i] = processor.Statistics.GetValueOrDefault(HitResult.Ok);
++                if (values[6] is { } meh) meh[i] = processor.Statistics.GetValueOrDefault(HitResult.Meh);
++
++                if (values[1] is not { } pp || nextEvent == 0 || difficulty == null || calculator == null)
++                    continue;
++
++                int matchingAttribute = difficulty.BinarySearch(new TimedDifficultyAttributes(lastObjectTime, null));
++                int attributeIndex = Math.Clamp(matchingAttribute < 0 ? ~matchingAttribute - 1 : matchingAttribute, 0, difficulty.Count - 1);
++
++                processor.PopulateScore(prefix);
++                prefix.MaximumStatistics.Clear();
++                foreach (var (result, count) in maximum)
++                    prefix.MaximumStatistics[result] = count;
++                var attributes = difficulty[attributeIndex].Attributes;
++                pp[i] = finitePP(calculator.Calculate(prefix, attributes).Total);
++
++                if (values[2] is { } ifFullCombo)
++                {
++                    var corrected = FullComboScoreInfo.Create(prefix);
++                    ifFullCombo[i] = corrected == null ? pp[i] : finitePP(calculator.Calculate(corrected, attributes).Total);
++                }
++            }
++
++            for (int i = 0; i < sample_count; i++)
++                values[3]![i] *= 100;
++
++            return new Progression(times, values, fullCombo);
++        }
++
++        private static double finitePP(double value) => double.IsFinite(value) ? Math.Max(0, value) : 0;
++
++        private static double eventTime(HitEvent hit) => hit.HitObject.GetEndTime() + hit.TimeOffset;
++
++        private void showProgression(Progression data)
++        {
++            progression = data;
++            view.Clear();
++
++            var buttons = new FillFlowContainer<RoundedButton>
++            {
++                RelativeSizeAxes = Axes.X,
++                AutoSizeAxes = Axes.Y,
++                Direction = FillDirection.Full,
++                Spacing = new Vector2(6),
++            };
++            for (int i = 0; i < toggles.Length; i++)
++            {
++                int index = i;
++                var button = toggles[i] = new RoundedButton
++                {
++                    Text = labels[i],
++                    Width = 82,
++                    Height = 26,
++                    Action = () =>
++                    {
++                        visible[index] = !visible[index];
++                        refreshPlots();
++                    },
++                };
++                buttons.Add(button);
++            }
++
++            view.Add(buttons);
++            readout = new OsuTextFlowContainer(text => text.Font = OsuFont.GetFont(size: 12)) { RelativeSizeAxes = Axes.X, AutoSizeAxes = Axes.Y };
++            view.Add(new Container
++            {
++                RelativeSizeAxes = Axes.X,
++                Height = 34,
++                Child = readout,
++            });
++
++            foreach (string title in new[] { "Accuracy / HP", "Estimated PP", "Judgements" })
++            {
++                var plot = new Plot(title, hover);
++                plots.Add(plot);
++                view.Add(plot);
++            }
++
++            refreshPlots();
++        }
++
++        private void refreshPlots()
++        {
++            var data = progression!;
++            int[] indices = { 0, 1, 3, 4, 5, 6 };
++            for (int i = 0; i < toggles.Length; i++)
++            {
++                toggles[i].BackgroundColour = visible[i] ? series_colours[indices[i]].Darken(0.66f) : new Color4(62, 63, 68, 255);
++                toggles[i].Enabled.Value = data.Values[indices[i]] != null;
++            }
++
++            updatePlot(plots[0], "Accuracy / HP", 100, "%", false, visible[0] ? 0 : -1, visible[2] ? 3 : -1);
++            updatePlot(plots[1], "Estimated PP", 0, " pp", false, visible[1] ? 1 : -1, visible[1] ? 2 : -1);
++            updatePlot(plots[2], "Judgements", 0, "", true, visible[3] ? 4 : -1, visible[4] ? 5 : -1, visible[5] ? 6 : -1);
++            hover(null);
++        }
++
++        private void updatePlot(Plot plot, string title, double fixedMax, string unit, bool stepped, params int[] indices)
++        {
++            var data = progression!;
++            var lines = indices.Where(index => index >= 0 && data.Values[index] != null)
++                               .Select(index => (Values: data.Values[index]!, Colour: series_colours[index]))
++                               .ToArray();
++            double maximum = fixedMax > 0 ? fixedMax : Math.Max(1, Math.Ceiling(lines.SelectMany(line => line.Values).DefaultIfEmpty().Max()));
++            plot.SetLines($"{title} · 0–{maximum:0}{unit}", lines, maximum, stepped);
++        }
++
++        private void hover(float? position)
++        {
++            var data = progression!;
++            foreach (var plot in plots)
++                plot.SetCursor(position);
++
++            if (position is not { } x)
++            {
++                string duration = TimeSpan.FromMilliseconds(data.Times[^1] - data.Times[0]).ToString(@"m\:ss");
++                string ppLegend = data.FullCombo ? "FC PP" : data.Values[2] != null ? "Play PP (green) · If FC (purple)" : "Play PP";
++                readout!.Text = $"{(visible[1] && data.Values[1] != null ? $"{ppLegend}   ·   " : "")}0:00–{duration}";
++                return;
++            }
++
++            int index = Math.Clamp((int)(x * (sample_count - 1)), 0, sample_count - 1);
++            var entries = new List<string>
++            {
++                TimeSpan.FromMilliseconds(data.Times[index] - data.Times[0]).ToString(@"m\:ss"),
++            };
++
++            void add(int toggle, int series, string name, string format)
++            {
++                if (visible[toggle] && data.Values[series] is { } values)
++                    entries.Add($"{name} {values[index].ToString(format)}");
++            }
++
++            add(0, 0, "Acc", "0.00'%'");
++            add(1, 1, data.FullCombo ? "FC" : "PP", "0.#");
++            add(1, 2, "If FC", "0.#");
++            add(2, 3, "HP", "0'%'");
++            add(3, 4, labels[3].ToString(), "0");
++            add(4, 5, labels[4].ToString(), "0");
++            add(5, 6, labels[5].ToString(), "0");
++            readout!.Text = string.Join("   ·   ", entries);
++        }
++
++        protected override void Dispose(bool isDisposing)
++        {
++            if (isDisposing)
++            {
++                cancellation?.Cancel();
++                cancellation?.Dispose();
++            }
++
++            base.Dispose(isDisposing);
++        }
++
++        internal sealed record Progression(double[] Times, double[]?[] Values, bool FullCombo);
++
++        private partial class Plot : CompositeDrawable
++        {
++            private readonly OsuSpriteText label;
++            private readonly PlotArea area;
++
++            public Plot(string title, Action<float?> hover)
++            {
++                RelativeSizeAxes = Axes.X;
++                AutoSizeAxes = Axes.Y;
++                InternalChild = new FillFlowContainer
++                {
++                    RelativeSizeAxes = Axes.X,
++                    AutoSizeAxes = Axes.Y,
++                    Direction = FillDirection.Vertical,
++                    Spacing = new Vector2(0, 3),
++                    Children = new Drawable[]
++                    {
++                        label = new OsuSpriteText { Text = title, Font = OsuFont.GetFont(size: 13) },
++                        area = new PlotArea(hover),
++                    },
++                };
++            }
++
++            public void SetLines(string title, (double[] Values, Color4 Colour)[] lines, double maximum, bool stepped)
++            {
++                label.Text = title;
++                area.SetLines(lines, maximum, stepped);
++                Alpha = lines.Length > 0 ? 1 : 0;
++            }
++
++            public void SetCursor(float? position) => area.SetCursor(position);
++        }
++
++        private partial class PlotArea : CompositeDrawable
++        {
++            private readonly Action<float?> hover;
++            private readonly Container paths;
++            private readonly Box cursor;
++            private (double[] Values, Color4 Colour)[] lines = Array.Empty<(double[], Color4)>();
++            private double maximum;
++            private bool stepped;
++            private float previousWidth = -1;
++
++            public PlotArea(Action<float?> hover)
++            {
++                this.hover = hover;
++                RelativeSizeAxes = Axes.X;
++                Height = 65;
++                InternalChildren = new Drawable[]
++                {
++                    new Box { RelativeSizeAxes = Axes.Both, Colour = new Color4(35, 39, 43, 255) },
++                    gridLine(Anchor.TopLeft),
++                    gridLine(Anchor.CentreLeft),
++                    gridLine(Anchor.BottomLeft),
++                    paths = new Container { RelativeSizeAxes = Axes.Both },
++                    cursor = new Box { RelativeSizeAxes = Axes.Y, RelativePositionAxes = Axes.X, Width = 1, Alpha = 0 },
++                };
++            }
++
++            private static Box gridLine(Anchor anchor) => new Box
++            {
++                Anchor = anchor,
++                Origin = anchor,
++                RelativeSizeAxes = Axes.X,
++                Height = 1,
++                Colour = new Color4(83, 91, 99, 255),
++            };
++
++            public void SetLines((double[] Values, Color4 Colour)[] newLines, double newMaximum, bool useSteps)
++            {
++                lines = newLines;
++                maximum = newMaximum;
++                stepped = useSteps;
++                previousWidth = -1;
++            }
++
++            public void SetCursor(float? position)
++            {
++                cursor.Alpha = position.HasValue ? 0.65f : 0;
++                cursor.X = position ?? 0;
++            }
++
++            protected override bool OnMouseMove(MouseMoveEvent e)
++            {
++                if (DrawWidth > 0)
++                    hover(Math.Clamp(e.MousePosition.X / DrawWidth, 0, 1));
++                return base.OnMouseMove(e);
++            }
++
++            protected override bool OnHover(HoverEvent e) => true;
++
++            protected override void OnHoverLost(HoverLostEvent e)
++            {
++                hover(null);
++                base.OnHoverLost(e);
++            }
++
++            protected override void Update()
++            {
++                base.Update();
++                if (DrawWidth == previousWidth)
++                    return;
++
++                previousWidth = DrawWidth;
++                paths.Clear();
++
++                foreach (var (values, colour) in lines)
++                {
++                    var vertices = new List<Vector2>(values.Length * (stepped ? 2 : 1));
++                    for (int i = 0; i < values.Length; i++)
++                    {
++                        float x = 2 + (DrawWidth - 4) * i / (values.Length - 1);
++                        float y = 2 + (DrawHeight - 4) * (1 - (float)Math.Clamp(values[i] / maximum, 0, 1));
++                        if (stepped && i > 0)
++                            vertices.Add(new Vector2(x, vertices[^1].Y));
++                        vertices.Add(new Vector2(x, y));
++                    }
++
++                    var path = new Path { Vertices = vertices, PathRadius = 1, Colour = colour };
++                    path.Position = -path.PositionInBoundingBox(Vector2.Zero);
++                    paths.Add(path);
++                }
++            }
++        }
++    }
++}
+diff --git a/osu.Game.Tests/NonVisual/ScoreProgressionTest.cs b/osu.Game.Tests/NonVisual/ScoreProgressionTest.cs
+new file mode 100644
+index 0000000000..1e8a5c35b5
+--- /dev/null
++++ b/osu.Game.Tests/NonVisual/ScoreProgressionTest.cs
+@@ -0,0 +1,70 @@
++// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
++
++using System;
++using System.Linq;
++using NUnit.Framework;
++using osu.Game.Beatmaps;
++using osu.Game.Rulesets.Judgements;
++using osu.Game.Rulesets.Mods;
++using osu.Game.Rulesets.Objects;
++using osu.Game.Rulesets.Osu;
++using osu.Game.Rulesets.Osu.Objects;
++using osu.Game.Rulesets.Scoring;
++using osu.Game.Scoring;
++using osu.Game.Screens.Ranking.Statistics;
++using osu.Game.Tests.Beatmaps;
++using osuTK;
++
++namespace osu.Game.Tests.NonVisual
++{
++    [TestFixture]
++    public class ScoreProgressionTest
++    {
++        [TestCase(true)]
++        [TestCase(false)]
++        public void TestFullComboComparison(bool fullCombo)
++        {
++            var ruleset = new OsuRuleset();
++            var beatmap = new Beatmap
++            {
++                HitObjects = Enumerable.Range(0, 24).Select(index => (HitObject)new HitCircle
++                {
++                    StartTime = 1000 + index * 200,
++                    Position = new Vector2(100 + index % 4 * 50, 200),
++                }).ToList(),
++            };
++            beatmap.BeatmapInfo.Ruleset = ruleset.RulesetInfo;
++
++            var working = new TestWorkingBeatmap(beatmap);
++            var playable = working.GetPlayableBeatmap(ruleset.RulesetInfo, Array.Empty<Mod>());
++            using var processor = ruleset.CreateScoreProcessor();
++            processor.ApplyBeatmap(playable);
++
++            for (int i = 0; i < playable.HitObjects.Count; i++)
++            {
++                var hit = playable.HitObjects[i];
++                processor.ApplyResult(new JudgementResult(hit, hit.Judgement)
++                {
++                    Type = i == 4 ? HitResult.Ok : i == 8 && !fullCombo ? HitResult.Miss : HitResult.Great,
++                });
++            }
++
++            var score = new ScoreInfo(beatmap.BeatmapInfo, ruleset.RulesetInfo);
++            processor.PopulateScore(score);
++            var progression = ScoreProgressionGraph.Compute(working, score, default);
++
++            Assert.Multiple(() =>
++            {
++                Assert.That(progression.FullCombo, Is.EqualTo(fullCombo));
++                Assert.That(progression.Values[0]![^1], Is.EqualTo(score.Accuracy * 100).Within(0.001));
++                Assert.That(progression.Values[1]![^1], Is.GreaterThan(0));
++                Assert.That(progression.Values[4]![^1], Is.EqualTo(fullCombo ? 0 : 1));
++                Assert.That(progression.Values[5]![^1], Is.EqualTo(1));
++                if (fullCombo)
++                    Assert.That(progression.Values[2], Is.Null);
++                else
++                    Assert.That(progression.Values[2]![^1], Is.GreaterThan(progression.Values[1]![^1]));
++            });
++        }
++    }
++}
 diff --git a/osu.Game.Tests/Visual/Navigation/TestSceneRitsuSimulation.cs b/osu.Game.Tests/Visual/Navigation/TestSceneRitsuSimulation.cs
 new file mode 100644
 index 0000000000..2bde1e26c9
@@ -21815,6 +22831,84 @@ index 0000000000..01b4948152
 +    <path d="M9 14h6"/>
 +  </g>
 +</svg>
+diff --git a/osu.Game.Tests/Visual/SongSelect/TestSceneBeatmapLeaderboardWedge.cs b/osu.Game.Tests/Visual/SongSelect/TestSceneBeatmapLeaderboardWedge.cs
+index c6d6339..b8afefc 100644
+--- a/osu.Game.Tests/Visual/SongSelect/TestSceneBeatmapLeaderboardWedge.cs
++++ b/osu.Game.Tests/Visual/SongSelect/TestSceneBeatmapLeaderboardWedge.cs
+@@ -15,6 +15,7 @@ using osu.Framework.Graphics.Containers;
+ using osu.Framework.Platform;
+ using osu.Framework.Testing;
+ using osu.Game.Beatmaps;
++using osu.Game.Beatmaps.Drawables;
+ using osu.Game.Graphics.Cursor;
+ using osu.Game.Graphics.UserInterface;
+ using osu.Game.Online.API.Requests.Responses;
+@@ -29,6 +30,7 @@ using osu.Game.Screens.Play.Leaderboards;
+ using osu.Game.Screens.Select;
+ using osu.Game.Tests.Resources;
+ using osu.Game.Users;
++using osu.Game.Utils;
+ using osuTK.Input;
+ 
+ namespace osu.Game.Tests.Visual.SongSelect
+@@ -209,6 +211,57 @@ namespace osu.Game.Tests.Visual.SongSelect
+             checkDisplayedCount(0);
+         }
+ 
++        [Test]
++        public void TestModdedStarBadgesUseScoreSettings()
++        {
++            ScoreInfo defaultSpacing = null!;
++            ScoreInfo reducedSpacing = null!;
++            ScoreInfo random = null!;
++            ScoreInfo noFail = null!;
++            double defaultStars = 0;
++            double reducedStars = 0;
++            double randomStars = 0;
++
++            setScope(BeatmapLeaderboardScope.Local);
++            AddStep("show scores with different Spacing Overtime settings", () =>
++            {
++                beatmapManager.Import(TestResources.GetTestBeatmapForImport(virtualTrack: true)).WaitSafely();
++                var beatmapInfo = beatmapManager.GetAllUsableBeatmapSets().First().Beatmaps
++                                                .Single(b => b.Ruleset.ShortName == "osu" && b.DifficultyName == "Insane");
++                var workingBeatmap = beatmapManager.GetWorkingBeatmap(beatmapInfo);
++                var calculator = beatmapInfo.Ruleset.CreateInstance().CreateDifficultyCalculator(workingBeatmap);
++                var scores = GenerateSampleScores(beatmapInfo);
++                defaultSpacing = scores[0];
++                reducedSpacing = scores[1];
++                random = scores[2];
++                noFail = scores[3];
++                defaultSpacing.Mods = new Mod[] { new OsuModSpacingOvertime() };
++                reducedSpacing.Mods = new Mod[] { new OsuModSpacingOvertime { EndSpacing = { Value = 0.4f } } };
++                defaultStars = calculator.Calculate(defaultSpacing.Mods).StarRating.FloorToDecimalDigits(2);
++                reducedStars = calculator.Calculate(reducedSpacing.Mods).StarRating.FloorToDecimalDigits(2);
++                random.Mods = new Mod[] { new OsuModRandom { Seed = { Value = 42 } } };
++                noFail.Mods = new Mod[] { new OsuModNoFail() };
++                randomStars = calculator.Calculate(random.Mods).StarRating.FloorToDecimalDigits(2);
++                double noModStars = calculator.Calculate().StarRating.FloorToDecimalDigits(2);
++                Assert.That(randomStars, Is.Not.EqualTo(noModStars));
++                Assert.That(defaultStars, Is.Not.EqualTo(noModStars));
++                Assert.That(reducedStars, Is.Not.EqualTo(noModStars).And.Not.EqualTo(defaultStars));
++
++                leaderboard.SetScores(new[] { defaultSpacing, reducedSpacing, random, noFail }, defaultSpacing);
++            });
++
++            AddUntilStep("show default spacing stars on the score and personal best", () => displayedStars(defaultSpacing), () => Is.EqualTo(new[] { defaultStars, defaultStars }));
++            AddUntilStep("show adjusted spacing stars on the other score", () => displayedStars(reducedSpacing), () => Is.EqualTo(new[] { reducedStars }));
++            AddUntilStep("show stars for regular Random", () => displayedStars(random), () => Is.EqualTo(new[] { randomStars }));
++            AddAssert("No Fail has no badge", () => displayedStars(noFail), () => Is.Empty);
++
++            double[] displayedStars(ScoreInfo score) => leaderboard.ChildrenOfType<BeatmapLeaderboardScore>()
++                                                                    .Where(row => ReferenceEquals(row.Score, score))
++                                                                    .SelectMany(row => row.ChildrenOfType<StarRatingDisplay>())
++                                                                    .Select(badge => badge.DisplayedStars.Value.FloorToDecimalDigits(2))
++                                                                    .ToArray();
++        }
++
+         [Test]
+         public void TestLocalScoresDisplayWorksWhenStartingOffline()
+         {
 diff --git a/osu.Game/Screens/Select/FooterButtonOptions.Popover.cs b/osu.Game/Screens/Select/FooterButtonOptions.Popover.cs
 index afc196e..e79256b 100644
 --- a/osu.Game/Screens/Select/FooterButtonOptions.Popover.cs
@@ -21856,3 +22950,177 @@ index 0000000..1b3ea40
 +        }
 +    }
 +}
+diff --git a/osu.Game/Beatmaps/StarRatingApproximator.cs b/osu.Game/Beatmaps/StarRatingApproximator.cs
+index a35a4ca..561e241 100644
+--- a/osu.Game/Beatmaps/StarRatingApproximator.cs
++++ b/osu.Game/Beatmaps/StarRatingApproximator.cs
+@@ -23,7 +23,7 @@ namespace osu.Game.Beatmaps
+         /// </summary>
+         public static bool ModAffectsDifficulty(Mod mod) =>
+             mod is IApplicableToDifficulty || mod is IApplicableToRate || mod is ModFlashlight || mod is ModHidden
+-            || mod is ModRelax || mod is ModTouchDevice || mod is IAffectsDifficulty;
++            || mod is ModRelax || mod is ModTouchDevice || mod is ModRandom || mod is IAffectsDifficulty;
+ 
+         /// <summary>
+         /// Computes a fast O(1) approximation of star rating when difficulty-altering mods are applied
+diff --git a/osu.Game.Rulesets.Mania/Mods/ManiaKeyMod.cs b/osu.Game.Rulesets.Mania/Mods/ManiaKeyMod.cs
+index 4e1bcc5..33f9750 100644
+--- a/osu.Game.Rulesets.Mania/Mods/ManiaKeyMod.cs
++++ b/osu.Game.Rulesets.Mania/Mods/ManiaKeyMod.cs
+@@ -9,7 +9,7 @@ using osu.Game.Rulesets.Mods;
+ 
+ namespace osu.Game.Rulesets.Mania.Mods
+ {
+-    public abstract class ManiaKeyMod : Mod, IApplicableToBeatmapConverter
++    public abstract class ManiaKeyMod : Mod, IApplicableToBeatmapConverter, IAffectsDifficulty
+     {
+         public override string Acronym => Name;
+         public abstract int KeyCount { get; }
+diff --git a/osu.Game.Rulesets.Mania/Mods/ManiaModDualStages.cs b/osu.Game.Rulesets.Mania/Mods/ManiaModDualStages.cs
+index 9c5d5f4..a6d258a 100644
+--- a/osu.Game.Rulesets.Mania/Mods/ManiaModDualStages.cs
++++ b/osu.Game.Rulesets.Mania/Mods/ManiaModDualStages.cs
+@@ -10,7 +10,7 @@ using osu.Game.Rulesets.Mods;
+ 
+ namespace osu.Game.Rulesets.Mania.Mods
+ {
+-    public class ManiaModDualStages : Mod, IPlayfieldTypeMod, IApplicableToBeatmapConverter
++    public class ManiaModDualStages : Mod, IPlayfieldTypeMod, IApplicableToBeatmapConverter, IAffectsDifficulty
+     {
+         public override string Name => "Dual Stages";
+         public override string Acronym => "DS";
+diff --git a/osu.Game.Rulesets.Mania/Mods/ManiaModHoldOff.cs b/osu.Game.Rulesets.Mania/Mods/ManiaModHoldOff.cs
+index c0333ec..917ba86 100644
+--- a/osu.Game.Rulesets.Mania/Mods/ManiaModHoldOff.cs
++++ b/osu.Game.Rulesets.Mania/Mods/ManiaModHoldOff.cs
+@@ -15,7 +15,7 @@ using osu.Game.Rulesets.Mania.Beatmaps;
+ 
+ namespace osu.Game.Rulesets.Mania.Mods
+ {
+-    public class ManiaModHoldOff : Mod, IApplicableAfterBeatmapConversion
++    public class ManiaModHoldOff : Mod, IApplicableAfterBeatmapConversion, IAffectsDifficulty
+     {
+         public override string Name => "Hold Off";
+ 
+diff --git a/osu.Game.Rulesets.Mania/Mods/ManiaModInvert.cs b/osu.Game.Rulesets.Mania/Mods/ManiaModInvert.cs
+index 98365fd..1a0b084 100644
+--- a/osu.Game.Rulesets.Mania/Mods/ManiaModInvert.cs
++++ b/osu.Game.Rulesets.Mania/Mods/ManiaModInvert.cs
+@@ -15,7 +15,7 @@ using osu.Game.Rulesets.Mods;
+ 
+ namespace osu.Game.Rulesets.Mania.Mods
+ {
+-    public class ManiaModInvert : Mod, IApplicableAfterBeatmapConversion
++    public class ManiaModInvert : Mod, IApplicableAfterBeatmapConversion, IAffectsDifficulty
+     {
+         public override string Name => "Invert";
+ 
+diff --git a/osu.Game.Rulesets.Mania/Mods/ManiaModClassic.cs b/osu.Game.Rulesets.Mania/Mods/ManiaModClassic.cs
+index 5e46250..45603d1 100644
+--- a/osu.Game.Rulesets.Mania/Mods/ManiaModClassic.cs
++++ b/osu.Game.Rulesets.Mania/Mods/ManiaModClassic.cs
+@@ -8,7 +8,7 @@ using osu.Game.Rulesets.Mods;
+ 
+ namespace osu.Game.Rulesets.Mania.Mods
+ {
+-    public class ManiaModClassic : ModClassic, IApplicableToBeatmap
++    public class ManiaModClassic : ModClassic, IApplicableToBeatmap, IAffectsDifficulty
+     {
+         public void ApplyToBeatmap(IBeatmap beatmap)
+         {
+diff --git a/osu.Game.Rulesets.Taiko/Mods/TaikoModSimplifiedRhythm.cs b/osu.Game.Rulesets.Taiko/Mods/TaikoModSimplifiedRhythm.cs
+index 907cf8b..2607aea 100644
+--- a/osu.Game.Rulesets.Taiko/Mods/TaikoModSimplifiedRhythm.cs
++++ b/osu.Game.Rulesets.Taiko/Mods/TaikoModSimplifiedRhythm.cs
+@@ -17,7 +17,7 @@ using osu.Game.Rulesets.Taiko.Objects;
+ 
+ namespace osu.Game.Rulesets.Taiko.Mods
+ {
+-    public class TaikoModSimplifiedRhythm : Mod, IApplicableToBeatmap
++    public class TaikoModSimplifiedRhythm : Mod, IApplicableToBeatmap, IAffectsDifficulty
+     {
+         public override string Name => "Simplified Rhythm";
+         public override string Acronym => "SR";
+diff --git a/osu.Game.Tests/Visual/Ranking/TestSceneResultsScreen.cs b/osu.Game.Tests/Visual/Ranking/TestSceneResultsScreen.cs
+index bcc36d3..53c53bd 100644
+--- a/osu.Game.Tests/Visual/Ranking/TestSceneResultsScreen.cs
++++ b/osu.Game.Tests/Visual/Ranking/TestSceneResultsScreen.cs
+@@ -9,12 +9,15 @@ using System.Threading.Tasks;
+ using NUnit.Framework;
+ using osu.Framework.Allocation;
+ using osu.Framework.Bindables;
++using osu.Framework.Extensions;
+ using osu.Framework.Graphics;
+ using osu.Framework.Graphics.Containers;
+ using osu.Framework.Screens;
+ using osu.Framework.Testing;
+ using osu.Framework.Utils;
+ using osu.Game.Beatmaps;
++using osu.Game.Beatmaps.Drawables;
++using osu.Game.Configuration;
+ using osu.Game.Database;
+ using osu.Game.Graphics.UserInterface;
+ using osu.Game.Online;
+@@ -23,7 +26,9 @@ using osu.Game.Online.API.Requests;
+ using osu.Game.Online.API.Requests.Responses;
+ using osu.Game.Rulesets;
+ using osu.Game.Rulesets.Difficulty;
++using osu.Game.Rulesets.Mods;
+ using osu.Game.Rulesets.Osu;
++using osu.Game.Rulesets.Osu.Mods;
+ using osu.Game.Rulesets.Scoring;
+ using osu.Game.Scoring;
+ using osu.Game.Screens;
+@@ -35,6 +40,7 @@ using osu.Game.Screens.Ranking.Statistics;
+ using osu.Game.Skinning;
+ using osu.Game.Tests.Resources;
+ using osu.Game.Users;
++using osu.Game.Utils;
+ using osuTK;
+ using osuTK.Input;
+ using Realms;
+@@ -467,6 +473,44 @@ namespace osu.Game.Tests.Visual.Ranking
+             AddAssert("download button is enabled", () => screen.ChildrenOfType<DownloadButton>().Last().Enabled.Value);
+         }
+ 
++        [Test]
++        public void TestModernV2DifficultyBadgeFollowsInspectedScore()
++        {
++            ResultsScreen screen = null;
++            ScoreInfo noModScore = null;
++            double moddedStars = 0;
++            double noModStars = 0;
++
++            AddStep("open a modded score in Modern V2", () =>
++            {
++                var config = Dependencies.Get<OsuConfigManager>();
++                config.SetValue(OsuSetting.UseV2ResultsScreen, true);
++                config.SetValue(OsuSetting.ToriiStableResults, false);
++
++                var imported = beatmaps.Import(new ImportTask(TestResources.GetTestBeatmapForImport(virtualTrack: true))).GetResultSafely();
++                var chart = beatmaps.GetAllUsableBeatmapSets().Single(set => set.ID == imported.ID).Beatmaps
++                                    .Single(b => b.Ruleset.ShortName == "osu" && b.DifficultyName == "Insane");
++                var moddedScore = TestResources.CreateTestScoreInfo(chart);
++                moddedScore.Mods = new Mod[] { new OsuModSpacingOvertime { EndSpacing = { Value = 0.4f } } };
++                noModScore = TestResources.CreateTestScoreInfo(chart);
++                noModScore.Mods = Array.Empty<Mod>();
++
++                var calculator = chart.Ruleset.CreateInstance().CreateDifficultyCalculator(beatmaps.GetWorkingBeatmap(chart));
++                moddedStars = calculator.Calculate(moddedScore.Mods).StarRating.FloorToDecimalDigits(2);
++                noModStars = calculator.Calculate().StarRating.FloorToDecimalDigits(2);
++                Assert.That(moddedStars, Is.Not.EqualTo(chart.StarRating.FloorToDecimalDigits(2)).And.Not.EqualTo(noModStars));
++
++                Child = resultsContainer = new TestResultsContainer(screen = createResultsScreen(moddedScore));
++            });
++            AddUntilStep("the badge shows the configured spacing difficulty", displayedStars, () => Is.EqualTo(moddedStars));
++
++            AddStep("inspect the no-mod score", () => screen.SelectOverviewScore(noModScore));
++            AddUntilStep("the badge shows the difficulty of the newly inspected score", displayedStars, () => Is.EqualTo(noModStars));
++
++            double? displayedStars() => screen.ChildrenOfType<V2ResultsPanel>().SingleOrDefault()?
++                .ChildrenOfType<StarRatingDisplay>().Single(badge => badge.Name == "Difficulty rating").DisplayedStars.Value.FloorToDecimalDigits(2);
++        }
++
+         [Test]
+         public void TestRulesetWithNoPerformanceCalculator()
+         {

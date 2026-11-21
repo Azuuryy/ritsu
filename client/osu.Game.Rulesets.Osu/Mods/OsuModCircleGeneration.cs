@@ -25,7 +25,7 @@ namespace osu.Game.Rulesets.Osu.Mods
     /// <summary>
     /// Generates hit circles in a square spiral pattern.
     /// </summary>
-    public partial class OsuModCircleGeneration : Mod, IApplicableToBeatmap, IModosuMod
+    public partial class OsuModCircleGeneration : Mod, IApplicableToBeatmap, IModosuMod, IAffectsDifficulty
     {
         public override bool Ranked => false;
         public override bool AlwaysValidForSubmission => false;
