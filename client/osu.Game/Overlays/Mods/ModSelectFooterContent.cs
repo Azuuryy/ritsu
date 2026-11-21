@@ -7,6 +7,7 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Game.LocalPriority;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Graphics.UserInterface;
@@ -146,11 +147,13 @@ namespace osu.Game.Overlays.Mods
                 double multiplier = scoreMultiplierCalculator?.CalculateFor(ActiveMods.Value) ?? 1;
 
                 rankingInformationDisplay.ModMultiplier.Value = multiplier;
-                rankingInformationDisplay.Ranked.Value = RitsuOffline.Enabled && profiles != null
-                    ? RitsuLocalBeatmapStatus.ForBeatmap(workingBeatmap.BeatmapInfo, profiles.GetActiveProfile()) != BeatmapOnlineStatus.Unranked
-                      && ActiveMods.Value.All(m => m.Acronym != "AT" && m.Acronym != "CN"
-                          && (m.Acronym != "RX" && m.Acronym != "AP" || profiles.IncludeRelaxAutopilot))
-                    : ActiveMods.Value.All(m => m.Ranked);
+                // osu!local: the active local profile may count every play (or Relax / Autopilot) as ranked.
+                rankingInformationDisplay.Ranked.Value = LocalPriorityPolicy.CountAllAsRanked
+                                                         || (RitsuOffline.Enabled && profiles != null
+                                                             ? RitsuLocalBeatmapStatus.ForBeatmap(workingBeatmap.BeatmapInfo, profiles.GetActiveProfile()) != BeatmapOnlineStatus.Unranked
+                                                               && ActiveMods.Value.All(m => m.Acronym != "AT" && m.Acronym != "CN"
+                                                                                           && (m.Acronym != "RX" && m.Acronym != "AP" || profiles.IncludeRelaxAutopilot || LocalPriorityPolicy.CountRelaxAutopilot))
+                                                             : ActiveMods.Value.All(LocalPriorityPolicy.IsModRanked));
             }
 
             beatmapAttributesDisplay?.Mods.Value = ActiveMods.Value;

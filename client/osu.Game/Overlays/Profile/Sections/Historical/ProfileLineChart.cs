@@ -37,6 +37,14 @@ namespace osu.Game.Overlays.Profile.Sections.Historical
         }
 
         private readonly UserHistoryGraph graph;
+
+        // Ritsu: the local profile also shows play history per week.
+        public string TickDateFormat { get; set; } = "MMM yyyy";
+
+        public string TooltipDateFormat
+        {
+            set => graph.TooltipDateFormat = value;
+        }
         private readonly Container<TickText> rowTicksContainer;
         private readonly Container<TickText> columnTicksContainer;
         private readonly Container<TickLine> rowLinesContainer;
@@ -192,7 +200,7 @@ namespace osu.Game.Overlays.Profile.Sections.Historical
             {
                 Origin = Anchor.CentreLeft,
                 RelativePositionAxes = Axes.X,
-                Text = value.ToLocalisableString("MMM yyyy"),
+                Text = value.ToLocalisableString(TickDateFormat),
                 Font = OsuFont.GetFont(size: 12, weight: FontWeight.SemiBold),
                 Rotation = 45,
                 X = x

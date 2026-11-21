@@ -232,18 +232,54 @@ namespace osu.Game
                 return;
             }
 
-            var profiles = Dependencies.Get<RitsuProfileManager>();
             string hash = Beatmap.Value.BeatmapInfo.Hash;
-            var best = profiles.GetBestScores(profiles.ActiveProfileId, Ruleset.Value.ShortName);
-            var previous = best.FirstOrDefault(score => score.BeatmapHash == hash)?.PP ?? 0;
-            double total = RitsuProfileManager.CalculateWeightedPP(best.Select(score => score.PP!.Value));
+
+            // osu!local: the active local profile's scores and PP (the numbers on its profile page). Ritsu's own profile data
+            // no longer gets new scores, so projecting from it gave old values.
+            var localProfiles = Dependencies.Get<LocalPriority.LocalProfileManager>();
+
+            if (localProfiles?.ActiveProfile.Value is { } localProfile)
+            {
+                var ruleset = Ruleset.Value;
+                var realmAccess = Dependencies.Get<RealmAccess>();
+
+                Task.Run(() => LocalPriority.LocalProfileStatistics.CalculateBestPerformanceAsync(localProfile, ruleset, realmAccess, BeatmapManager, localProfiles.Store, default))
+                    .ContinueWith(task => Schedule(() =>
+                    {
+                        if (task.IsFaulted || task.IsCanceled)
+                        {
+                            postRitsuNotice("The profile PP could not be calculated.");
+                            return;
+                        }
+
+                        var stats = task.GetAwaiter().GetResult();
+                        showRitsuPPProjection(value, reach, hash, stats.BestPerformance,
+                            pps => LocalPriority.LocalProfileStatistics.WeightedTotal(pps.ToArray()));
+                    }));
+                return;
+            }
+
+            var profiles = Dependencies.Get<RitsuProfileManager>();
+            var best = profiles.GetBestScores(profiles.ActiveProfileId, Ruleset.Value.ShortName)
+                               .Select(score => (score.BeatmapHash, score.PP!.Value)).ToArray();
+            showRitsuPPProjection(value, reach, hash, best, RitsuProfileManager.CalculateWeightedPP);
+        }
+
+        /// <param name="value">The score PP (/whatif) or the profile PP to reach (/reach).</param>
+        /// <param name="hash">The selected difficulty's hash.</param>
+        /// <param name="best">The best PP on each beatmap, highest first.</param>
+        /// <param name="weigh">The profile total for PP values ordered highest first.</param>
+        private void showRitsuPPProjection(double value, bool reach, string hash, IReadOnlyList<(string BeatmapHash, double PP)> best, Func<IEnumerable<double>, double> weigh)
+        {
+            var previous = best.FirstOrDefault(score => score.BeatmapHash == hash).PP;
+            double total = weigh(best.Select(score => score.PP));
             double after(double newScore)
             {
                 if (newScore <= previous)
                     return total;
 
-                return RitsuProfileManager.CalculateWeightedPP(best.Where(score => score.BeatmapHash != hash)
-                    .Select(score => score.PP!.Value).Append(newScore).OrderByDescending(pp => pp));
+                return weigh(best.Where(score => score.BeatmapHash != hash)
+                    .Select(score => score.PP).Append(newScore).OrderByDescending(pp => pp));
             }
 
             if (!reach)

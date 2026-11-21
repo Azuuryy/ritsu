@@ -7,6 +7,7 @@ using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Game.Configuration;
+using osu.Game.LocalPriority;
 using osu.Game.Localisation;
 using osu.Game.Online;
 using osu.Game.Online.API;
@@ -18,7 +19,7 @@ using osu.Game.Online.Notifications.WebSocket;
 namespace osu.Game.Offline
 {
     /// <summary>Production offline provider, with no authentication or transport objects.</summary>
-    public partial class OfflineAPIProvider : CompositeComponent, IAPIProvider
+    public partial class OfflineAPIProvider : CompositeComponent, IAPIProvider, ILocalProfileApi
     {
         private readonly LocalUserState localUserState;
         private readonly Bindable<APIState> state = new Bindable<APIState>(APIState.Offline);
@@ -28,7 +29,52 @@ namespace osu.Game.Offline
             config.SetValue(OsuSetting.Token, string.Empty);
             localUserState = new LocalUserState(this, config);
             AddInternal(localUserState);
+
+            // osu!local profiles: start in the profile that was active when the game was last closed.
+            var initialLocalUser = LocalPriorityPolicy.TakeInitialLocalUser();
+
+            if (initialLocalUser != null)
+            {
+                offlineUser = initialLocalUser;
+                LocalPriorityPolicy.OfflineProfileActive = true;
+                localUserState.SetOfflineLocalUser(initialLocalUser, immediate: true);
+            }
         }
+
+        #region osu!local profiles
+
+        private volatile APIUser? offlineUser;
+
+        public APIUser? ActiveOfflineUser => offlineUser;
+
+        // Ritsu has no online account to switch back to.
+        public event Action? OnlineAccountRequested { add { } remove { } }
+
+        public void SetOfflineProfile(APIUser? localUser)
+        {
+            var previous = offlineUser;
+
+            if (localUser == null && previous == null)
+                return;
+
+            if (localUser != null && previous != null && localUser.Id == previous.Id
+                && localUser.Username == previous.Username && localUser.CountryCode == previous.CountryCode
+                && LocalUser.Value.Id == localUser.Id)
+                return;
+
+            offlineUser = localUser;
+            LocalPriorityPolicy.OfflineProfileActive = localUser != null;
+
+            if (localUser != null)
+                localUserState.SetOfflineLocalUser(localUser);
+            else
+                Schedule(localUserState.ClearLocalUser);
+        }
+
+        // Ritsu never signs in, so local profiles always stay fully offline.
+        public void SetLocalProfilesUseOnlineAccount(bool value) => LocalPriorityPolicy.LocalProfilesUseOnlineAccount = false;
+
+        #endregion
 
         public IBindable<APIUser> LocalUser => localUserState.User;
         public void SetLocalProfile(string username) => localUserState.SetOfflineProfile(username);

@@ -53,6 +53,9 @@ namespace osu.Game.Screens.Select
         private INotificationOverlay? notifications { get; set; }
 
         [Resolved]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
+        [Resolved]
         private IDialogOverlay? dialogOverlay { get; set; }
 
         [Resolved]
@@ -193,6 +196,10 @@ namespace osu.Game.Screens.Select
             if (beatmaps.CanHide(beatmap))
                 yield return new OsuMenuItem(WebCommonStrings.ButtonsHide.ToSentence(), MenuItemType.Standard, () => beatmaps.Hide(beatmap));
 
+            // osu!local: never give PP on local profiles for this difficulty (e.g. a map made for skill testing).
+            if (localProfiles != null)
+                yield return osu.Game.LocalPriority.LocalPerformanceExclusions.CreateBeatmapMenuItem(localProfiles, beatmap);
+
             // torii: borrar una sola dificultad. estaba solo en el editor (File > delete
             // difficulty) y nadie lo encontraba. la ultima que queda no se puede borrar:
             // un set sin dificultades no existe, para eso esta borrar el mapa entero.
@@ -210,6 +217,11 @@ namespace osu.Game.Screens.Select
         private void start(ModAutoplay? preview)
         {
             if (playerLoader != null) return;
+
+            // osu!local: auto-switch rules are checked first, and a profile that only allows its mods with exact settings
+            // puts those settings back before every play.
+            localProfiles?.CheckAutoSwitchNow();
+            localProfiles?.ResetFixedModSettings();
 
             modsAtGameplayStart = Mods.Value.Select(m => m.DeepClone()).ToArray();
 

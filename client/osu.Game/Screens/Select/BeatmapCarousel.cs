@@ -1084,6 +1084,9 @@ namespace osu.Game.Screens.Select
         [Resolved(canBeNull: true)]
         private osu.Game.Offline.RitsuProfileManager? ritsuProfiles { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
         /// <remarks>
         /// FOOTGUN WARNING: this being sorted on the realm side before detaching is IMPORTANT.
         /// realm supports sorting as an internal operation, and realm's implementation of string sorting does NOT match dotnet's
@@ -1105,7 +1108,7 @@ namespace osu.Game.Screens.Select
 
             foreach (var score in allLocalScores)
             {
-                if (ritsuProfiles != null && !ritsuProfiles.BelongsToActiveProfile(score.ID))
+                if (!osu.Game.LocalPriority.RitsuProfileBridge.BelongsToActiveProfile(localProfiles, ritsuProfiles, score))
                     continue;
                 Debug.Assert(score.BeatmapInfo != null);
 

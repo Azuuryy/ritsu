@@ -118,6 +118,12 @@ namespace osu.Game.Overlays.Mods
         private Container aboveColumnsContent = null!;
         private ModCustomisationPanel customisationPanel = null!;
 
+        // Ritsu: the local profile mod rules picker moves "Customise" and adds its rules to it.
+        protected ModCustomisationPanel CustomisationPanel => customisationPanel;
+
+        // Ritsu: keep "Customise" usable even when no selected mod has settings (it also holds the profile rules there).
+        protected virtual bool AlwaysEnableCustomisation => false;
+
         protected virtual SelectAllModsButton? SelectAllModsButton => null;
 
         private Sample? columnAppearSample;
@@ -397,7 +403,7 @@ namespace osu.Game.Overlays.Mods
                 modState.PendingConfiguration = false;
             }
 
-            if (anyCustomisableModActive)
+            if (anyCustomisableModActive || AlwaysEnableCustomisation)
             {
                 customisationPanel.Enabled.Value = true;
 

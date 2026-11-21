@@ -18,6 +18,7 @@ using osu.Framework.Graphics.Effects;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Localisation;
 using osu.Framework.Utils;
+using osu.Game.LocalPriority;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Graphics;
@@ -309,7 +310,8 @@ namespace osu.Game.Screens.Select
                     int ppValue = (int)Math.Round(pp, MidpointRounding.AwayFromZero);
                     ValueText.Text = LocalisableString.Interpolate(@$"{ppValue:N0}pp");
 
-                    if (!scoreInfo.BeatmapInfo!.Status.GrantsPerformancePoints() || hasUnrankedMods(scoreInfo))
+                    // Ritsu: a local profile can count every play as ranked (this profile only).
+                    if (!LocalPriorityPolicy.GrantsPerformance(scoreInfo.BeatmapInfo!.Status) || hasUnrankedMods(scoreInfo))
                         Alpha = 0.5f;
                     else
                         Alpha = 1f;
@@ -322,7 +324,7 @@ namespace osu.Game.Screens.Select
                     if (scoreInfo.IsLegacyScore)
                         modsToCheck = modsToCheck.Where(m => m is not ModClassic);
 
-                    return modsToCheck.Any(m => !m.Ranked);
+                    return modsToCheck.Any(m => !LocalPriorityPolicy.IsModRanked(m));
                 }
             }
 

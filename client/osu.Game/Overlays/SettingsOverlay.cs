@@ -17,6 +17,7 @@ using osu.Game.Localisation;
 using osu.Game.Overlays.Settings;
 using osu.Game.Overlays.Settings.Sections;
 using osu.Game.Overlays.Settings.Sections.Input;
+using osu.Game.LocalPriority;
 using osu.Game.Rulesets;
 using osuTK.Graphics;
 
@@ -102,6 +103,8 @@ namespace osu.Game.Overlays
                 new AudioSection(),
                 new GraphicsSection(),
                 new OnlineSection(),
+                // Ritsu: its own tab, right under Online.
+                new LocalPrioritySection(),
                 new MaintenanceSection(),
                 new DebugSection()
             });

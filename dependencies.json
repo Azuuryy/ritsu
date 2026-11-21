@@ -4,7 +4,10 @@
     "ref": "v2026.1026.0-torii",
     "commit": "27291c03874c611155073440b5e2539548681fe6",
     "directory": "client",
-    "patch": "patches/client-offline.patch"
+    "patches": [
+      "patches/client-offline.patch",
+      "patches/client-local-profiles.patch"
+    ]
   },
   "framework": {
     "repository": "https://github.com/ShikkesoraSIM/torii-framework.git",

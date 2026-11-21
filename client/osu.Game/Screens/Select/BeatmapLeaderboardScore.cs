@@ -104,6 +104,9 @@ namespace osu.Game.Screens.Select
         [Resolved]
         private IAPIProvider api { get; set; } = null!;
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
         // Anchos pensados para un score fixed-width medido contra un digito, no
         // contra la 'm' (ver NumericSpriteText). Con NumericSpriteText el peor caso
         // de classic, "12,345,678", da 140px y le sobran 40 de los 200.
@@ -714,15 +717,12 @@ namespace osu.Game.Screens.Select
                 if (copyableMods.Length > 0)
                     items.Add(new OsuMenuItem(SongSelectStrings.UseTheseMods, MenuItemType.Highlighted, () => SelectedMods.Value = copyableMods));
 
-                var transfer = RitsuScoreTransferMenu.Create(ritsuProfiles, dialogOverlay, Score.ID);
-                if (transfer != null)
-                    items.Add(transfer);
-
-                if (ritsuProfiles?.BelongsToActiveProfile(Score.ID) == true)
+                // osu!local: move this score to another local profile (changes its player in the database), or exclude it from PP.
+                // These replace Ritsu's own "Transfer / Assign score to profile" and "Exclude this score from profile PP".
+                if (localProfiles != null)
                 {
-                    bool included = ritsuProfiles.IsScoreIncludedInPP(Score.ID);
-                    items.Add(new OsuMenuItem(included ? "Exclude this score from profile PP" : "Include this score in profile PP", MenuItemType.Standard,
-                        () => ritsuProfiles.SetScoreIncludedInPP(Score.ID, !included)));
+                    items.Add(osu.Game.LocalPriority.LocalProfileScoreTransfer.CreateMenuItem(localProfiles, Score));
+                    items.Add(osu.Game.LocalPriority.LocalPerformanceExclusions.CreateScoreMenuItem(localProfiles, Score));
                 }
 
                 if (library != null && collectionRealm != null && Score.BeatmapInfo is { } beatmap)
