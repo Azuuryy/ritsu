@@ -10644,7 +10644,7 @@ index d9fc6acc0e..a4022ee969 100644
                      if (Offline.RitsuOffline.Enabled)
                          ToggleLocalProfile();
 diff --git a/osu.Game/OsuGameBase.cs b/osu.Game/OsuGameBase.cs
-index f382377e68..b53c4e8c85 100644
+index f382377e68..0e17edb759 100644
 --- a/osu.Game/OsuGameBase.cs
 +++ b/osu.Game/OsuGameBase.cs
 @@ -1,7 +1,7 @@
@@ -10656,7 +10656,17 @@ index f382377e68..b53c4e8c85 100644
  
  using System;
  using System.Collections.Generic;
-@@ -338,6 +338,11 @@ namespace osu.Game
+@@ -289,7 +289,8 @@ namespace osu.Game
+             Resources.AddStore(new DllResourceStore(OsuResources.ResourceAssembly));
+             Resources.AddStore(new DllResourceStore(typeof(OsuGameBase).Assembly));
+ 
+-            dependencies.Cache(realm = new RealmAccess(Storage, CLIENT_DATABASE_FILENAME, Host.UpdateThread));
++            bool sharedRitsuStorage = Offline.RitsuOffline.Enabled && Host.Name == Offline.RitsuOffline.StorageName;
++            dependencies.Cache(realm = new RealmAccess(Storage, CLIENT_DATABASE_FILENAME, Host.UpdateThread, useVersionedDatabase: !sharedRitsuStorage));
+ 
+             dependencies.CacheAs<RulesetStore>(RulesetStore = new RealmRulesetStore(realm, Storage));
+             dependencies.CacheAs<IRulesetStore>(RulesetStore);
+@@ -338,6 +339,11 @@ namespace osu.Game
  
              var ritsuProfiles = new Offline.RitsuProfileManager(Storage, realm);
              dependencies.Cache(ritsuProfiles);
@@ -10668,7 +10678,7 @@ index f382377e68..b53c4e8c85 100644
              if (API is Offline.OfflineAPIProvider offlineProfilesApi)
              {
                  largeStore.AddTextureSource(Host.CreateTextureLoaderStore(new StorageBackedResourceStore(ritsuProfiles.AvatarStorage)));
-@@ -350,7 +355,7 @@ namespace osu.Game
+@@ -350,7 +356,7 @@ namespace osu.Game
              dependencies.Cache(difficultyCache = new BeatmapDifficultyCache());
  
              // ordering is important here to ensure foreign keys rules are not broken in ModelStore.Cleanup()
@@ -10677,7 +10687,7 @@ index f382377e68..b53c4e8c85 100644
  
              dependencies.Cache(BeatmapManager = new BeatmapManager(Storage, realm, API, Audio, Resources, Host, defaultBeatmap, difficultyCache, performOnlineLookups: false));
              dependencies.CacheAs<IWorkingBeatmapCache>(BeatmapManager);
-@@ -832,7 +837,7 @@ namespace osu.Game
+@@ -832,7 +838,7 @@ namespace osu.Game
              // may be non-null for certain tests
              Storage ??= host.Storage;
  
@@ -19222,10 +19232,24 @@ index 32a8a41aa0..3aebfa6d69 100644
      /// desde osu.Game invertiria la direccion de dependencia. ToriiSection lo trae via el hook generico
      /// <see cref="Ruleset.CreateToriiSettingsSubsection"/>.
 diff --git a/osu.Desktop/Program.cs b/osu.Desktop/Program.cs
-index 18741dd769..cbd50faca5 100644
+index 18741dd769..073f5462ac 100644
 --- a/osu.Desktop/Program.cs
 +++ b/osu.Desktop/Program.cs
-@@ -464,8 +464,7 @@ namespace osu.Desktop
+@@ -21,12 +21,7 @@ namespace osu.Desktop
+ {
+     public static class Program
+     {
+-#if DEBUG
+-        private const string base_game_name = @"Ritsu";
+-#else
+-        // Keep this offline foundation separate from existing Torii and osu! data.
+-        private const string base_game_name = @"Ritsu";
+-#endif
++        private const string base_game_name = osu.Game.Offline.RitsuOffline.StorageName;
+ 
+         /// <summary>
+         /// Compute the path to the folder containing this install's storage,
+@@ -464,8 +459,7 @@ namespace osu.Desktop
                          if (trySendIPCMessage(host, cwd, args))
                              return;
  
@@ -19455,3 +19479,25 @@ index 0000000000..854c01350e
 +        }
 +    }
 +}
+diff --git a/osu.Game/Database/RealmAccess.cs b/osu.Game/Database/RealmAccess.cs
+index cf375cb0d3..b3d4dc627d 100644
+--- a/osu.Game/Database/RealmAccess.cs
++++ b/osu.Game/Database/RealmAccess.cs
+@@ -203,7 +203,7 @@ namespace osu.Game.Database
+         /// <param name="storage">The game storage which will be used to create the realm backing file.</param>
+         /// <param name="filename">The filename to use for the realm backing file. A ".realm" extension will be added automatically if not specified.</param>
+         /// <param name="updateThread">The game update thread, used to post realm operations into a thread-safe context.</param>
+-        public RealmAccess(Storage storage, string filename, GameThread? updateThread = null)
++        public RealmAccess(Storage storage, string filename, GameThread? updateThread = null, bool useVersionedDatabase = true)
+         {
+             this.storage = storage;
+ 
+@@ -215,7 +215,7 @@ namespace osu.Game.Database
+                 Filename += realm_extension;
+ 
+ #if DEBUG
+-            if (!DebugUtils.IsNUnitRunning)
++            if (useVersionedDatabase && !DebugUtils.IsNUnitRunning)
+                 applyFilenameSchemaSuffix(ref Filename);
+ #endif
+ 

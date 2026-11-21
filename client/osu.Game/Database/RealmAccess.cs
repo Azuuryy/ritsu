@@ -203,7 +203,7 @@ namespace osu.Game.Database
         /// <param name="storage">The game storage which will be used to create the realm backing file.</param>
         /// <param name="filename">The filename to use for the realm backing file. A ".realm" extension will be added automatically if not specified.</param>
         /// <param name="updateThread">The game update thread, used to post realm operations into a thread-safe context.</param>
-        public RealmAccess(Storage storage, string filename, GameThread? updateThread = null)
+        public RealmAccess(Storage storage, string filename, GameThread? updateThread = null, bool useVersionedDatabase = true)
         {
             this.storage = storage;
 
@@ -215,7 +215,7 @@ namespace osu.Game.Database
                 Filename += realm_extension;
 
 #if DEBUG
-            if (!DebugUtils.IsNUnitRunning)
+            if (useVersionedDatabase && !DebugUtils.IsNUnitRunning)
                 applyFilenameSchemaSuffix(ref Filename);
 #endif
 
