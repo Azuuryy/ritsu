@@ -26,7 +26,7 @@ namespace osu.Game.LocalPriority
         public const string AVATAR_DIRECTORY = @"avatars";
 
         private const string profiles_file = DIRECTORY + @"/profiles.json";
-        private const string performance_file = DIRECTORY + @"/performance-cache.json";
+        private const string performance_file = DIRECTORY + @"/performance-cache-v2.json";
 
         public const int MAX_NAME_LENGTH = 32;
 
@@ -46,7 +46,8 @@ namespace osu.Game.LocalPriority
         private readonly object sync = new object();
 
         private StoreData data = new StoreData();
-        private Dictionary<Guid, double?> performanceCache = new Dictionary<Guid, double?>();
+        private readonly object performanceSaveLock = new object();
+        private Dictionary<Guid, ScorePerformance> performanceCache = new Dictionary<Guid, ScorePerformance>();
 
         public LocalProfileStore(Storage storage)
         {
@@ -70,7 +71,7 @@ namespace osu.Game.LocalPriority
             if (data.ActiveProfileId != null && data.Profiles.All(p => p.Id != data.ActiveProfileId))
                 data.ActiveProfileId = null;
 
-            performanceCache = read<Dictionary<Guid, double?>>(performance_file) ?? new Dictionary<Guid, double?>();
+            performanceCache = read<Dictionary<Guid, ScorePerformance>>(performance_file) ?? new Dictionary<Guid, ScorePerformance>();
 
             BeatmapTags = new LocalBeatmapTags(storage);
 
@@ -802,34 +803,51 @@ namespace osu.Game.LocalPriority
 
         #region Performance cache
 
-        public bool TryGetCachedPerformance(Guid scoreId, out double? pp)
+        internal sealed record ScorePerformance(string Key, double? PP);
+
+        internal bool TryGetCachedPerformance(Guid scoreId, string key, out double? pp)
         {
             lock (sync)
-                return performanceCache.TryGetValue(scoreId, out pp);
+            {
+                if (performanceCache.TryGetValue(scoreId, out var entry) && entry.Key == key)
+                {
+                    pp = entry.PP;
+                    return true;
+                }
+
+                pp = null;
+                return false;
+            }
         }
 
         /// <summary>
         /// Remembers calculated PP. A null value marks a score whose beatmap difficulty couldn't be calculated (broken or unsupported beatmap):
         /// it is never calculated again (no repeated errors), and <see cref="CalculationsFailed"/> tells about new ones once.
         /// </summary>
-        public void SetCachedPerformance(IReadOnlyDictionary<Guid, double?> values)
+        internal void SetCachedPerformance(IReadOnlyDictionary<Guid, ScorePerformance> values)
         {
             if (values.Count == 0)
                 return;
 
             int newlyFailed = 0;
 
-            lock (sync)
+            lock (performanceSaveLock)
             {
-                foreach (var (id, pp) in values)
+                Dictionary<Guid, ScorePerformance> snapshot;
+                lock (sync)
                 {
-                    if (pp == null && !(performanceCache.TryGetValue(id, out double? existing) && existing == null))
-                        newlyFailed++;
+                    foreach (var (id, entry) in values)
+                    {
+                        if (entry.PP == null && (!performanceCache.TryGetValue(id, out var existing) || existing != entry))
+                            newlyFailed++;
 
-                    performanceCache[id] = pp;
+                        performanceCache[id] = entry;
+                    }
+
+                    snapshot = new Dictionary<Guid, ScorePerformance>(performanceCache);
                 }
 
-                write(performance_file, performanceCache);
+                write(performance_file, snapshot);
             }
 
             if (newlyFailed > 0)
@@ -847,7 +865,7 @@ namespace osu.Game.LocalPriority
         public IReadOnlyList<Guid> GetFailedCalculations()
         {
             lock (sync)
-                return performanceCache.Where(p => p.Value == null).Select(p => p.Key).ToArray();
+                return performanceCache.Where(p => p.Value.PP == null).Select(p => p.Key).ToArray();
         }
 
         #endregion

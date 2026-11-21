@@ -208,6 +208,8 @@ namespace osu.Game.LocalPriority
         /// </summary>
         private class ScoreSummary
         {
+            public string? ModsJson;
+            public double? StoredPP;
             public Guid ID;
             public string BeatmapHash = string.Empty;
             public string? BeatmapMD5;
@@ -241,8 +243,8 @@ namespace osu.Game.LocalPriority
         /// Full statistics for the profile page.
         /// </summary>
         public static Task<LocalProfileStatistics> CalculateAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm, BeatmapManager beatmaps,
-                                                                  LocalProfileManager manager, CancellationToken cancellationToken)
-            => calculateAsync(profile, ruleset, realm, beatmaps, manager, true, cancellationToken);
+                                                                  LocalProfileManager manager, CancellationToken cancellationToken, Action<LocalProfileStatistics>? preliminary = null)
+            => calculateAsync(profile, ruleset, realm, beatmaps, manager, true, cancellationToken, preliminary);
 
         /// <summary>
         /// Only the PP total (for other profiles' chips and the local ranking): nothing else is built.
@@ -324,13 +326,14 @@ namespace osu.Game.LocalPriority
         }
 
         private static async Task<LocalProfileStatistics> calculateAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm, BeatmapManager beatmaps,
-                                                                         LocalProfileManager manager, bool full, CancellationToken cancellationToken)
+                                                                         LocalProfileManager manager, bool full, CancellationToken cancellationToken, Action<LocalProfileStatistics>? preliminary = null)
         {
             var store = manager.Store;
             var ids = manager.Profiles.GetProfilePlayIds(profile.Id, ruleset.ShortName);
             var options = store.Options;
             var exclusions = store.PerformanceExclusions;
 
+            BeatmapInfo? versionMap = null;
             var scores = realm.Run(r =>
             {
                 var results = ids.Keys.Select(id => r.Find<ScoreInfo>(id))
@@ -343,9 +346,15 @@ namespace osu.Game.LocalPriority
                 {
                     string? noPerformanceReason = exclusions.GetReason(score) ?? getNoPerformanceReason(score, profile, options.CountEverythingAsRanked);
 
+                    bool mapAvailable = score.BeatmapInfo != null && score.BeatmapInfo.Hash == score.BeatmapHash;
+                    if (mapAvailable && versionMap == null)
+                        versionMap = score.BeatmapInfo!.Detach();
+
                     var summary = new ScoreSummary
                     {
                         ID = score.ID,
+                        ModsJson = mapAvailable ? score.ModsJson : null,
+                        StoredPP = score.PP,
                         BeatmapHash = score.BeatmapHash,
                         BeatmapMD5 = score.BeatmapInfo?.MD5Hash,
                         GrantsPerformance = noPerformanceReason == null,
@@ -377,30 +386,65 @@ namespace osu.Game.LocalPriority
                 return list;
             });
 
-            // PP comes from the cache; only scores never calculated before are loaded in full (once) to calculate it.
-            var performance = new Dictionary<Guid, double?>();
-            var newlyCalculated = new Dictionary<Guid, double?>();
-            var difficulties = new Dictionary<string, DifficultyAttributes?>();
+            var performance = new System.Collections.Concurrent.ConcurrentDictionary<Guid, double?>();
+            var newlyCalculated = new System.Collections.Concurrent.ConcurrentDictionary<Guid, LocalProfileStore.ScorePerformance>();
+            var missing = new List<(Guid Id, string Map, string Mods, string Key)>();
+            int version = versionMap == null ? 0 : ruleset.CreateInstance().CreateDifficultyCalculator(beatmaps.GetWorkingBeatmap(versionMap)).Version;
 
             foreach (var summary in scores)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-
-                if (store.TryGetCachedPerformance(summary.ID, out double? cached))
+                if (summary.ModsJson == null)
                 {
-                    performance[summary.ID] = cached;
+                    performance[summary.ID] = null;
                     continue;
                 }
 
-                var score = realm.Run(r => r.Find<ScoreInfo>(summary.ID)?.Detach());
-                var (pp, failed) = score == null ? (null, false) : await calculatePerformance(score, beatmaps, difficulties, cancellationToken).ConfigureAwait(false);
-                performance[summary.ID] = pp;
-
-                // Scores on missing beatmaps are retried once the beatmap is imported; beatmaps that fail to calculate are remembered
-                // (as null) and never calculated again.
-                if (pp != null || failed)
-                    newlyCalculated[summary.ID] = pp;
+                string key = BeatmapDifficultyCache.CreateStablePerformanceKey(version, ruleset.ShortName, summary.BeatmapHash, summary.ModsJson);
+                if (summary.StoredPP is double pp && double.IsFinite(pp) && pp >= 0 && manager.Profiles.GetPerformanceKey(summary.ID) == key)
+                    performance[summary.ID] = pp;
+                else if (store.TryGetCachedPerformance(summary.ID, key, out double? cached))
+                    performance[summary.ID] = cached;
+                else if (summary.GrantsPerformance || full)
+                    missing.Add((summary.ID, summary.BeatmapHash, summary.ModsJson, key));
             }
+
+            await Parallel.ForEachAsync(missing.GroupBy(score => (score.Map, score.Mods)),
+                new ParallelOptions { MaxDegreeOfParallelism = Math.Min(4, Math.Max(1, Environment.ProcessorCount - 2)), CancellationToken = cancellationToken },
+                async (group, token) =>
+                {
+                    var scoreIds = group.ToDictionary(score => score.Id, score => score.Key);
+                    var batch = realm.Run(r => scoreIds.Keys.Select(id => r.Find<ScoreInfo>(id))
+                        .OfType<ScoreInfo>().Where(score => !score.DeletePending && score.BeatmapInfo?.Hash == score.BeatmapHash).Detach());
+                    if (batch.Count == 0)
+                        return;
+
+                    var first = batch[0];
+                    var difficulty = await manager.DifficultyCache.GetProfileDifficultyAsync(first.BeatmapInfo!, ruleset, first.Mods, token).ConfigureAwait(false);
+                    var calculator = ruleset.CreateInstance().CreatePerformanceCalculator();
+
+                    foreach (var score in batch)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        double? pp = null;
+                        if (difficulty?.DifficultyAttributes is { } attributes && calculator != null)
+                        {
+                            try
+                            {
+                                double total = (await calculator.CalculateAsync(score, attributes, token).ConfigureAwait(false)).Total;
+                                if (double.IsFinite(total) && total >= 0)
+                                    pp = total;
+                            }
+                            catch (Exception e) when (e is not OperationCanceledException)
+                            {
+                                Logger.Error(e, $"Ritsu: could not calculate PP for score {score.ID}");
+                            }
+                        }
+
+                        performance[score.ID] = pp;
+                        newlyCalculated[score.ID] = new LocalProfileStore.ScorePerformance(scoreIds[score.ID], pp);
+                    }
+                }).ConfigureAwait(false);
 
             store.SetCachedPerformance(newlyCalculated);
 
@@ -475,6 +519,12 @@ namespace osu.Game.LocalPriority
                                          .OrderByDescending(e => e.PP ?? 0)
                                          .Take(BEST_SCORE_LIMIT)
                                          .ToArray();
+            }
+
+            if (preliminary != null)
+            {
+                LocalScoreEntry.Load(bestScores.Take(PRELOADED_ROWS), realm);
+                preliminary(new LocalProfileStatistics { PP = totalPP, BestScores = bestScores, BestPerformance = bestPerformance, SavedScoreCount = scores.Count });
             }
 
             // PP history: replay the PP-giving scores in the order they were set and recompute the weighted total after each.
@@ -579,64 +629,7 @@ namespace osu.Game.LocalPriority
             return null;
         }
 
-        /// <summary>
-        /// The score's PP, calculated here instead of through the game's difficulty cache: a beatmap that can't be calculated
-        /// is only logged quietly (the difficulty cache shows an error notification every time).
-        /// </summary>
-        /// <returns>The PP (null without), and whether the beatmap's difficulty failed to calculate (as opposed to the beatmap being missing).</returns>
-        private static async Task<(double? PP, bool Failed)> calculatePerformance(ScoreInfo score, BeatmapManager beatmaps, Dictionary<string, DifficultyAttributes?> difficulties,
-                                                                                   CancellationToken cancellationToken)
-        {
-            if (score.BeatmapInfo == null || score.BeatmapInfo.Hash != score.BeatmapHash)
-                return (null, false);
 
-            try
-            {
-                var ruleset = score.Ruleset.CreateInstance();
-                var calculator = ruleset.CreatePerformanceCalculator();
-
-                if (calculator == null)
-                    return (null, false);
-
-                // Same beatmap, mode and mods: the same difficulty (calculated once per statistics run).
-                string key = $@"{score.BeatmapInfo.ID}|{score.Ruleset.ShortName}|{string.Join(@",", score.Mods.Select(m => Newtonsoft.Json.JsonConvert.SerializeObject(new APIMod(m))).OrderBy(m => m))}";
-
-                if (!difficulties.TryGetValue(key, out var attributes))
-                {
-                    try
-                    {
-                        var working = beatmaps.GetWorkingBeatmap(score.BeatmapInfo);
-                        attributes = ruleset.CreateDifficultyCalculator(working).Calculate(score.Mods, cancellationToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception e)
-                    {
-                        Logger.Log($@"Ritsu: could not calculate the difficulty of {score.BeatmapInfo} ({score.Ruleset.ShortName}): {e.Message}");
-                        attributes = null;
-                    }
-
-                    difficulties[key] = attributes;
-                }
-
-                if (attributes == null)
-                    return (null, true);
-
-                var result = await calculator.CalculateAsync(score, attributes, cancellationToken).ConfigureAwait(false);
-                return double.IsFinite(result.Total) ? (result.Total, false) : (null, true);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception e)
-            {
-                Logger.Log($@"Ritsu: could not calculate PP for score {score.ID}: {e.Message}");
-                return (null, true);
-            }
-        }
     }
 
     /// <summary>

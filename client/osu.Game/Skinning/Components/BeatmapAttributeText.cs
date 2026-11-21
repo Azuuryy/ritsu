@@ -51,6 +51,8 @@ namespace osu.Game.Skinning.Components
         private CancellationTokenSource? difficultyCancellationSource;
         private ModSettingChangeTracker? modSettingTracker;
         private StarDifficulty? starDifficulty;
+        private CancellationTokenSource? perfectPerformanceRequest;
+        private double? perfectPerformance;
 
         public BeatmapAttributeText()
         {
@@ -70,8 +72,8 @@ namespace osu.Game.Skinning.Components
         {
             base.LoadComplete();
 
-            Attribute.BindValueChanged(_ => updateText());
-            Template.BindValueChanged(_ => updateText());
+            Attribute.BindValueChanged(_ => refreshText());
+            Template.BindValueChanged(_ => refreshText());
 
             beatmap.BindValueChanged(b =>
             {
@@ -86,7 +88,7 @@ namespace osu.Game.Skinning.Components
                     updateText();
                 });
 
-                updateText();
+                refreshText();
             }, true);
 
             mods.BindValueChanged(m =>
@@ -94,15 +96,56 @@ namespace osu.Game.Skinning.Components
                 modSettingTracker?.Dispose();
                 modSettingTracker = new ModSettingChangeTracker(m.NewValue)
                 {
-                    SettingChanged = _ => updateText()
+                    SettingChanged = _ => refreshText()
                 };
 
-                updateText();
+                refreshText();
             }, true);
 
-            ruleset.BindValueChanged(_ => updateText());
+            ruleset.BindValueChanged(_ => refreshText());
 
             updateText();
+        }
+
+        private void refreshText()
+        {
+            perfectPerformance = null;
+            perfectPerformanceRequest?.Cancel();
+            updateText();
+            Scheduler.AddOnce(requestPerfectPerformance);
+        }
+
+        private void requestPerfectPerformance()
+        {
+            if (Attribute.Value != BeatmapAttribute.MaxPP && !Template.Value.Contains("{MaxPP}", StringComparison.Ordinal))
+                return;
+
+            var map = beatmap.Value.BeatmapInfo;
+            if (string.IsNullOrEmpty(map.Hash))
+                return;
+
+            perfectPerformanceRequest?.Dispose();
+            var request = perfectPerformanceRequest = new CancellationTokenSource();
+            var token = request.Token;
+            var lookup = difficultyCache.CreatePerfectPerformanceLookup(ruleset.Value, mods.Value);
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    double? pp = await lookup.CalculateAsync(map, token, background: false, loadPreset: false).ConfigureAwait(false);
+                    Schedule(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            perfectPerformance = pp;
+                            updateText();
+                        }
+                    });
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                }
+            });
         }
 
         private void updateText()
@@ -228,7 +271,7 @@ namespace osu.Game.Skinning.Components
                     return (starDifficulty?.Stars ?? 0).FormatStarRating();
 
                 case BeatmapAttribute.MaxPP:
-                    return Math.Round(starDifficulty?.PerformanceAttributes?.Total ?? 0, MidpointRounding.AwayFromZero).ToLocalisableString();
+                    return Math.Round(perfectPerformance ?? starDifficulty?.PerformanceAttributes?.Total ?? 0, MidpointRounding.AwayFromZero).ToLocalisableString();
 
                 default:
                     return string.Empty;
@@ -248,6 +291,8 @@ namespace osu.Game.Skinning.Components
 
         protected override void Dispose(bool isDisposing)
         {
+            perfectPerformanceRequest?.Cancel();
+            perfectPerformanceRequest?.Dispose();
             base.Dispose(isDisposing);
 
             difficultyCancellationSource?.Cancel();

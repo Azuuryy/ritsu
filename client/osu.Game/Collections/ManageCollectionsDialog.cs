@@ -11,6 +11,8 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Input.Events;
+using osu.Game.Input.Bindings;
 using osu.Game.Beatmaps;
 using osu.Game.Library;
 using osu.Game.Database;
@@ -25,6 +27,7 @@ using osu.Game.Overlays.Dialog;
 using osu.Game.Overlays;
 using osu.Game.Resources.Localisation.Web;
 using osuTK;
+using osuTK.Input;
 
 namespace osu.Game.Collections
 {
@@ -47,6 +50,7 @@ namespace osu.Game.Collections
         private BasicSearchTextBox searchTextBox = null!;
         private DrawableCollectionList list = null!;
         private Action? undo;
+        internal event Action? RemovalUndone;
 
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
@@ -54,8 +58,27 @@ namespace osu.Game.Collections
         [Resolved(canBeNull: true)]
         private RitsuLibrary? library { get; set; }
 
-        [Resolved(canBeNull: true)]
-        private IDialogOverlay? dialogs { get; set; }
+        internal readonly Bindable<Guid?> ExpandedCollection = new Bindable<Guid?>();
+        internal RitsuLibrary? Library => library;
+
+        protected override bool OnKeyDown(KeyDownEvent e)
+        {
+            if (e.Key == Key.Tab && this.MoveFocusToNextTabStop(e.ShiftPressed, requireFocusedChild: false))
+                return true;
+
+            return base.OnKeyDown(e);
+        }
+
+        public override bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
+        {
+            if (!e.Repeat && e.Action == GlobalAction.Back && ExpandedCollection.Value != null)
+            {
+                ExpandedCollection.Value = null;
+                return true;
+            }
+
+            return base.OnPressed(e);
+        }
 
         public override void Show()
         {
@@ -202,6 +225,7 @@ namespace osu.Game.Collections
         internal void UndoRemoval()
         {
             undo?.Invoke();
+            RemovalUndone?.Invoke();
             undo = null;
         }
 
@@ -264,20 +288,6 @@ namespace osu.Game.Collections
                                             Anchor = Anchor.CentreLeft,
                                             Origin = Anchor.CentreLeft,
                                             X = 10,
-                                            Alpha = library == null ? 0 : 1,
-                                            Icon = FontAwesome.Solid.Edit,
-                                            TooltipText = "Edit collection contents",
-                                            Action = () =>
-                                            {
-                                                if (library != null)
-                                                    dialogs?.Push(new RitsuCollectionEditor(this, library));
-                                            },
-                                        },
-                                        new IconButton
-                                        {
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft,
-                                            X = 43,
                                             Alpha = library == null ? 0 : 1,
                                             Icon = FontAwesome.Solid.Undo,
                                             TooltipText = "Undo last removal",
@@ -403,6 +413,7 @@ namespace osu.Game.Collections
 
         protected override void PopOut()
         {
+            ExpandedCollection.Value = null;
             base.PopOut();
 
             duckOperation?.Dispose();

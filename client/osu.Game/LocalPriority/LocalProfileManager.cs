@@ -34,6 +34,9 @@ namespace osu.Game.LocalPriority
     {
         public LocalProfileStore Store { get; }
         internal RitsuProfileManager Profiles { get; }
+
+        [Resolved]
+        internal BeatmapDifficultyCache DifficultyCache { get; private set; } = null!;
         private readonly bool linkedStorage;
         private readonly bool migratingProfiles;
 

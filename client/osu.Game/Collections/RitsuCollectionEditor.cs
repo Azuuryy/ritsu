@@ -6,24 +6,21 @@ using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Graphics.Sprites;
 using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
-using osu.Game.Offline;
-using osu.Game.Overlays.Dialog;
 using osuTK;
 
 namespace osu.Game.Collections
 {
-    internal partial class RitsuCollectionEditor : PopupDialog
+    internal partial class RitsuCollectionEditor : CompositeDrawable
     {
         private readonly ManageCollectionsDialog manager;
         private readonly RitsuLibrary library;
-        private readonly OsuDropdown<Entry> collections;
+        private readonly Guid collectionId;
         private readonly OsuDropdown<Entry> subgroups;
         private readonly BasicSearchTextBox search;
         private readonly FillFlowContainer rows;
@@ -31,6 +28,7 @@ namespace osu.Game.Collections
         private readonly OsuButton addSubgroup;
         private readonly OsuTextBox subgroupName;
         private readonly OsuButton deleteSubgroup;
+        private int visibleLimit = 100;
         private readonly HashSet<string> selected = new HashSet<string>();
         private readonly Entry allMembers = new Entry(Guid.Empty, "All difficulties");
         private (string Hash, string Label)[] difficulties = Array.Empty<(string, string)>();
@@ -38,14 +36,15 @@ namespace osu.Game.Collections
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
-        public RitsuCollectionEditor(ManageCollectionsDialog manager, RitsuLibrary library)
+        public RitsuCollectionEditor(ManageCollectionsDialog manager, RitsuLibrary library, Guid collectionId)
         {
             this.manager = manager;
             this.library = library;
 
-            HeaderText = "Collection contents";
-            Icon = FontAwesome.Solid.FolderOpen;
-            MainContent.Add(new FillFlowContainer
+            this.collectionId = collectionId;
+            RelativeSizeAxes = Axes.X;
+            AutoSizeAxes = Axes.Y;
+            AddInternal(new FillFlowContainer
             {
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
@@ -54,63 +53,53 @@ namespace osu.Game.Collections
                 Padding = new MarginPadding { Horizontal = 35, Vertical = 8 },
                 Children = new Drawable[]
                 {
-                    collections = new OsuDropdown<Entry> { RelativeSizeAxes = Axes.X },
                     subgroups = new OsuDropdown<Entry> { RelativeSizeAxes = Axes.X },
                     search = new BasicSearchTextBox { RelativeSizeAxes = Axes.X, Height = 32, PlaceholderText = "Find difficulties" },
-                    new OsuScrollContainer
-                    {
-                        RelativeSizeAxes = Axes.X,
-                        Height = 215,
-                        Child = rows = new FillFlowContainer
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Vertical,
-                            Spacing = new Vector2(0, 2),
-                        },
-                    },
                     subgroupName = new OsuTextBox { RelativeSizeAxes = Axes.X, PlaceholderText = "Name a new subgroup", ReleaseFocusOnCommit = false },
                     new FillFlowContainer
                     {
-                        AutoSizeAxes = Axes.Both,
-                        Direction = FillDirection.Horizontal,
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Direction = FillDirection.Full,
                         Spacing = new Vector2(5, 0),
                         Children = new Drawable[]
                         {
                             remove = new RoundedButton { Width = 135, Height = 28, Text = "Remove selected", Action = removeSelected },
                             addSubgroup = new RoundedButton { Width = 110, Height = 28, Text = "New subgroup", Action = addGroup },
                             deleteSubgroup = new RoundedButton { Width = 115, Height = 28, Text = "Delete subgroup", Action = deleteGroup },
-                            new RoundedButton { Width = 65, Height = 28, Text = "Undo", Action = () => { manager.UndoRemoval(); refresh(); } },
+                            new RoundedButton { Width = 65, Height = 28, Text = "Undo", Action = manager.UndoRemoval },
                         },
+                    },
+                    rows = new FillFlowContainer
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Direction = FillDirection.Vertical,
+                        Spacing = new Vector2(0, 2),
                     },
                 },
             });
-            Buttons = new PopupDialogButton[] { new PopupDialogOkButton { Text = "Done" } };
         }
 
         protected override void LoadComplete()
         {
             base.LoadComplete();
-            refresh();
-            collections.Current.ValueChanged += _ => refreshSubgroups();
+            Refresh();
             subgroups.Current.ValueChanged += _ => refreshDifficulties();
-            search.Current.ValueChanged += _ => refreshRows();
+            search.Current.ValueChanged += _ =>
+            {
+                visibleLimit = 100;
+                refreshRows();
+            };
+            manager.RemovalUndone += Refresh;
             subgroupName.Current.ValueChanged += _ => updateSubgroupButton();
             subgroupName.OnCommit += (_, _) => addGroup();
         }
 
-        private void refresh()
+        internal void Refresh()
         {
-            var entries = realm.Run(r => r.All<BeatmapCollection>().OrderBy(c => c.Name).AsEnumerable().Select(c => new Entry(c.ID, c.Name)).ToArray());
-            updateDropdown(collections, entries);
-            refreshSubgroups();
-        }
-
-        private void refreshSubgroups()
-        {
-            var collection = collections.Current.Value;
             updateDropdown(subgroups, new[] { allMembers }.Concat(library.Subgroups
-                .Where(s => s.CollectionId == collection?.Id)
+                .Where(s => s.CollectionId == collectionId)
                 .Select(s => new Entry(s.Id, s.Name))).ToArray());
             refreshDifficulties();
         }
@@ -132,13 +121,13 @@ namespace osu.Game.Collections
         private void refreshDifficulties()
         {
             selected.Clear();
-            var collection = collections.Current.Value;
+            visibleLimit = 100;
             var subgroup = library.Subgroups.FirstOrDefault(s => s.Id == subgroups.Current.Value?.Id);
             deleteSubgroup.Enabled.Value = subgroup != null;
             updateSubgroupButton();
-            difficulties = collection == null ? Array.Empty<(string, string)>() : realm.Run(r =>
+            difficulties = realm.Run(r =>
             {
-                var hashes = r.Find<BeatmapCollection>(collection.Id)?.BeatmapMD5Hashes.AsEnumerable() ?? Enumerable.Empty<string>();
+                var hashes = r.Find<BeatmapCollection>(collectionId)?.BeatmapMD5Hashes.AsEnumerable() ?? Enumerable.Empty<string>();
                 if (subgroup != null)
                     hashes = hashes.Intersect(subgroup.Hashes);
 
@@ -155,7 +144,8 @@ namespace osu.Game.Collections
         private void refreshRows()
         {
             rows.Clear();
-            foreach (var (hash, label) in difficulties.Where(d => d.Label.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase)))
+            var filtered = difficulties.Where(d => d.Label.Contains(search.Text, StringComparison.CurrentCultureIgnoreCase)).ToArray();
+            foreach (var (hash, label) in filtered.Take(visibleLimit))
             {
                 var row = new RoundedButton { RelativeSizeAxes = Axes.X, Height = 26 };
                 void update() => row.Text = $"{(selected.Contains(hash) ? "☑" : "☐")}  {label}";
@@ -169,34 +159,54 @@ namespace osu.Game.Collections
                 update();
                 rows.Add(row);
             }
+            if (filtered.Length > visibleLimit)
+                rows.Add(new RoundedButton
+                {
+                    RelativeSizeAxes = Axes.X,
+                    Height = 28,
+                    Text = "Show more difficulties",
+                    Action = () =>
+                    {
+                        visibleLimit += 100;
+                        refreshRows();
+                    },
+                });
+
             remove.Enabled.Value = selected.Count > 0;
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (isDisposing)
+                manager.RemovalUndone -= Refresh;
+            base.Dispose(isDisposing);
         }
 
         private void removeSelected()
         {
-            if (collections.Current.Value is not { } collection || selected.Count == 0)
+            if (selected.Count == 0)
                 return;
 
             Guid subgroup = subgroups.Current.Value?.Id ?? Guid.Empty;
-            manager.RemoveMembers(collection.Id, subgroup == Guid.Empty ? null : subgroup, selected);
+            manager.RemoveMembers(collectionId, subgroup == Guid.Empty ? null : subgroup, selected);
             refreshDifficulties();
         }
 
         private void addGroup()
         {
             string name = subgroupName.Text.Trim();
-            if (collections.Current.Value is not { } collection || name.Length == 0)
+            if (name.Length == 0)
                 return;
 
-            var group = new RitsuSubgroup(Guid.NewGuid(), collection.Id, name, selected.ToArray());
+            var group = new RitsuSubgroup(Guid.NewGuid(), collectionId, name, selected.ToArray());
             library.SaveSubgroup(group);
             subgroupName.Text = string.Empty;
-            refreshSubgroups();
+            Refresh();
             subgroups.Current.Value = subgroups.Items.Single(s => s.Id == group.Id);
         }
 
         private void updateSubgroupButton() =>
-            addSubgroup.Enabled.Value = collections.Current.Value != null && !string.IsNullOrWhiteSpace(subgroupName.Text);
+            addSubgroup.Enabled.Value = !string.IsNullOrWhiteSpace(subgroupName.Text);
 
         private void deleteGroup()
         {
@@ -204,7 +214,7 @@ namespace osu.Game.Collections
                 return;
 
             manager.DeleteSubgroup(group.Id);
-            refreshSubgroups();
+            Refresh();
         }
 
         private sealed record Entry(Guid Id, string Label)

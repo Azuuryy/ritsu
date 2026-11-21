@@ -2,8 +2,12 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Linq;
 using NUnit.Framework;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Input;
 using osu.Framework.Screens;
@@ -21,6 +25,7 @@ using osu.Game.Rulesets.Osu.Mods;
 using osu.Game.Screens;
 using osu.Game.Screens.Select;
 using osu.Game.Screens.Select.Filter;
+using osu.Game.Tests.Resources;
 using osuTK.Input;
 using FilterControl = osu.Game.Screens.Select.FilterControl;
 using NoResultsPlaceholder = osu.Game.Screens.Select.NoResultsPlaceholder;
@@ -637,6 +642,83 @@ namespace osu.Game.Tests.Visual.SongSelect
             GroupBy(GroupMode.Difficulty);
             WaitForFiltering();
             AddAssert("group change clears scope", () => SongSelect.ScopedBeatmapSet.Value, () => Is.Null);
+        }
+
+        [Test]
+        public void TestParallelMaxPerformanceMatchesForeground()
+        {
+            Task? measurement = null;
+            BeatmapDifficultyCache cache = null!;
+            BeatmapInfo map = null!;
+            AddStep("import a playable osu!standard difficulty", () =>
+            {
+                using var archive = TestResources.OpenResource("Archives/241526 Soleily - Renatus_virtual_quick.osz");
+                var imported = Beatmaps.Import(new ImportTask(archive, "Renatus.osz")).GetResultSafely();
+                map = Beatmaps.GetAllUsableBeatmapSets().Single(set => set.ID == imported.ID).Beatmaps
+                              .First(beatmap => beatmap.Ruleset.ShortName == "osu" && beatmap.DifficultyName == "Hard").Detach();
+            });
+            LoadSongSelect();
+
+            AddStep("load a difficulty cache for the test library", () => Add(cache = new BeatmapDifficultyCache()));
+            AddUntilStep("difficulty cache loaded", () => cache.IsLoaded);
+            AddStep("compare exact Max PP with 1, 2, 4 and 8 workers", () =>
+            {
+                var mode = map.Ruleset;
+                var variants = PerfectPerformanceWarmup.CreateVariants(mode, full: false).ToArray();
+                measurement = Task.Run(async () =>
+                {
+                    var reference = new double?[variants.Length];
+                    for (int i = 0; i < variants.Length; i++)
+                        reference[i] = (await cache.GetDifficultyAsync(map, mode, variants[i]).ConfigureAwait(false))?.PerformanceAttributes?.Total;
+
+                    Assert.That(reference.All(value => value is > 0), Is.True);
+                    foreach (int workers in new[] { 1, 2, 4, 8 })
+                    {
+                        cache.Clear();
+                        var stopwatch = Stopwatch.StartNew();
+                        var parallel = new double?[variants.Length];
+                        await Parallel.ForEachAsync(Enumerable.Range(0, variants.Length), new ParallelOptions { MaxDegreeOfParallelism = workers },
+                            async (index, token) => parallel[index] = (await cache.GetProfileDifficultyAsync(map, mode, variants[index], token).ConfigureAwait(false))?.PerformanceAttributes?.Total);
+                        stopwatch.Stop();
+                        Assert.That(parallel, Is.EqualTo(reference));
+                        TestContext.Progress.WriteLine($"Max PP · {workers} workers · {variants.Length} variants · {stopwatch.Elapsed.TotalMilliseconds:F1} ms");
+                    }
+
+                    var warm = Stopwatch.StartNew();
+                    for (int i = 0; i < variants.Length; i++)
+                        Assert.That((await cache.GetDifficultyAsync(map, mode, variants[i]).ConfigureAwait(false))?.PerformanceAttributes?.Total,
+                            Is.EqualTo(reference[i]));
+                    TestContext.Progress.WriteLine($"Max PP · cache warm · {variants.Length} variants · {warm.Elapsed.TotalMilliseconds:F1} ms");
+                });
+            });
+            AddUntilStep("calculations completed", () => measurement?.IsCompleted == true);
+            AddStep("check results", () => measurement!.GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void TestChangingModsKeepsScopedSet()
+        {
+            ImportBeatmapForRuleset(0);
+            ImportBeatmapForRuleset(0);
+            LoadSongSelect();
+            applyDifficultyCriterion(DifficultyCriterion.Sort);
+            Guid setId = Guid.Empty;
+            AddStep("scope selected set", () =>
+            {
+                var set = Beatmap.Value.BeatmapInfo.BeatmapSet!;
+                setId = set.ID;
+                SongSelect.ScopeToBeatmapSet(set);
+            });
+            WaitForFiltering();
+            ChangeMods(new OsuModDoubleTime());
+            AddAssert("mod toggle keeps the set", () => SongSelect.ScopedBeatmapSet.Value?.ID, () => Is.EqualTo(setId));
+            changeModSetting("change rate", () => selectedDoubleTime.SpeedChange.Value = 1.25);
+            AddAssert("rate change keeps the set", () => SongSelect.ScopedBeatmapSet.Value?.ID, () => Is.EqualTo(setId));
+            ChangeMods();
+            AddAssert("removing the mod keeps the set", () => SongSelect.ScopedBeatmapSet.Value?.ID, () => Is.EqualTo(setId));
+            AddStep("go back", () => SongSelect.UnscopeBeatmapSet());
+            WaitForFiltering();
+            AddAssert("back clears the scope", () => SongSelect.ScopedBeatmapSet.Value, () => Is.Null);
         }
 
         [Test]

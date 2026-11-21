@@ -1556,7 +1556,10 @@ namespace osu.Game.Screens.Play
             if (imported != null && score.ScoreInfo.ID == newScoreId && localProfileId.HasValue && ritsuProfiles != null)
             {
                 ritsuProfiles.AssociateNewScore(score.ScoreInfo.ID, localProfileId.Value, score.ScoreInfo.Ruleset.ShortName, calculatorVersion, score.ScoreInfo.ModsJson,
-                    localPlay: osu.Game.LocalPriority.LocalPriorityPolicy.IsOfflineProfileUser(score.ScoreInfo.User));
+                    localPlay: osu.Game.LocalPriority.LocalPriorityPolicy.IsOfflineProfileUser(score.ScoreInfo.User),
+                    ppKey: calculatorVersion > 0 && score.ScoreInfo.PP.HasValue && score.ScoreInfo.BeatmapInfo is { } map
+                        ? BeatmapDifficultyCache.CreateStablePerformanceKey(calculatorVersion, score.ScoreInfo.Ruleset.ShortName, map.Hash, score.ScoreInfo.ModsJson)
+                        : null);
                 LocalScoreWasAssociated = true;
             }
         }

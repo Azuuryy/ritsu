@@ -44,6 +44,40 @@ namespace osu.Game.Tests.Visual.Navigation
     public partial class TestSceneSongSelectNavigation : OsuGameTestScene
     {
         [Test]
+        public void TestCollectionContentsExpandInlineAndUndoRemoval()
+        {
+            ManageCollectionsDialog manager = null!;
+            Guid collectionId = Guid.Empty;
+            const string hash = "missing-from-test-library";
+
+            AddUntilStep("wait for collection manager", () => Game.Dependencies.Get<ManageCollectionsDialog>()?.IsLoaded == true);
+            AddStep("create and open a collection", () =>
+            {
+                manager = Game.Dependencies.Get<ManageCollectionsDialog>();
+                collectionId = Game.Realm.Write(realm => realm.Add(new BeatmapCollection("Inline collection", new[] { hash })).ID);
+                manager.Show();
+            });
+            AddUntilStep("show collection chevron", () => chevron() != null);
+            AddStep("expand inline", () => chevron()!.TriggerClick());
+            AddUntilStep("contents are under the original collection row", () =>
+                manager.ExpandedCollection.Value == collectionId && manager.ChildrenOfType<RitsuCollectionEditor>().SingleOrDefault()?.IsLoaded == true);
+            AddStep("remove and undo a collection difficulty", () =>
+            {
+                manager.RemoveMembers(collectionId, null, new[] { hash });
+                Assert.That(Game.Realm.Run(realm => realm.Find<BeatmapCollection>(collectionId)!.BeatmapMD5Hashes.Count), Is.Zero);
+                manager.UndoRemoval();
+            });
+            AddUntilStep("collection stays expanded and contains its difficulty", () => manager.ExpandedCollection.Value == collectionId
+                && Game.Realm.Run(realm => realm.Find<BeatmapCollection>(collectionId)!.BeatmapMD5Hashes.Contains(hash)));
+            AddStep("Escape collapses the row", () => InputManager.Key(Key.Escape));
+            AddAssert("manager remains open", () => manager.ExpandedCollection.Value == null &&
+                manager.State.Value == osu.Framework.Graphics.Containers.Visibility.Visible);
+
+            IconButton? chevron() => manager.ChildrenOfType<IconButton>().FirstOrDefault(button =>
+                button.IsPresent && button.TooltipText.ToString() == "Show collection contents");
+        }
+
+        [Test]
         public void TestCollectionsEntryPointsShareTheSelectedBeatmap()
         {
             BeatmapInfo beatmap = null!;

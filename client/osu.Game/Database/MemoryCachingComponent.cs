@@ -31,6 +31,7 @@ namespace osu.Game.Database
         protected virtual bool CacheNullValues => true;
 
         protected virtual bool SharePendingComputations => false;
+        protected virtual bool CacheComputedValue(TLookup lookup) => true;
 
         protected MemoryCachingComponent()
         {
@@ -62,7 +63,7 @@ namespace osu.Game.Database
 
             statistics.Value.MissCount++;
 
-            if (computed != null || CacheNullValues)
+            if (CacheComputedValue(lookup) && (computed != null || CacheNullValues))
             {
                 cache[lookup] = computed;
                 statistics.Value.Usage = cache.Count;
@@ -108,7 +109,7 @@ namespace osu.Game.Database
                     {
                         pending.Remove(lookup);
                         statistics.Value.MissCount++;
-                        if (result != null || CacheNullValues)
+                        if (CacheComputedValue(lookup) && (result != null || CacheNullValues))
                             cache[lookup] = result;
                         statistics.Value.Usage = cache.Count;
                         computation.TrySetResult(result);

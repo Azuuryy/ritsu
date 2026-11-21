@@ -348,7 +348,7 @@ namespace osu.Game.Screens.Select
                 bool difficultyCriteriaMayChange = (performanceCriteriaActive || difficultyCriteriaActive) && difficultyModsChanged(m.OldValue, m.NewValue);
 
                 if (rulesetCriteria?.FilterMayChangeFromMods(currentCriteria, m) == true || difficultyCriteriaMayChange)
-                    updateCriteria();
+                    updateCriteria(clearScopedSet: false);
             });
 
             trackModSettings(mods.Value);
@@ -434,7 +434,7 @@ namespace osu.Game.Screens.Select
 
                 // Settings can change very often (e.g. when dragging a rate slider), so debounce re-filtering.
                 debouncedModSettingsChange?.Cancel();
-                debouncedModSettingsChange = Scheduler.AddDelayed(() => updateCriteria(), 100);
+                debouncedModSettingsChange = Scheduler.AddDelayed(() => updateCriteria(clearScopedSet: false), 100);
             };
         }
 

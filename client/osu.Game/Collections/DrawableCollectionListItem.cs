@@ -23,6 +23,7 @@ using osu.Game.Graphics.UserInterface;
 using osu.Game.Localisation;
 using osu.Game.Overlays;
 using osuTK;
+using osuTK.Input;
 using osuTK.Graphics;
 
 namespace osu.Game.Collections
@@ -69,7 +70,93 @@ namespace osu.Game.Collections
             CornerExponent = 2.5f;
         }
 
-        protected override Drawable CreateContent() => content = new ItemContent(Model, MembershipManager);
+        protected override Drawable CreateContent()
+        {
+            if (MembershipManager is { Library: { } library } manager && Model.IsManaged)
+                return new ExpandableContent(Model, manager, library) { Header = content = new ItemContent(Model, MembershipManager) };
+
+            return content = new ItemContent(Model, MembershipManager);
+        }
+
+        private partial class ExpandableContent : CompositeDrawable
+        {
+            private readonly Guid id;
+            private readonly ManageCollectionsDialog manager;
+            private readonly osu.Game.Library.RitsuLibrary library;
+            private readonly IBindable<Guid?> expanded;
+            private readonly FillFlowContainer layout;
+            private readonly Chevron chevron;
+            private RitsuCollectionEditor? editor;
+
+            public Drawable Header { init => layout.Add(value); }
+
+            public ExpandableContent(Live<BeatmapCollection> collection, ManageCollectionsDialog manager, osu.Game.Library.RitsuLibrary library)
+            {
+                id = collection.PerformRead(item => item.ID);
+                this.manager = manager;
+                this.library = library;
+                expanded = manager.ExpandedCollection.GetBoundCopy();
+                RelativeSizeAxes = Axes.X;
+                AutoSizeAxes = Axes.Y;
+                AddInternal(layout = new FillFlowContainer { RelativeSizeAxes = Axes.X, AutoSizeAxes = Axes.Y, Direction = FillDirection.Vertical });
+                AddInternal(chevron = new Chevron
+                {
+                    Size = new Vector2(30, item_height),
+                    Icon = FontAwesome.Solid.ChevronRight,
+                    TooltipText = "Show collection contents",
+                    Action = () => manager.ExpandedCollection.Value = expanded.Value == id ? null : id,
+                });
+            }
+
+            protected override void LoadComplete()
+            {
+                base.LoadComplete();
+                expanded.BindValueChanged(change =>
+                {
+                    if (change.NewValue == id)
+                    {
+                        layout.Add(editor = new RitsuCollectionEditor(manager, library, id));
+                        chevron.Icon = FontAwesome.Solid.ChevronDown;
+                        chevron.TooltipText = "Hide collection contents";
+                    }
+                    else if (editor != null)
+                    {
+                        layout.Remove(editor, true);
+                        editor = null;
+                        chevron.Icon = FontAwesome.Solid.ChevronRight;
+                        chevron.TooltipText = "Show collection contents";
+                        if (change.NewValue == null)
+                            chevron.Focus();
+                    }
+                }, true);
+            }
+
+            private partial class Chevron : IconButton, ITabbableContainer
+            {
+                public bool CanBeTabbedTo => IsPresent;
+
+                public override bool AcceptsFocus => true;
+
+                public void Focus() => GetContainingFocusManager()?.ChangeFocus(this);
+
+                protected override bool OnClick(ClickEvent e)
+                {
+                    Focus();
+                    return base.OnClick(e);
+                }
+
+                protected override bool OnKeyDown(KeyDownEvent e)
+                {
+                    if (HasFocus && !e.Repeat && (e.Key == Key.Enter || e.Key == Key.Space))
+                    {
+                        TriggerClick();
+                        return true;
+                    }
+
+                    return base.OnKeyDown(e);
+                }
+            }
+        }
 
         /// <summary>
         /// The main content of the <see cref="DrawableCollectionListItem"/>.
@@ -116,7 +203,7 @@ namespace osu.Game.Collections
                     nameArea = new Container
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Padding = new MarginPadding { Right = collection.IsManaged ? button_width : 0 },
+                        Padding = new MarginPadding { Left = manager?.Library != null && collection.IsManaged ? 30 : 0, Right = collection.IsManaged ? button_width : 0 },
                         Children = new Drawable[]
                         {
                             TextBox = new ItemTextBox(collection)
@@ -191,7 +278,7 @@ namespace osu.Game.Collections
                 var selection = target.Value;
                 membershipActions.Alpha = selection == null ? 0 : 1;
                 float actionWidth = selection == null ? 0 : membership_actions_width;
-                nameArea.Padding = new MarginPadding { Right = button_width + actionWidth };
+                nameArea.Padding = new MarginPadding { Left = nameArea.Padding.Left, Right = button_width + actionWidth };
                 delete!.X = -actionWidth;
                 if (selection == null)
                 {

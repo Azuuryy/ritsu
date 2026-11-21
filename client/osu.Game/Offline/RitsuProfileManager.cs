@@ -277,7 +277,7 @@ namespace osu.Game.Offline
             Changed?.Invoke();
         }
 
-        public void AssociateNewScore(Guid scoreId, Guid profileId, string ruleset, int calculatorVersion, string modsJson, bool localPlay = false)
+        public void AssociateNewScore(Guid scoreId, Guid profileId, string ruleset, int calculatorVersion, string modsJson, bool localPlay = false, string? ppKey = null)
         {
             lock (sync)
             {
@@ -290,6 +290,7 @@ namespace osu.Game.Offline
                     CalculatorVersion = calculatorVersion,
                     ModsJson = modsJson,
                     LocalPlay = localPlay,
+                    PerformanceKey = ppKey,
                 });
                 save();
             }
@@ -333,6 +334,12 @@ namespace osu.Game.Offline
             }
 
             Changed?.Invoke();
+        }
+
+        internal string? GetPerformanceKey(Guid scoreId)
+        {
+            lock (sync)
+                return data.Scores.GetValueOrDefault(scoreId)?.PerformanceKey;
         }
 
         internal bool IsLocalPlay(Guid profileId, Guid scoreId)
@@ -910,6 +917,7 @@ namespace osu.Game.Offline
         public Guid ProfileId { get; set; }
         public string Ruleset { get; set; } = string.Empty;
         public int CalculatorVersion { get; set; }
+        public string? PerformanceKey { get; set; }
         public string ModsJson { get; set; } = string.Empty;
         public bool IncludeInPP { get; set; } = true;
         public bool LocalPlay { get; set; }

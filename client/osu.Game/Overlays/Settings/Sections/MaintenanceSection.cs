@@ -27,6 +27,7 @@ namespace osu.Game.Overlays.Settings.Sections
                 new BeatmapSettings(),
                 new SkinSettings(),
                 new CollectionsSettings(),
+                new PerfectPerformanceSettings(),
                 new ScoreSettings(),
                 new ModPresetSettings(),
                 // Ultimo de todo: es una salida para hardware que se porta mal, no

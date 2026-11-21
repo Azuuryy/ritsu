@@ -290,6 +290,8 @@ namespace osu.Game
 
         IBindable<LocalUserPlayingState> ILocalUserPlayInfo.PlayingState => UserPlayingState;
 
+        private PerfectPerformanceWarmup? performanceWarmup;
+
         protected readonly Bindable<LocalUserPlayingState> UserPlayingState = new Bindable<LocalUserPlayingState>();
 
         public OsuScreenStack ScreenStack { get; private set; }
@@ -1450,6 +1452,13 @@ namespace osu.Game
             SkinManager.PostNotification = n => Notifications.Post(n);
             SkinManager.PresentImport = items => PresentSkin(items.First().Value);
 
+            if (Offline.RitsuOffline.Enabled && Host is not HeadlessGameHost)
+            {
+                Dependencies.Cache(performanceWarmup = new PerfectPerformanceWarmup());
+                Add(performanceWarmup);
+                Scheduler.AddDelayed(performanceWarmup.StartAutomatic, 3000);
+            }
+
             BeatmapManager.PostNotification = n => Notifications.Post(n);
             BeatmapManager.PresentImport = items => PresentBeatmap(items.First().Value);
 
@@ -2570,6 +2579,7 @@ namespace osu.Game
 
         protected virtual void ScreenChanged([CanBeNull] IOsuScreen current, [CanBeNull] IOsuScreen newScreen)
         {
+            performanceWarmup?.SetPlaying(newScreen is Player or PlayerLoader);
             SentrySdk.ConfigureScope(scope =>
             {
                 scope.Contexts[@"screen stack"] = new

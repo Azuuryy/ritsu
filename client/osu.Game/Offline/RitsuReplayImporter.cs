@@ -150,7 +150,10 @@ namespace osu.Game.Offline
                 throw new InvalidOperationException("The existing score uses a different ruleset.");
             bool alreadyAssociated = previousProfile == profileId;
             if (!alreadyAssociated)
-                profiles.AssociateNewScore(existing.ID, profileId, rulesetName, calculatorVersion, existing.ModsJson);
+                profiles.AssociateNewScore(existing.ID, profileId, rulesetName, calculatorVersion, existing.ModsJson,
+                    ppKey: calculatorVersion > 0 && existing.PP.HasValue && existing.BeatmapInfo is { } map
+                        ? BeatmapDifficultyCache.CreateStablePerformanceKey(calculatorVersion, rulesetName, map.Hash, existing.ModsJson)
+                        : null);
             if (profiles.GetScoreProfileId(existing.ID) != profileId)
                 throw new InvalidOperationException("The score was saved, but could not be assigned to the selected profile.");
 

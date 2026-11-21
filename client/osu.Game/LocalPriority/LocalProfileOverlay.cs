@@ -496,7 +496,16 @@ namespace osu.Game.LocalPriority
 
             Task.Run(async () =>
             {
-                var statistics = await LocalProfileStatistics.CalculateAsync(profile, mode, realm, beatmaps, manager, token).ConfigureAwait(false);
+                var statistics = await LocalProfileStatistics.CalculateAsync(profile, mode, realm, beatmaps, manager, token, preview => Schedule(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                        populate(profile, allProfiles, preview, null);
+                })).ConfigureAwait(false);
+                Schedule(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                        populate(profile, allProfiles, statistics, null);
+                });
                 var ppByProfile = new Dictionary<Guid, double> { [profile.Id] = statistics.PP };
 
                 // Other profiles only need their PP total (chips, local ranking).

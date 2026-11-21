@@ -39,10 +39,12 @@ namespace osu.Game.Screens.Select
         {
             var lookup = cache.CreatePerfectPerformanceLookup(ruleset, mods);
             tryCached = beatmap => (lookup.TryGet(beatmap, out double value), value);
-            calculate = lookup.Calculate;
+            calculate = allowCalculations
+                ? lookup.Calculate
+                : (beatmap, _) => lookup.ReadPersisted(beatmap, loadPreset: true);
             flush = cache.FlushPerfectPerformanceCache;
             this.changed = changed;
-            this.allowCalculations = allowCalculations;
+            this.allowCalculations = true;
             Logger.Log($"Ritsu PP calculation session started, calculations enabled: {allowCalculations}");
         }
 
