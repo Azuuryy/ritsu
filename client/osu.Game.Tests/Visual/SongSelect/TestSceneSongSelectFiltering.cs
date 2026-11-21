@@ -61,6 +61,30 @@ namespace osu.Game.Tests.Visual.SongSelect
         }
 
         [Test]
+        public void TestPerformanceSessionIsKeptWhenOnlySearchChanges()
+        {
+            PerfectPerformanceSession? original = null;
+            var ruleset = new OsuRuleset().RulesetInfo;
+            LoadSongSelect();
+
+            AddStep("start with a PP sort", () =>
+            {
+                Carousel.Filter(new FilterCriteria { Ruleset = ruleset, Sort = SortMode.PerformancePoints, Mods = new[] { new OsuModDoubleTime() } });
+                original = Carousel.Criteria!.PerformanceSession;
+            });
+            AddAssert("PP session exists", () => original != null);
+            AddStep("change search with the same mods", () =>
+                Carousel.Filter(new FilterCriteria { Ruleset = ruleset, Sort = SortMode.PerformancePoints, Mods = new[] { new OsuModDoubleTime() }, SearchText = "new search" }));
+            AddAssert("PP session is retained", () => Carousel.Criteria!.PerformanceSession, () => Is.SameAs(original));
+            AddStep("change the DT rate", () =>
+            {
+                var dt = new OsuModDoubleTime { SpeedChange = { Value = 1.25 } };
+                Carousel.Filter(new FilterCriteria { Ruleset = ruleset, Sort = SortMode.PerformancePoints, Mods = new[] { dt } });
+            });
+            AddAssert("PP session is replaced", () => Carousel.Criteria!.PerformanceSession, () => Is.Not.Null.And.Not.SameAs(original));
+        }
+
+        [Test]
         public void TestSingleFilterOnEnter()
         {
             ImportBeatmapForRuleset(0);

@@ -130,6 +130,10 @@ namespace osu.Game.Beatmaps
         internal static IEnumerable<Mod> FilterPerformanceMods(IEnumerable<Mod>? mods)
             => mods?.Where(mod => ModUtils.FlattenMods(new[] { mod }).Any(StarRatingApproximator.ModAffectsDifficulty)) ?? Enumerable.Empty<Mod>();
 
+        internal static string CreatePerfectPerformanceModKey(IEnumerable<Mod>? mods)
+            => JsonConvert.SerializeObject(FilterPerformanceMods(mods).OrderBy(mod => mod.Acronym)
+                .Select(mod => new { Type = mod.GetType().FullName, Settings = new APIMod(mod) }));
+
         internal Task<StarDifficulty?> GetProfileDifficultyAsync(BeatmapInfo map, RulesetInfo ruleset, IReadOnlyList<Mod> mods, CancellationToken token)
             => GetAsync(new DifficultyCacheLookup(map, ruleset, mods) { Background = true }, token);
 
@@ -141,7 +145,7 @@ namespace osu.Game.Beatmaps
             private readonly BeatmapDifficultyCache owner;
             private readonly RulesetInfo? ruleset;
             private readonly Mod[] mods;
-            private readonly string modKey;
+            internal string ModKey { get; }
             private readonly string gameVersion = typeof(BeatmapDifficultyCache).Assembly.ManifestModule.ModuleVersionId.ToString();
             private readonly Dictionary<string, (int difficultyVersion, string legacyVersion)> versions = new Dictionary<string, (int, string)>();
 
@@ -150,7 +154,7 @@ namespace osu.Game.Beatmaps
                 this.owner = owner;
                 this.ruleset = ruleset;
                 this.mods = FilterPerformanceMods(mods).OrderBy(m => m.Acronym).Select(m => m.DeepClone()).ToArray();
-                modKey = JsonConvert.SerializeObject(this.mods.Select(m => new { Type = m.GetType().FullName, Settings = new APIMod(m) }));
+                ModKey = CreatePerfectPerformanceModKey(this.mods);
             }
 
             private readonly Dictionary<string, Dictionary<string, double>> loadedPresets = new Dictionary<string, Dictionary<string, double>>();
@@ -169,8 +173,8 @@ namespace osu.Game.Beatmaps
                         versions[info.ShortName] = version;
                     }
                 }
-                string stable = CreateStablePerformanceKey(version.difficultyVersion, info.ShortName, beatmap.Hash, modKey);
-                string legacy = JsonConvert.SerializeObject(new[] { gameVersion, version.legacyVersion, info.ShortName, beatmap.Hash, modKey });
+                string stable = CreateStablePerformanceKey(version.difficultyVersion, info.ShortName, beatmap.Hash, ModKey);
+                string legacy = JsonConvert.SerializeObject(new[] { gameVersion, version.legacyVersion, info.ShortName, beatmap.Hash, ModKey });
                 return (stable, legacy);
             }
 
@@ -282,6 +286,14 @@ namespace osu.Game.Beatmaps
         }
 
         internal void FlushPerfectPerformanceCache() => savePerformanceCache();
+
+        internal bool HasPerfectPerformanceMarker(string marker) => performanceStorage?.HasMarker(marker) == true;
+
+        internal void SavePerfectPerformanceMarker(string marker)
+        {
+            if (performanceStorage != null && savePerformanceCache())
+                performanceStorage.SaveMarker(marker);
+        }
 
         private bool savePerformanceCache()
         {

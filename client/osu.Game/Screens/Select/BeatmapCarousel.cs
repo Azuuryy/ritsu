@@ -855,7 +855,7 @@ namespace osu.Game.Screens.Select
         {
             get
             {
-                if (performanceSession == null) return null;
+                if (performanceSession?.CalculatesMissingValues != true) return null;
                 var progress = performanceSession.Progress;
                 return progress.total > progress.completed ? $"Calculating PP: {progress.completed}/{progress.total}" : null;
             }
@@ -908,12 +908,17 @@ namespace osu.Game.Screens.Select
         {
             bool resetDisplay = grouping.BeatmapSetsGroupedTogether != BeatmapCarouselFilterGrouping.ShouldGroupBeatmapsTogether(criteria);
 
-            performanceSession?.Dispose();
-            performanceRefresh?.Cancel();
-            performanceRefresh = null;
-            performanceSession = null;
-            if (difficultyCache != null && (criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability || criteria.Group == GroupMode.PerformancePoints100 || criteria.UsesPerformanceFilter))
-                performanceSession = new PerfectPerformanceSession(difficultyCache, criteria.Ruleset, criteria.Mods, performanceChanged, criteria.CalculateMapPerformance || criteria.SmartCollectionCriteria?.CalculateMapPerformance == true);
+            bool usesPerformance = criteria.UsesPerformanceFilter || criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability || criteria.Group == GroupMode.PerformancePoints100;
+            bool calculateMissing = criteria.CalculateMapPerformance || criteria.SmartCollectionCriteria?.CalculateMapPerformance == true;
+            if (!usesPerformance || performanceSession?.Matches(criteria.Ruleset, criteria.Mods, calculateMissing) != true)
+            {
+                performanceSession?.Dispose();
+                performanceRefresh?.Cancel();
+                performanceRefresh = null;
+                performanceSession = usesPerformance && difficultyCache != null
+                    ? new PerfectPerformanceSession(difficultyCache, criteria.Ruleset, criteria.Mods, performanceChanged, calculateMissing)
+                    : null;
+            }
             criteria.PerformanceSession = performanceSession;
             criteria.LocalProfile = ritsuProfiles?.GetActiveProfile();
             if (criteria.SmartCollectionCriteria != null)

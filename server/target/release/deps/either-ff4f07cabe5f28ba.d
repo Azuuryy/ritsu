@@ -1,0 +1,11 @@
+C:\Users\natha\ritsu\server\target\release\deps\either-ff4f07cabe5f28ba.d: C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\lib.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\serde_untagged.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\serde_untagged_optional.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\iterator.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\into_either.rs
+
+C:\Users\natha\ritsu\server\target\release\deps\libeither-ff4f07cabe5f28ba.rlib: C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\lib.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\serde_untagged.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\serde_untagged_optional.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\iterator.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\into_either.rs
+
+C:\Users\natha\ritsu\server\target\release\deps\libeither-ff4f07cabe5f28ba.rmeta: C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\lib.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\serde_untagged.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\serde_untagged_optional.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\iterator.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\into_either.rs
+
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\lib.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\serde_untagged.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\serde_untagged_optional.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\iterator.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\either-1.19.0\src\into_either.rs:

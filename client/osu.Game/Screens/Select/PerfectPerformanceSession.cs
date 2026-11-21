@@ -19,13 +19,17 @@ namespace osu.Game.Screens.Select
     internal sealed class PerfectPerformanceSession : IDisposable
     {
         private readonly object sync = new object();
-        private readonly Dictionary<Guid, PerfectPerformanceResult> results = new Dictionary<Guid, PerfectPerformanceResult>();
+        private readonly Dictionary<(Guid id, string hash), PerfectPerformanceResult> results = new Dictionary<(Guid id, string hash), PerfectPerformanceResult>();
         private readonly Queue<BeatmapInfo> queue = new Queue<BeatmapInfo>();
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         private readonly Func<BeatmapInfo, (bool found, double value)> tryCached;
         private readonly Func<BeatmapInfo, CancellationToken, double?> calculate;
         private readonly Action flush;
-        private readonly bool allowCalculations;
+        private readonly bool processMissingValues;
+        private readonly string? rulesetName;
+        private readonly string? modKey;
+
+        internal bool CalculatesMissingValues { get; }
         private readonly Action<PerfectPerformanceSession> changed;
         private readonly Stopwatch elapsed = Stopwatch.StartNew();
         private bool running;
@@ -44,7 +48,10 @@ namespace osu.Game.Screens.Select
                 : (beatmap, _) => lookup.ReadPersisted(beatmap, loadPreset: true);
             flush = cache.FlushPerfectPerformanceCache;
             this.changed = changed;
-            this.allowCalculations = true;
+            processMissingValues = true;
+            CalculatesMissingValues = allowCalculations;
+            rulesetName = ruleset?.ShortName;
+            modKey = lookup.ModKey;
             Logger.Log($"Ritsu PP calculation session started, calculations enabled: {allowCalculations}");
         }
 
@@ -54,8 +61,13 @@ namespace osu.Game.Screens.Select
             this.calculate = calculate;
             this.flush = flush;
             this.changed = changed;
-            this.allowCalculations = allowCalculations;
+            processMissingValues = allowCalculations;
+            CalculatesMissingValues = allowCalculations;
         }
+
+        internal bool Matches(RulesetInfo? ruleset, IReadOnlyList<Mod>? mods, bool calculateMissing)
+            => CalculatesMissingValues == calculateMissing && rulesetName == ruleset?.ShortName
+               && modKey == BeatmapDifficultyCache.CreatePerfectPerformanceModKey(mods);
 
         internal (int completed, int total, int cached, int failures) Progress
         {
@@ -66,7 +78,8 @@ namespace osu.Game.Screens.Select
         {
             lock (sync)
             {
-                if (results.TryGetValue(beatmap.ID, out var existing)) return existing;
+                var key = (beatmap.ID, beatmap.Hash);
+                if (results.TryGetValue(key, out var existing)) return existing;
                 if (cancellation.IsCancellationRequested) return new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
                 try
                 {
@@ -75,7 +88,7 @@ namespace osu.Game.Screens.Select
                     {
                         cacheHits++;
                         completed++;
-                        return results[beatmap.ID] = new PerfectPerformanceResult(PerfectPerformanceState.Available, cached.value);
+                        return results[key] = new PerfectPerformanceResult(PerfectPerformanceState.Available, cached.value);
                     }
                 }
                 catch (Exception e)
@@ -83,15 +96,15 @@ namespace osu.Game.Screens.Select
                     if (failures < 5) Logger.Error(e, $"Ritsu PP cache lookup failed for beatmap {beatmap.ID}");
                     failures++;
                     completed++;
-                    return results[beatmap.ID] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                    return results[key] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
                 }
-                if (!allowCalculations)
+                if (!processMissingValues)
                 {
                     completed++;
-                    return results[beatmap.ID] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                    return results[key] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
                 }
                 var pending = new PerfectPerformanceResult(PerfectPerformanceState.Pending);
-                results[beatmap.ID] = pending;
+                results[key] = pending;
                 queue.Enqueue(beatmap);
                 if (!running)
                 {
@@ -143,7 +156,7 @@ namespace osu.Game.Screens.Select
                     lock (sync)
                     {
                         currentBeatmap = null;
-                        results[beatmap.ID] = pp.HasValue ? new PerfectPerformanceResult(PerfectPerformanceState.Available, pp.Value) : new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                        results[(beatmap.ID, beatmap.Hash)] = pp.HasValue ? new PerfectPerformanceResult(PerfectPerformanceState.Available, pp.Value) : new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
                         completed++;
                         if (!pp.HasValue) failures++;
                     }
@@ -171,7 +184,7 @@ namespace osu.Game.Screens.Select
                 lock (sync)
                 {
                     running = false;
-                    foreach (var id in new List<Guid>(results.Keys))
+                    foreach (var id in new List<(Guid id, string hash)>(results.Keys))
                     {
                         if (results[id].State != PerfectPerformanceState.Pending) continue;
                         results[id] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);

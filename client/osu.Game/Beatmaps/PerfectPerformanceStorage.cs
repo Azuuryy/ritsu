@@ -30,14 +30,29 @@ namespace osu.Game.Beatmaps
 
         public void ImportJson(System.Func<Dictionary<string, double>> read)
         {
-            using var connection = open();
-            using var command = connection.CreateCommand();
-            command.CommandText = "SELECT 1 FROM metadata WHERE key = 'json-v2'";
-            if (command.ExecuteScalar() != null)
+            const string marker = "json-v2";
+            if (HasMarker(marker))
                 return;
 
             Save(read());
-            command.CommandText = "INSERT OR IGNORE INTO metadata(key) VALUES ('json-v2')";
+            SaveMarker(marker);
+        }
+
+        internal bool HasMarker(string marker)
+        {
+            using var connection = open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT 1 FROM metadata WHERE key = $key";
+            command.Parameters.AddWithValue("$key", marker);
+            return command.ExecuteScalar() != null;
+        }
+
+        internal void SaveMarker(string marker)
+        {
+            using var connection = open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "INSERT OR IGNORE INTO metadata(key) VALUES ($key)";
+            command.Parameters.AddWithValue("$key", marker);
             command.ExecuteNonQuery();
         }
 

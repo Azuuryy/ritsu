@@ -36,10 +36,10 @@ namespace osu.Game.Beatmaps
 
         public void SetPlaying(bool value) => playing = value;
 
-        public void StartAutomatic()
+        public void StartAutomatic(int difficultyVersion, string libraryPath)
         {
             if (running == null)
-                start(false);
+                start(full: false, completionMarker: BeatmapDifficultyCache.CreateStablePerformanceKey(difficultyVersion, "osu", libraryPath, "automatic-grid-v1"));
         }
 
         public void ToggleFull()
@@ -54,7 +54,7 @@ namespace osu.Game.Beatmaps
             start(true);
         }
 
-        private void start(bool full)
+        private void start(bool full, string? completionMarker = null)
         {
             if (disposed)
                 return;
@@ -66,7 +66,8 @@ namespace osu.Game.Beatmaps
             runCancellation = cancellation;
             completeGrid = full;
             Guid current = selectedBeatmap.Value.BeatmapInfo.ID;
-            status.Value = full ? "Stop full Max PP precalculation" : "Precalculating common Max PP combinations…";
+            if (full)
+                status.Value = "Stop full Max PP precalculation";
 
             running = Task.Run(async () =>
             {
@@ -75,7 +76,13 @@ namespace osu.Game.Beatmaps
                     if (previous != null)
                         await previous.ConfigureAwait(false);
 
-                    await run(full, current, cancellation).ConfigureAwait(false);
+                    if (completionMarker != null && cache.HasPerfectPerformanceMarker(completionMarker))
+                        return;
+
+                    if (!full)
+                        publish(cancellation, "Precalculating common Max PP combinations…");
+
+                    await run(full, current, cancellation, completionMarker).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
@@ -103,7 +110,7 @@ namespace osu.Game.Beatmaps
             status.TriggerChange();
         }
 
-        private async Task run(bool full, Guid current, CancellationTokenSource cancellation)
+        private async Task run(bool full, Guid current, CancellationTokenSource cancellation, string? completionMarker)
         {
             var token = cancellation.Token;
             token.ThrowIfCancellationRequested();
@@ -141,6 +148,10 @@ namespace osu.Game.Beatmaps
                         publish(cancellation, $"Max PP precalculation: {done:N0}/{total:N0}");
                 }).ConfigureAwait(false);
             }
+
+            token.ThrowIfCancellationRequested();
+            if (completionMarker != null)
+                cache.SavePerfectPerformanceMarker(completionMarker);
 
             publish(cancellation, full
                 ? $"Precalculate full Max PP grid again ({total - unavailable:N0}/{total:N0} available)"

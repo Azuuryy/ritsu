@@ -27,6 +27,22 @@ namespace osu.Game.Tests.NonVisual
         }
 
         [Test]
+        public void TestAutomaticCompletionMarkerIsScopedToLibraryAndVersion()
+        {
+            using var storage = new TemporaryNativeStorage($"pp-{Guid.NewGuid():N}");
+            string path = storage.GetFullPath("perfect-pp.db", true);
+            string marker = BeatmapDifficultyCache.CreateStablePerformanceKey(1, "osu", "library", "automatic-grid-v1");
+            var cache = new PerfectPerformanceStorage(path);
+            Assert.That(cache.HasMarker(marker), Is.False);
+            cache.SaveMarker(marker);
+
+            cache = new PerfectPerformanceStorage(path);
+            Assert.That(cache.HasMarker(marker), Is.True);
+            Assert.That(cache.HasMarker(BeatmapDifficultyCache.CreateStablePerformanceKey(2, "osu", "library", "automatic-grid-v1")), Is.False);
+            Assert.That(cache.HasMarker(BeatmapDifficultyCache.CreateStablePerformanceKey(1, "osu", "other-library", "automatic-grid-v1")), Is.False);
+        }
+
+        [Test]
         public void TestCachePersistsAndGroupsOnlyMatchingPreset()
         {
             using var storage = new TemporaryNativeStorage($"pp-{Guid.NewGuid():N}");

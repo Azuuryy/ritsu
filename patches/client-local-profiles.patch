@@ -628,10 +628,10 @@ index f37486e8ab..66a9d9c2b6 100644
          {
 diff --git a/osu.Game.Tests/NonVisual/PerfectPerformanceWarmupTest.cs b/osu.Game.Tests/NonVisual/PerfectPerformanceWarmupTest.cs
 new file mode 100644
-index 0000000000..26882820f0
+index 0000000000..0721ae70f5
 --- /dev/null
 +++ b/osu.Game.Tests/NonVisual/PerfectPerformanceWarmupTest.cs
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,61 @@
 +using System;
 +using System.Collections.Generic;
 +using System.Linq;
@@ -658,6 +658,22 @@ index 0000000000..26882820f0
 +                && mods.Count(m => m is ModDoubleTime or ModHalfTime) <= 1), Is.True);
 +            Assert.That(presets.Select(mods => Math.Round(ModUtils.CalculateRateWithMods(mods), 2)).Distinct(),
 +                Is.EquivalentTo(full ? Enumerable.Range(10, 31).Select(x => x / 20d) : new[] { 0.75, 1, 1.25, 1.50 }));
++        }
++
++        [Test]
++        public void TestAutomaticCompletionMarkerIsScopedToLibraryAndVersion()
++        {
++            using var storage = new TemporaryNativeStorage($"pp-{Guid.NewGuid():N}");
++            string path = storage.GetFullPath("perfect-pp.db", true);
++            string marker = BeatmapDifficultyCache.CreateStablePerformanceKey(1, "osu", "library", "automatic-grid-v1");
++            var cache = new PerfectPerformanceStorage(path);
++            Assert.That(cache.HasMarker(marker), Is.False);
++            cache.SaveMarker(marker);
++
++            cache = new PerfectPerformanceStorage(path);
++            Assert.That(cache.HasMarker(marker), Is.True);
++            Assert.That(cache.HasMarker(BeatmapDifficultyCache.CreateStablePerformanceKey(2, "osu", "library", "automatic-grid-v1")), Is.False);
++            Assert.That(cache.HasMarker(BeatmapDifficultyCache.CreateStablePerformanceKey(1, "osu", "other-library", "automatic-grid-v1")), Is.False);
 +        }
 +
 +        [Test]
@@ -1631,7 +1647,7 @@ index 0000000000..f76eb389af
 +    }
 +}
 diff --git a/osu.Game.Tests/Visual/SongSelect/TestSceneSongSelectFiltering.cs b/osu.Game.Tests/Visual/SongSelect/TestSceneSongSelectFiltering.cs
-index f5a803118e..1e03d3a5fe 100644
+index f5a803118e..3c1baa5b77 100644
 --- a/osu.Game.Tests/Visual/SongSelect/TestSceneSongSelectFiltering.cs
 +++ b/osu.Game.Tests/Visual/SongSelect/TestSceneSongSelectFiltering.cs
 @@ -2,8 +2,12 @@
@@ -1655,7 +1671,38 @@ index f5a803118e..1e03d3a5fe 100644
  using osuTK.Input;
  using FilterControl = osu.Game.Screens.Select.FilterControl;
  using NoResultsPlaceholder = osu.Game.Screens.Select.NoResultsPlaceholder;
-@@ -639,6 +644,83 @@ public void TestChangingSortKeepsScopeAndChangingGroupClearsIt()
+@@ -55,6 +60,30 @@ protected override void LoadSongSelect()
+             });
+         }
+ 
++        [Test]
++        public void TestPerformanceSessionIsKeptWhenOnlySearchChanges()
++        {
++            PerfectPerformanceSession? original = null;
++            var ruleset = new OsuRuleset().RulesetInfo;
++            LoadSongSelect();
++
++            AddStep("start with a PP sort", () =>
++            {
++                Carousel.Filter(new FilterCriteria { Ruleset = ruleset, Sort = SortMode.PerformancePoints, Mods = new[] { new OsuModDoubleTime() } });
++                original = Carousel.Criteria!.PerformanceSession;
++            });
++            AddAssert("PP session exists", () => original != null);
++            AddStep("change search with the same mods", () =>
++                Carousel.Filter(new FilterCriteria { Ruleset = ruleset, Sort = SortMode.PerformancePoints, Mods = new[] { new OsuModDoubleTime() }, SearchText = "new search" }));
++            AddAssert("PP session is retained", () => Carousel.Criteria!.PerformanceSession, () => Is.SameAs(original));
++            AddStep("change the DT rate", () =>
++            {
++                var dt = new OsuModDoubleTime { SpeedChange = { Value = 1.25 } };
++                Carousel.Filter(new FilterCriteria { Ruleset = ruleset, Sort = SortMode.PerformancePoints, Mods = new[] { dt } });
++            });
++            AddAssert("PP session is replaced", () => Carousel.Criteria!.PerformanceSession, () => Is.Not.Null.And.Not.SameAs(original));
++        }
++
+         [Test]
+         public void TestSingleFilterOnEnter()
+         {
+@@ -639,6 +668,83 @@ public void TestChangingSortKeepsScopeAndChangingGroupClearsIt()
              AddAssert("group change clears scope", () => SongSelect.ScopedBeatmapSet.Value, () => Is.Null);
          }
  
@@ -1740,7 +1787,7 @@ index f5a803118e..1e03d3a5fe 100644
          public void TestChangingCollectionClearsScope()
          {
 diff --git a/osu.Game/Beatmaps/BeatmapDifficultyCache.cs b/osu.Game/Beatmaps/BeatmapDifficultyCache.cs
-index 99a5621741..21676104ba 100644
+index 99a5621741..28a647eb1f 100644
 --- a/osu.Game/Beatmaps/BeatmapDifficultyCache.cs
 +++ b/osu.Game/Beatmaps/BeatmapDifficultyCache.cs
 @@ -22,6 +22,7 @@
@@ -1789,18 +1836,35 @@ index 99a5621741..21676104ba 100644
          }
  
          internal static Dictionary<string, double> loadPerformanceCache(Storage storage, string filename)
-@@ -119,6 +130,9 @@ internal static void WritePerformanceCache(Storage storage, string filename, IRe
+@@ -119,6 +130,13 @@ internal static void WritePerformanceCache(Storage storage, string filename, IRe
          internal static IEnumerable<Mod> FilterPerformanceMods(IEnumerable<Mod>? mods)
              => mods?.Where(mod => ModUtils.FlattenMods(new[] { mod }).Any(StarRatingApproximator.ModAffectsDifficulty)) ?? Enumerable.Empty<Mod>();
  
++        internal static string CreatePerfectPerformanceModKey(IEnumerable<Mod>? mods)
++            => JsonConvert.SerializeObject(FilterPerformanceMods(mods).OrderBy(mod => mod.Acronym)
++                .Select(mod => new { Type = mod.GetType().FullName, Settings = new APIMod(mod) }));
++
 +        internal Task<StarDifficulty?> GetProfileDifficultyAsync(BeatmapInfo map, RulesetInfo ruleset, IReadOnlyList<Mod> mods, CancellationToken token)
 +            => GetAsync(new DifficultyCacheLookup(map, ruleset, mods) { Background = true }, token);
 +
          internal PerfectPerformanceLookup CreatePerfectPerformanceLookup(RulesetInfo? ruleset, IReadOnlyList<Mod>? mods)
              => new PerfectPerformanceLookup(this, ruleset, mods);
  
-@@ -139,6 +153,8 @@ internal PerfectPerformanceLookup(BeatmapDifficultyCache owner, RulesetInfo? rul
-                 modKey = JsonConvert.SerializeObject(this.mods.Select(m => new { Type = m.GetType().FullName, Settings = new APIMod(m) }));
+@@ -127,7 +145,7 @@ internal sealed class PerfectPerformanceLookup
+             private readonly BeatmapDifficultyCache owner;
+             private readonly RulesetInfo? ruleset;
+             private readonly Mod[] mods;
+-            private readonly string modKey;
++            internal string ModKey { get; }
+             private readonly string gameVersion = typeof(BeatmapDifficultyCache).Assembly.ManifestModule.ModuleVersionId.ToString();
+             private readonly Dictionary<string, (int difficultyVersion, string legacyVersion)> versions = new Dictionary<string, (int, string)>();
+ 
+@@ -136,9 +154,11 @@ internal PerfectPerformanceLookup(BeatmapDifficultyCache owner, RulesetInfo? rul
+                 this.owner = owner;
+                 this.ruleset = ruleset;
+                 this.mods = FilterPerformanceMods(mods).OrderBy(m => m.Acronym).Select(m => m.DeepClone()).ToArray();
+-                modKey = JsonConvert.SerializeObject(this.mods.Select(m => new { Type = m.GetType().FullName, Settings = new APIMod(m) }));
++                ModKey = CreatePerfectPerformanceModKey(this.mods);
              }
  
 +            private readonly Dictionary<string, Dictionary<string, double>> loadedPresets = new Dictionary<string, Dictionary<string, double>>();
@@ -1808,7 +1872,18 @@ index 99a5621741..21676104ba 100644
              private (string? stable, string? legacy) getKeys(BeatmapInfo beatmap)
              {
                  if (string.IsNullOrEmpty(beatmap.Hash)) return (null, null);
-@@ -174,7 +190,7 @@ internal bool TryGet(BeatmapInfo beatmap, out double value)
+@@ -153,8 +173,8 @@ internal PerfectPerformanceLookup(BeatmapDifficultyCache owner, RulesetInfo? rul
+                         versions[info.ShortName] = version;
+                     }
+                 }
+-                string stable = CreateStablePerformanceKey(version.difficultyVersion, info.ShortName, beatmap.Hash, modKey);
+-                string legacy = JsonConvert.SerializeObject(new[] { gameVersion, version.legacyVersion, info.ShortName, beatmap.Hash, modKey });
++                string stable = CreateStablePerformanceKey(version.difficultyVersion, info.ShortName, beatmap.Hash, ModKey);
++                string legacy = JsonConvert.SerializeObject(new[] { gameVersion, version.legacyVersion, info.ShortName, beatmap.Hash, ModKey });
+                 return (stable, legacy);
+             }
+ 
+@@ -174,7 +194,7 @@ internal bool TryGet(BeatmapInfo beatmap, out double value)
                          FrameProfileCapture.Count("PerfectPP.hit", 1);
                          owner.performanceCache[stable] = value;
                          FrameProfileCapture.Count("PerfectPP.size", owner.performanceCache.Count);
@@ -1817,7 +1892,7 @@ index 99a5621741..21676104ba 100644
                          return true;
                      }
                  }
-@@ -183,54 +199,84 @@ internal bool TryGet(BeatmapInfo beatmap, out double value)
+@@ -183,87 +203,125 @@ internal bool TryGet(BeatmapInfo beatmap, out double value)
                  return false;
              }
  
@@ -1911,13 +1986,13 @@ index 99a5621741..21676104ba 100644
              {
 -                bool saved = false;
 -                try
--                {
--                    saved = savePerformanceCache();
--                }
--                finally
 +                bool saved = savePerformanceCache();
 +                lock (performanceCacheLock)
                  {
+-                    saved = savePerformanceCache();
+-                }
+-                finally
+-                {
 -                    lock (performanceCacheLock)
 -                    {
 -                        performanceSaveQueued = false;
@@ -1930,7 +2005,19 @@ index 99a5621741..21676104ba 100644
                  }
              });
          }
-@@ -242,28 +288,28 @@ private bool savePerformanceCache()
+ 
+         internal void FlushPerfectPerformanceCache() => savePerformanceCache();
+ 
++        internal bool HasPerfectPerformanceMarker(string marker) => performanceStorage?.HasMarker(marker) == true;
++
++        internal void SavePerfectPerformanceMarker(string marker)
++        {
++            if (performanceStorage != null && savePerformanceCache())
++                performanceStorage.SaveMarker(marker);
++        }
++
+         private bool savePerformanceCache()
+         {
              lock (performanceCacheWriteLock)
              {
                  Dictionary<string, double> snapshot;
@@ -1970,7 +2057,7 @@ index 99a5621741..21676104ba 100644
                      return false;
                  }
              }
-@@ -454,13 +500,15 @@ internal EffectiveStarRatingLookup CreateEffectiveStarRatingLookup(IRulesetInfo?
+@@ -454,13 +512,15 @@ internal EffectiveStarRatingLookup CreateEffectiveStarRatingLookup(IRulesetInfo?
                      return existing;
  
                  return computeDifficulty(lookup, cancellationToken);
@@ -1987,7 +2074,7 @@ index 99a5621741..21676104ba 100644
          public Task<List<TimedDifficultyAttributes>> GetTimedDifficultyAttributesAsync(IWorkingBeatmap beatmap, Ruleset ruleset, Mod[] mods, CancellationToken cancellationToken = default)
          {
              return Task.Factory.StartNew(() => ruleset.CreateDifficultyCalculator(beatmap).CalculateTimed(mods, cancellationToken),
-@@ -650,6 +698,7 @@ protected override void Dispose(bool isDisposing)
+@@ -650,6 +710,7 @@ protected override void Dispose(bool isDisposing)
              cancelTrackedBindableUpdate();
              Clear();
              updateScheduler.Dispose();
@@ -1995,7 +2082,7 @@ index 99a5621741..21676104ba 100644
              if (isDisposing)
                  FlushPerfectPerformanceCache();
          }
-@@ -657,8 +706,11 @@ protected override void Dispose(bool isDisposing)
+@@ -657,8 +718,11 @@ protected override void Dispose(bool isDisposing)
          public readonly struct DifficultyCacheLookup : IEquatable<DifficultyCacheLookup>
          {
              public readonly BeatmapInfo BeatmapInfo;
@@ -2007,7 +2094,7 @@ index 99a5621741..21676104ba 100644
  
              public DifficultyCacheLookup(BeatmapInfo beatmapInfo, RulesetInfo? ruleset, IEnumerable<Mod>? mods)
                  : this(beatmapInfo, ruleset, OrderMods(mods))
-@@ -671,6 +723,7 @@ public DifficultyCacheLookup(BeatmapInfo beatmapInfo, RulesetInfo? ruleset, IEnu
+@@ -671,6 +735,7 @@ public DifficultyCacheLookup(BeatmapInfo beatmapInfo, RulesetInfo? ruleset, IEnu
              private DifficultyCacheLookup(BeatmapInfo beatmapInfo, RulesetInfo? ruleset, Mod[] orderedMods)
              {
                  BeatmapInfo = beatmapInfo;
@@ -2015,7 +2102,7 @@ index 99a5621741..21676104ba 100644
                  // In the case that the user hasn't given us a ruleset, use the beatmap's default ruleset.
                  Ruleset = ruleset ?? BeatmapInfo.Ruleset;
                  OrderedMods = orderedMods;
-@@ -690,6 +743,7 @@ internal static Mod[] OrderMods(IEnumerable<Mod>? mods)
+@@ -690,6 +755,7 @@ internal static Mod[] OrderMods(IEnumerable<Mod>? mods)
  
              public bool Equals(DifficultyCacheLookup other)
                  => BeatmapInfo.Equals(other.BeatmapInfo)
@@ -2023,7 +2110,7 @@ index 99a5621741..21676104ba 100644
                     && Ruleset.Equals(other.Ruleset)
                     && OrderedMods.SequenceEqual(other.OrderedMods);
  
-@@ -698,6 +752,7 @@ public override int GetHashCode()
+@@ -698,6 +764,7 @@ public override int GetHashCode()
                  var hashCode = new HashCode();
  
                  hashCode.Add(BeatmapInfo.ID);
@@ -2158,10 +2245,10 @@ index a56c36a1ad..cd23d6d994 100644
  
 diff --git a/osu.Game/Beatmaps/PerfectPerformanceStorage.cs b/osu.Game/Beatmaps/PerfectPerformanceStorage.cs
 new file mode 100644
-index 0000000000..cb0b3f4b1d
+index 0000000000..93785ffe08
 --- /dev/null
 +++ b/osu.Game/Beatmaps/PerfectPerformanceStorage.cs
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,131 @@
 +using System.Collections.Generic;
 +using Microsoft.Data.Sqlite;
 +using Newtonsoft.Json;
@@ -2194,14 +2281,29 @@ index 0000000000..cb0b3f4b1d
 +
 +        public void ImportJson(System.Func<Dictionary<string, double>> read)
 +        {
-+            using var connection = open();
-+            using var command = connection.CreateCommand();
-+            command.CommandText = "SELECT 1 FROM metadata WHERE key = 'json-v2'";
-+            if (command.ExecuteScalar() != null)
++            const string marker = "json-v2";
++            if (HasMarker(marker))
 +                return;
 +
 +            Save(read());
-+            command.CommandText = "INSERT OR IGNORE INTO metadata(key) VALUES ('json-v2')";
++            SaveMarker(marker);
++        }
++
++        internal bool HasMarker(string marker)
++        {
++            using var connection = open();
++            using var command = connection.CreateCommand();
++            command.CommandText = "SELECT 1 FROM metadata WHERE key = $key";
++            command.Parameters.AddWithValue("$key", marker);
++            return command.ExecuteScalar() != null;
++        }
++
++        internal void SaveMarker(string marker)
++        {
++            using var connection = open();
++            using var command = connection.CreateCommand();
++            command.CommandText = "INSERT OR IGNORE INTO metadata(key) VALUES ($key)";
++            command.Parameters.AddWithValue("$key", marker);
 +            command.ExecuteNonQuery();
 +        }
 +
@@ -2280,10 +2382,10 @@ index 0000000000..cb0b3f4b1d
 +}
 diff --git a/osu.Game/Beatmaps/PerfectPerformanceWarmup.cs b/osu.Game/Beatmaps/PerfectPerformanceWarmup.cs
 new file mode 100644
-index 0000000000..df02ac2485
+index 0000000000..dace24d7ac
 --- /dev/null
 +++ b/osu.Game/Beatmaps/PerfectPerformanceWarmup.cs
-@@ -0,0 +1,193 @@
+@@ -0,0 +1,204 @@
 +using System;
 +using System.Collections.Generic;
 +using System.Linq;
@@ -2322,10 +2424,10 @@ index 0000000000..df02ac2485
 +
 +        public void SetPlaying(bool value) => playing = value;
 +
-+        public void StartAutomatic()
++        public void StartAutomatic(int difficultyVersion, string libraryPath)
 +        {
 +            if (running == null)
-+                start(false);
++                start(full: false, completionMarker: BeatmapDifficultyCache.CreateStablePerformanceKey(difficultyVersion, "osu", libraryPath, "automatic-grid-v1"));
 +        }
 +
 +        public void ToggleFull()
@@ -2340,7 +2442,7 @@ index 0000000000..df02ac2485
 +            start(true);
 +        }
 +
-+        private void start(bool full)
++        private void start(bool full, string? completionMarker = null)
 +        {
 +            if (disposed)
 +                return;
@@ -2352,7 +2454,8 @@ index 0000000000..df02ac2485
 +            runCancellation = cancellation;
 +            completeGrid = full;
 +            Guid current = selectedBeatmap.Value.BeatmapInfo.ID;
-+            status.Value = full ? "Stop full Max PP precalculation" : "Precalculating common Max PP combinations…";
++            if (full)
++                status.Value = "Stop full Max PP precalculation";
 +
 +            running = Task.Run(async () =>
 +            {
@@ -2361,7 +2464,13 @@ index 0000000000..df02ac2485
 +                    if (previous != null)
 +                        await previous.ConfigureAwait(false);
 +
-+                    await run(full, current, cancellation).ConfigureAwait(false);
++                    if (completionMarker != null && cache.HasPerfectPerformanceMarker(completionMarker))
++                        return;
++
++                    if (!full)
++                        publish(cancellation, "Precalculating common Max PP combinations…");
++
++                    await run(full, current, cancellation, completionMarker).ConfigureAwait(false);
 +                }
 +                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
 +                {
@@ -2389,7 +2498,7 @@ index 0000000000..df02ac2485
 +            status.TriggerChange();
 +        }
 +
-+        private async Task run(bool full, Guid current, CancellationTokenSource cancellation)
++        private async Task run(bool full, Guid current, CancellationTokenSource cancellation, string? completionMarker)
 +        {
 +            var token = cancellation.Token;
 +            token.ThrowIfCancellationRequested();
@@ -2427,6 +2536,10 @@ index 0000000000..df02ac2485
 +                        publish(cancellation, $"Max PP precalculation: {done:N0}/{total:N0}");
 +                }).ConfigureAwait(false);
 +            }
++
++            token.ThrowIfCancellationRequested();
++            if (completionMarker != null)
++                cache.SavePerfectPerformanceMarker(completionMarker);
 +
 +            publish(cancellation, full
 +                ? $"Precalculate full Max PP grid again ({total - unavailable:N0}/{total:N0} available)"
@@ -3247,6 +3360,30 @@ index b422e1fe76..f1db502742 100644
 +        RitsuLeaderboardScope,
      }
  }
+diff --git a/osu.Game/Database/BackgroundDataStoreProcessor.cs b/osu.Game/Database/BackgroundDataStoreProcessor.cs
+index f554417547..3ca64143e4 100644
+--- a/osu.Game/Database/BackgroundDataStoreProcessor.cs
++++ b/osu.Game/Database/BackgroundDataStoreProcessor.cs
+@@ -75,6 +75,9 @@ public partial class BackgroundDataStoreProcessor : Component
+         [Resolved]
+         private OsuConfigManager config { get; set; } = null!;
+ 
++        [Resolved(canBeNull: true)]
++        private PerfectPerformanceWarmup? performanceWarmup { get; set; }
++
+         private LocalCachedBeatmapMetadataSource localMetadataSource = null!;
+ 
+         protected virtual int TimeToSleepDuringGameplay => 30000;
+@@ -118,6 +121,9 @@ protected override void LoadComplete()
+                 }
+ 
+                 Logger.Log("Finished background data store processing!");
++
++                if (t.IsCompletedSuccessfully && performanceWarmup != null && currentDifficultyVersions.TryGetValue("osu", out int version))
++                    Schedule(() => performanceWarmup.StartAutomatic(version, storage.GetFullPath(".")));
+             });
+         }
+ 
 diff --git a/osu.Game/Database/LegacyScoreExporter.cs b/osu.Game/Database/LegacyScoreExporter.cs
 index 690070af85..9d12fd8b11 100644
 --- a/osu.Game/Database/LegacyScoreExporter.cs
@@ -15078,7 +15215,7 @@ index 60fb4f8de0..86b055c764 100644
          }
  
 diff --git a/osu.Game/OsuGame.cs b/osu.Game/OsuGame.cs
-index af1b3fafb1..96f49921ba 100644
+index af1b3fafb1..4a22123d2b 100644
 --- a/osu.Game/OsuGame.cs
 +++ b/osu.Game/OsuGame.cs
 @@ -50,6 +50,7 @@
@@ -15266,7 +15403,7 @@ index af1b3fafb1..96f49921ba 100644
                          break;
                  }
              }, validScreens: validScreens);
-@@ -1356,6 +1452,13 @@ protected override void LoadComplete()
+@@ -1356,6 +1452,12 @@ protected override void LoadComplete()
              SkinManager.PostNotification = n => Notifications.Post(n);
              SkinManager.PresentImport = items => PresentSkin(items.First().Value);
  
@@ -15274,13 +15411,12 @@ index af1b3fafb1..96f49921ba 100644
 +            {
 +                Dependencies.Cache(performanceWarmup = new PerfectPerformanceWarmup());
 +                Add(performanceWarmup);
-+                Scheduler.AddDelayed(performanceWarmup.StartAutomatic, 3000);
 +            }
 +
              BeatmapManager.PostNotification = n => Notifications.Post(n);
              BeatmapManager.PresentImport = items => PresentBeatmap(items.First().Value);
  
-@@ -1698,6 +1801,41 @@ protected override void LoadComplete()
+@@ -1698,6 +1800,41 @@ protected override void LoadComplete()
                  Origin = Anchor.TopRight,
              }, rightFloatingOverlayContent.Add, true);
  
@@ -15322,7 +15458,7 @@ index af1b3fafb1..96f49921ba 100644
              loadComponentSingleFile(new AccountCreationOverlay(), topMostOverlayContent.Add, true);
              loadComponentSingleFile<IDialogOverlay>(dialogOverlay = new DialogOverlay(), topMostOverlayContent.Add, true);
              loadComponentSingleFile(localProfiles = new RitsuLocalProfileOverlay(), overlayContent.Add, true);
-@@ -1717,7 +1855,7 @@ protected override void LoadComplete()
+@@ -1717,7 +1854,7 @@ protected override void LoadComplete()
              Add(new FriendPresenceNotifier());
  
              // side overlays which cancel each other.
@@ -15331,7 +15467,7 @@ index af1b3fafb1..96f49921ba 100644
  
              foreach (var overlay in singleDisplaySideOverlays)
              {
-@@ -2441,6 +2579,7 @@ private void adjustGlobalScreenOffset()
+@@ -2441,6 +2578,7 @@ private void adjustGlobalScreenOffset()
  
          protected virtual void ScreenChanged([CanBeNull] IOsuScreen current, [CanBeNull] IOsuScreen newScreen)
          {
@@ -15339,7 +15475,7 @@ index af1b3fafb1..96f49921ba 100644
              SentrySdk.ConfigureScope(scope =>
              {
                  scope.Contexts[@"screen stack"] = new
-@@ -2476,6 +2615,8 @@ protected virtual void ScreenChanged([CanBeNull] IOsuScreen current, [CanBeNull]
+@@ -2476,6 +2614,8 @@ protected virtual void ScreenChanged([CanBeNull] IOsuScreen current, [CanBeNull]
  
                  case Player player:
                      player.PlayingState.BindTo(UserPlayingState);
@@ -16604,10 +16740,43 @@ index abba4951ee..321c592c24 100644
  
          public override void Appear()
 diff --git a/osu.Game/Screens/Select/BeatmapCarousel.cs b/osu.Game/Screens/Select/BeatmapCarousel.cs
-index 793e86f31b..f0fafca0ff 100644
+index 793e86f31b..ad85b4d03d 100644
 --- a/osu.Game/Screens/Select/BeatmapCarousel.cs
 +++ b/osu.Game/Screens/Select/BeatmapCarousel.cs
-@@ -1098,10 +1098,15 @@ protected override void Dispose(bool isDisposing)
+@@ -855,7 +855,7 @@ protected override float GetPanelXOffset(Drawable panel)
+         {
+             get
+             {
+-                if (performanceSession == null) return null;
++                if (performanceSession?.CalculatesMissingValues != true) return null;
+                 var progress = performanceSession.Progress;
+                 return progress.total > progress.completed ? $"Calculating PP: {progress.completed}/{progress.total}" : null;
+             }
+@@ -908,12 +908,17 @@ public void Filter(FilterCriteria criteria, bool showLoadingImmediately = false)
+         {
+             bool resetDisplay = grouping.BeatmapSetsGroupedTogether != BeatmapCarouselFilterGrouping.ShouldGroupBeatmapsTogether(criteria);
+ 
+-            performanceSession?.Dispose();
+-            performanceRefresh?.Cancel();
+-            performanceRefresh = null;
+-            performanceSession = null;
+-            if (difficultyCache != null && (criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability || criteria.Group == GroupMode.PerformancePoints100 || criteria.UsesPerformanceFilter))
+-                performanceSession = new PerfectPerformanceSession(difficultyCache, criteria.Ruleset, criteria.Mods, performanceChanged, criteria.CalculateMapPerformance || criteria.SmartCollectionCriteria?.CalculateMapPerformance == true);
++            bool usesPerformance = criteria.UsesPerformanceFilter || criteria.Sort is SortMode.PerformancePoints or SortMode.Farmability || criteria.Group == GroupMode.PerformancePoints100;
++            bool calculateMissing = criteria.CalculateMapPerformance || criteria.SmartCollectionCriteria?.CalculateMapPerformance == true;
++            if (!usesPerformance || performanceSession?.Matches(criteria.Ruleset, criteria.Mods, calculateMissing) != true)
++            {
++                performanceSession?.Dispose();
++                performanceRefresh?.Cancel();
++                performanceRefresh = null;
++                performanceSession = usesPerformance && difficultyCache != null
++                    ? new PerfectPerformanceSession(difficultyCache, criteria.Ruleset, criteria.Mods, performanceChanged, calculateMissing)
++                    : null;
++            }
+             criteria.PerformanceSession = performanceSession;
+             criteria.LocalProfile = ritsuProfiles?.GetActiveProfile();
+             if (criteria.SmartCollectionCriteria != null)
+@@ -1098,10 +1103,15 @@ protected override void Dispose(bool isDisposing)
          {
              var topRankMapping = new Dictionary<Guid, ScoreRank>();
  
@@ -17125,10 +17294,30 @@ index 6ccd8c71af..c0941f1ec8 100644
                                    .MaxBy(info => (info.TotalScore, -info.Date.UtcDateTime.Ticks));
  
 diff --git a/osu.Game/Screens/Select/PerfectPerformanceSession.cs b/osu.Game/Screens/Select/PerfectPerformanceSession.cs
-index bb9a97c6e3..604ed5a379 100644
+index bb9a97c6e3..88f7c31693 100644
 --- a/osu.Game/Screens/Select/PerfectPerformanceSession.cs
 +++ b/osu.Game/Screens/Select/PerfectPerformanceSession.cs
-@@ -39,10 +39,12 @@ internal PerfectPerformanceSession(BeatmapDifficultyCache cache, RulesetInfo? ru
+@@ -19,13 +19,17 @@ internal enum PerfectPerformanceState { Pending, Available, Unavailable }
+     internal sealed class PerfectPerformanceSession : IDisposable
+     {
+         private readonly object sync = new object();
+-        private readonly Dictionary<Guid, PerfectPerformanceResult> results = new Dictionary<Guid, PerfectPerformanceResult>();
++        private readonly Dictionary<(Guid id, string hash), PerfectPerformanceResult> results = new Dictionary<(Guid id, string hash), PerfectPerformanceResult>();
+         private readonly Queue<BeatmapInfo> queue = new Queue<BeatmapInfo>();
+         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
+         private readonly Func<BeatmapInfo, (bool found, double value)> tryCached;
+         private readonly Func<BeatmapInfo, CancellationToken, double?> calculate;
+         private readonly Action flush;
+-        private readonly bool allowCalculations;
++        private readonly bool processMissingValues;
++        private readonly string? rulesetName;
++        private readonly string? modKey;
++
++        internal bool CalculatesMissingValues { get; }
+         private readonly Action<PerfectPerformanceSession> changed;
+         private readonly Stopwatch elapsed = Stopwatch.StartNew();
+         private bool running;
+@@ -39,10 +43,15 @@ internal PerfectPerformanceSession(BeatmapDifficultyCache cache, RulesetInfo? ru
          {
              var lookup = cache.CreatePerfectPerformanceLookup(ruleset, mods);
              tryCached = beatmap => (lookup.TryGet(beatmap, out double value), value);
@@ -17139,10 +17328,86 @@ index bb9a97c6e3..604ed5a379 100644
              flush = cache.FlushPerfectPerformanceCache;
              this.changed = changed;
 -            this.allowCalculations = allowCalculations;
-+            this.allowCalculations = true;
++            processMissingValues = true;
++            CalculatesMissingValues = allowCalculations;
++            rulesetName = ruleset?.ShortName;
++            modKey = lookup.ModKey;
              Logger.Log($"Ritsu PP calculation session started, calculations enabled: {allowCalculations}");
          }
  
+@@ -52,9 +61,14 @@ internal PerfectPerformanceSession(Func<BeatmapInfo, (bool found, double value)>
+             this.calculate = calculate;
+             this.flush = flush;
+             this.changed = changed;
+-            this.allowCalculations = allowCalculations;
++            processMissingValues = allowCalculations;
++            CalculatesMissingValues = allowCalculations;
+         }
+ 
++        internal bool Matches(RulesetInfo? ruleset, IReadOnlyList<Mod>? mods, bool calculateMissing)
++            => CalculatesMissingValues == calculateMissing && rulesetName == ruleset?.ShortName
++               && modKey == BeatmapDifficultyCache.CreatePerfectPerformanceModKey(mods);
++
+         internal (int completed, int total, int cached, int failures) Progress
+         {
+             get { lock (sync) return (completed, results.Count, cacheHits, failures); }
+@@ -64,7 +78,8 @@ internal PerfectPerformanceResult Get(BeatmapInfo beatmap)
+         {
+             lock (sync)
+             {
+-                if (results.TryGetValue(beatmap.ID, out var existing)) return existing;
++                var key = (beatmap.ID, beatmap.Hash);
++                if (results.TryGetValue(key, out var existing)) return existing;
+                 if (cancellation.IsCancellationRequested) return new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                 try
+                 {
+@@ -73,7 +88,7 @@ internal PerfectPerformanceResult Get(BeatmapInfo beatmap)
+                     {
+                         cacheHits++;
+                         completed++;
+-                        return results[beatmap.ID] = new PerfectPerformanceResult(PerfectPerformanceState.Available, cached.value);
++                        return results[key] = new PerfectPerformanceResult(PerfectPerformanceState.Available, cached.value);
+                     }
+                 }
+                 catch (Exception e)
+@@ -81,15 +96,15 @@ internal PerfectPerformanceResult Get(BeatmapInfo beatmap)
+                     if (failures < 5) Logger.Error(e, $"Ritsu PP cache lookup failed for beatmap {beatmap.ID}");
+                     failures++;
+                     completed++;
+-                    return results[beatmap.ID] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
++                    return results[key] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                 }
+-                if (!allowCalculations)
++                if (!processMissingValues)
+                 {
+                     completed++;
+-                    return results[beatmap.ID] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
++                    return results[key] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                 }
+                 var pending = new PerfectPerformanceResult(PerfectPerformanceState.Pending);
+-                results[beatmap.ID] = pending;
++                results[key] = pending;
+                 queue.Enqueue(beatmap);
+                 if (!running)
+                 {
+@@ -141,7 +156,7 @@ private void run()
+                     lock (sync)
+                     {
+                         currentBeatmap = null;
+-                        results[beatmap.ID] = pp.HasValue ? new PerfectPerformanceResult(PerfectPerformanceState.Available, pp.Value) : new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
++                        results[(beatmap.ID, beatmap.Hash)] = pp.HasValue ? new PerfectPerformanceResult(PerfectPerformanceState.Available, pp.Value) : new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
+                         completed++;
+                         if (!pp.HasValue) failures++;
+                     }
+@@ -169,7 +184,7 @@ private void run()
+                 lock (sync)
+                 {
+                     running = false;
+-                    foreach (var id in new List<Guid>(results.Keys))
++                    foreach (var id in new List<(Guid id, string hash)>(results.Keys))
+                     {
+                         if (results[id].State != PerfectPerformanceState.Pending) continue;
+                         results[id] = new PerfectPerformanceResult(PerfectPerformanceState.Unavailable);
 diff --git a/osu.Game/Screens/Select/SoloSongSelect.cs b/osu.Game/Screens/Select/SoloSongSelect.cs
 index 1b2913599f..d83ca42e2d 100644
 --- a/osu.Game/Screens/Select/SoloSongSelect.cs

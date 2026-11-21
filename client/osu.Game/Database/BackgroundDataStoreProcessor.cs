@@ -75,6 +75,9 @@ namespace osu.Game.Database
         [Resolved]
         private OsuConfigManager config { get; set; } = null!;
 
+        [Resolved(canBeNull: true)]
+        private PerfectPerformanceWarmup? performanceWarmup { get; set; }
+
         private LocalCachedBeatmapMetadataSource localMetadataSource = null!;
 
         protected virtual int TimeToSleepDuringGameplay => 30000;
@@ -118,6 +121,9 @@ namespace osu.Game.Database
                 }
 
                 Logger.Log("Finished background data store processing!");
+
+                if (t.IsCompletedSuccessfully && performanceWarmup != null && currentDifficultyVersions.TryGetValue("osu", out int version))
+                    Schedule(() => performanceWarmup.StartAutomatic(version, storage.GetFullPath(".")));
             });
         }
 

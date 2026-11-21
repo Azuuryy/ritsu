@@ -1,0 +1,6 @@
+C:\users\natha\ritsu\server\target\debug\build\rustversion-9e470faa9d7a4c36\build_script_build-9e470faa9d7a4c36.d: C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustversion-1.0.23\build\build.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustversion-1.0.23\build\rustc.rs
+
+C:\users\natha\ritsu\server\target\debug\build\rustversion-9e470faa9d7a4c36\build_script_build-9e470faa9d7a4c36.exe: C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustversion-1.0.23\build\build.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustversion-1.0.23\build\rustc.rs
+
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustversion-1.0.23\build\build.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustversion-1.0.23\build\rustc.rs:

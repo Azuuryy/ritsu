@@ -1456,7 +1456,6 @@ namespace osu.Game
             {
                 Dependencies.Cache(performanceWarmup = new PerfectPerformanceWarmup());
                 Add(performanceWarmup);
-                Scheduler.AddDelayed(performanceWarmup.StartAutomatic, 3000);
             }
 
             BeatmapManager.PostNotification = n => Notifications.Post(n);

@@ -1,0 +1,1 @@
+cargo:rustc-env=MIME_TYPES_GENERATED_PATH=C:\Users\natha\ritsu\server\target\release\build\mime_guess-1b30a7b0afe3888c\out\mime_types_generated.rs

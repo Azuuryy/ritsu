@@ -1,0 +1,12 @@
+C:\Users\natha\ritsu\server\target\release\deps\zeroize-9f8152075edf77ad.d: C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\lib.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\x86.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\barrier.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\bulk.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\stack.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\../README.md
+
+C:\Users\natha\ritsu\server\target\release\deps\libzeroize-9f8152075edf77ad.rlib: C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\lib.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\x86.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\barrier.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\bulk.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\stack.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\../README.md
+
+C:\Users\natha\ritsu\server\target\release\deps\libzeroize-9f8152075edf77ad.rmeta: C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\lib.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\x86.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\barrier.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\bulk.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\stack.rs C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\../README.md
+
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\lib.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\x86.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\barrier.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\bulk.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\stack.rs:
+C:\Users\natha\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zeroize-1.9.2\src\../README.md:
