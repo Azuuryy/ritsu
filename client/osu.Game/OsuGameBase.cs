@@ -63,6 +63,7 @@ using osu.Game.Resources;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
+using osu.Game.Screens.Play.Leaderboards;
 using osu.Game.Skinning;
 using osu.Game.Utils;
 using RuntimeInfo = osu.Framework.RuntimeInfo;
@@ -334,6 +335,9 @@ namespace osu.Game
             localisationParameters.BindValueChanged(_ => updateLanguage(), true);
 
             CurrentLanguage.BindValueChanged(val => frameworkLocale.Value = val.NewValue.ToCultureCode());
+
+            if (!Offline.RitsuScoreServer.Enabled && LocalConfig.Get<BeatmapLeaderboardScope>(OsuSetting.RitsuLeaderboardScope) == BeatmapLeaderboardScope.Global)
+                LocalConfig.SetValue(OsuSetting.RitsuLeaderboardScope, BeatmapLeaderboardScope.Local);
 
             dependencies.CacheAs(API ??= new Offline.OfflineAPIProvider(LocalConfig));
 

@@ -51,10 +51,27 @@ namespace osu.Game.Offline
         public void Queue(APIRequest request) => _ = PerformAsync(request);
         public void Perform(APIRequest request) => Queue(request);
 
+        internal event Action<string>? ScoreSubmitted;
+
+        internal async Task SubmitScoreAsync(Scoring.ScoreInfo score, Guid profileId)
+        {
+            string? hash = score.BeatmapInfo?.MD5Hash;
+            if (!RitsuScoreServer.Enabled || !RitsuScoreServer.IsBeatmapHash(hash))
+                return;
+
+            if (await RitsuScoreServer.SubmitAsync(score, profileId, hash!).ConfigureAwait(false))
+                Schedule(() => ScoreSubmitted?.Invoke(hash!));
+        }
+
         public Task PerformAsync(APIRequest request)
         {
             if (request is DownloadBeatmapSetRequest download)
                 return download.PerformCatalogueAsync(this);
+            if (RitsuScoreServer.Enabled && request is GetScoresRequest { UsesLocalServer: true } scores)
+            {
+                scores.AttachAPI(this);
+                return RitsuScoreServer.FetchAsync(scores);
+            }
             reject(request);
             // IAPIProvider reports request failure via APIRequest.Failure, including
             // callers that intentionally do not await this dispatch task.

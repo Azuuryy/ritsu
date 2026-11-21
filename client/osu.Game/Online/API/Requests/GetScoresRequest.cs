@@ -22,14 +22,22 @@ namespace osu.Game.Online.API.Requests
 
         public int ScoresRequested { get; }
 
+        internal bool UsesLocalServer { get; }
+
         private readonly IBeatmapInfo beatmapInfo;
         private readonly BeatmapLeaderboardScope scope;
         private readonly IRulesetInfo ruleset;
         private readonly IEnumerable<IMod> mods;
 
         public GetScoresRequest(IBeatmapInfo beatmapInfo, IRulesetInfo ruleset, BeatmapLeaderboardScope scope = BeatmapLeaderboardScope.Global, IEnumerable<IMod>? mods = null)
+            : this(beatmapInfo, ruleset, scope, mods, false)
         {
-            if (beatmapInfo.OnlineID <= 0)
+        }
+
+        internal GetScoresRequest(IBeatmapInfo beatmapInfo, IRulesetInfo ruleset, BeatmapLeaderboardScope scope, IEnumerable<IMod>? mods, bool localServer)
+        {
+            UsesLocalServer = localServer;
+            if (!UsesLocalServer && beatmapInfo.OnlineID <= 0)
                 throw new InvalidOperationException($"Cannot lookup a beatmap's scores without having a populated {nameof(IBeatmapInfo.OnlineID)}.");
 
             if (scope is BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll)
@@ -44,6 +52,17 @@ namespace osu.Game.Online.API.Requests
         }
 
         protected override string Target => $@"beatmaps/{beatmapInfo.OnlineID}/scores";
+
+        internal string LocalServerTarget
+        {
+            get
+            {
+                string path = $"beatmaps/{beatmapInfo.MD5Hash}/scores?mode={System.Uri.EscapeDataString(ruleset.ShortName)}&limit={ScoresRequested}";
+                if (mods.Any())
+                    path += $"&mods={System.Uri.EscapeDataString(string.Join(",", mods.Select(mod => mod.Acronym).Where(acronym => acronym != "NM").OrderBy(acronym => acronym, StringComparer.Ordinal)))}";
+                return path;
+            }
+        }
 
         protected override WebRequest CreateWebRequest()
         {

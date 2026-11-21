@@ -11101,10 +11101,10 @@ index 0aff5e57c5..ef34112e19 100644
  
          /// <summary>
 diff --git a/osu.Game/Offline/OfflineAPIProvider.cs b/osu.Game/Offline/OfflineAPIProvider.cs
-index 7a8b14cc21..239e847617 100644
+index 7a8b14c..6b25e9e 100644
 --- a/osu.Game/Offline/OfflineAPIProvider.cs
 +++ b/osu.Game/Offline/OfflineAPIProvider.cs
-@@ -48,11 +48,13 @@ namespace osu.Game.Offline
+@@ -48,11 +48,30 @@ namespace osu.Game.Offline
          public SessionVerificationMethod? SessionVerificationMethod => null;
          public INotificationsClient NotificationsClient { get; } = new OfflineNotificationsClient();
  
@@ -11112,11 +11112,28 @@ index 7a8b14cc21..239e847617 100644
 -        public void Perform(APIRequest request) => reject(request);
 +        public void Queue(APIRequest request) => _ = PerformAsync(request);
 +        public void Perform(APIRequest request) => Queue(request);
++
++        internal event Action<string>? ScoreSubmitted;
++
++        internal async Task SubmitScoreAsync(Scoring.ScoreInfo score, Guid profileId)
++        {
++            string? hash = score.BeatmapInfo?.MD5Hash;
++            if (!RitsuScoreServer.Enabled || !RitsuScoreServer.IsBeatmapHash(hash))
++                return;
++
++            if (await RitsuScoreServer.SubmitAsync(score, profileId, hash!).ConfigureAwait(false))
++                Schedule(() => ScoreSubmitted?.Invoke(hash!));
++        }
  
          public Task PerformAsync(APIRequest request)
          {
 +            if (request is DownloadBeatmapSetRequest download)
 +                return download.PerformCatalogueAsync(this);
++            if (RitsuScoreServer.Enabled && request is GetScoresRequest { UsesLocalServer: true } scores)
++            {
++                scores.AttachAPI(this);
++                return RitsuScoreServer.FetchAsync(scores);
++            }
              reject(request);
              // IAPIProvider reports request failure via APIRequest.Failure, including
              // callers that intentionally do not await this dispatch task.
@@ -12189,7 +12206,7 @@ index d9fc6acc0e..1d34b6bfb5 100644
                      if (Offline.RitsuOffline.Enabled)
                          ToggleLocalProfile();
 diff --git a/osu.Game/OsuGameBase.cs b/osu.Game/OsuGameBase.cs
-index f382377e68..0e17edb759 100644
+index f382377..ffb78ce 100644
 --- a/osu.Game/OsuGameBase.cs
 +++ b/osu.Game/OsuGameBase.cs
 @@ -1,7 +1,7 @@
@@ -12201,7 +12218,15 @@ index f382377e68..0e17edb759 100644
  
  using System;
  using System.Collections.Generic;
-@@ -289,7 +289,8 @@ namespace osu.Game
+@@ -63,6 +63,7 @@ using osu.Game.Resources;
+ using osu.Game.Rulesets;
+ using osu.Game.Rulesets.Mods;
+ using osu.Game.Scoring;
++using osu.Game.Screens.Play.Leaderboards;
+ using osu.Game.Skinning;
+ using osu.Game.Utils;
+ using RuntimeInfo = osu.Framework.RuntimeInfo;
+@@ -289,7 +290,8 @@ namespace osu.Game
              Resources.AddStore(new DllResourceStore(OsuResources.ResourceAssembly));
              Resources.AddStore(new DllResourceStore(typeof(OsuGameBase).Assembly));
  
@@ -12211,7 +12236,14 @@ index f382377e68..0e17edb759 100644
  
              dependencies.CacheAs<RulesetStore>(RulesetStore = new RealmRulesetStore(realm, Storage));
              dependencies.CacheAs<IRulesetStore>(RulesetStore);
-@@ -338,6 +339,11 @@ namespace osu.Game
+@@ -334,10 +336,18 @@ namespace osu.Game
+ 
+             CurrentLanguage.BindValueChanged(val => frameworkLocale.Value = val.NewValue.ToCultureCode());
+ 
++            if (!Offline.RitsuScoreServer.Enabled && LocalConfig.Get<BeatmapLeaderboardScope>(OsuSetting.RitsuLeaderboardScope) == BeatmapLeaderboardScope.Global)
++                LocalConfig.SetValue(OsuSetting.RitsuLeaderboardScope, BeatmapLeaderboardScope.Local);
++
+             dependencies.CacheAs(API ??= new Offline.OfflineAPIProvider(LocalConfig));
  
              var ritsuProfiles = new Offline.RitsuProfileManager(Storage, realm);
              dependencies.Cache(ritsuProfiles);
@@ -12223,7 +12255,7 @@ index f382377e68..0e17edb759 100644
              if (API is Offline.OfflineAPIProvider offlineProfilesApi)
              {
                  largeStore.AddTextureSource(Host.CreateTextureLoaderStore(new StorageBackedResourceStore(ritsuProfiles.AvatarStorage)));
-@@ -350,7 +356,7 @@ namespace osu.Game
+@@ -350,7 +360,7 @@ namespace osu.Game
              dependencies.Cache(difficultyCache = new BeatmapDifficultyCache());
  
              // ordering is important here to ensure foreign keys rules are not broken in ModelStore.Cleanup()
@@ -12232,7 +12264,7 @@ index f382377e68..0e17edb759 100644
  
              dependencies.Cache(BeatmapManager = new BeatmapManager(Storage, realm, API, Audio, Resources, Host, defaultBeatmap, difficultyCache, performOnlineLookups: false));
              dependencies.CacheAs<IWorkingBeatmapCache>(BeatmapManager);
-@@ -832,7 +838,7 @@ namespace osu.Game
+@@ -832,7 +842,7 @@ namespace osu.Game
              // may be non-null for certain tests
              Storage ??= host.Storage;
  
@@ -14367,10 +14399,10 @@ index 6bc9dd21d3..6c957656ab 100644
              if (OnQuit != null)
                  AddButton(GameplayMenuOverlayStrings.Quit, new Color4(170, 27, 39, 255), () => OnQuit.Invoke(), confirmable: true);
 diff --git a/osu.Game/Screens/Play/Player.cs b/osu.Game/Screens/Play/Player.cs
-index 209e5e75b4..bb3477f8b9 100644
+index 209e5e7..0a2c0e5 100644
 --- a/osu.Game/Screens/Play/Player.cs
 +++ b/osu.Game/Screens/Play/Player.cs
-@@ -103,6 +103,9 @@ public override bool RequiresPortraitOrientation
+@@ -103,6 +103,9 @@ namespace osu.Game.Screens.Play
          protected virtual bool PauseOnFocusLost => true;
  
          public Action<bool> PrepareLoaderForRestart;
@@ -14380,7 +14412,7 @@ index 209e5e75b4..bb3477f8b9 100644
  
          private bool isRestarting;
          private bool skipExitTransition;
-@@ -272,6 +275,17 @@ private void load(OsuConfigManager config, OsuGameBase game, CancellationToken c
+@@ -272,6 +275,17 @@ namespace osu.Game.Screens.Play
              constantHitsoundVolume = config.Get<bool>(OsuSetting.ToriiConstantHitsoundVolume);
  
              var gameplayMods = Mods.Value.Select(m => m.DeepClone()).ToArray();
@@ -14398,7 +14430,7 @@ index 209e5e75b4..bb3477f8b9 100644
  
              if (gameplayMods.Any(m => m is UnknownMod))
              {
-@@ -376,6 +390,7 @@ private void load(OsuConfigManager config, OsuGameBase game, CancellationToken c
+@@ -376,6 +390,7 @@ namespace osu.Game.Screens.Play
                  {
                      SaveReplay = Configuration.AllowUserInteraction ? async () => await prepareAndImportScoreAsync(true).ConfigureAwait(false) : null,
                      OnRetry = Configuration.AllowUserInteraction ? () => Restart() : null,
@@ -14406,7 +14438,7 @@ index 209e5e75b4..bb3477f8b9 100644
                      OnQuit = () => PerformExitWithConfirmation(),
                  },
              });
-@@ -597,6 +612,7 @@ private Drawable createOverlayComponents()
+@@ -597,6 +612,7 @@ namespace osu.Game.Screens.Play
                          OnResume = Resume,
                          Retries = RestartCount,
                          OnRetry = () => Restart(),
@@ -14414,7 +14446,7 @@ index 209e5e75b4..bb3477f8b9 100644
                          OnQuit = () => PerformExitWithConfirmation(),
                      },
                      // Torii: one-time mid-map skip briefing, created only alongside the skip overlay.
-@@ -741,6 +757,12 @@ private IBeatmap loadPlayableBeatmap(Mod[] gameplayMods, CancellationToken cance
+@@ -741,6 +757,12 @@ namespace osu.Game.Screens.Play
                      return null;
                  }
              }
@@ -14427,7 +14459,7 @@ index 209e5e75b4..bb3477f8b9 100644
              catch (OperationCanceledException)
              {
                  // Load has been cancelled. No logging is required.
-@@ -957,7 +979,12 @@ protected void SetGameplayStartTime(double time)
+@@ -957,7 +979,12 @@ namespace osu.Game.Screens.Play
          /// </summary>
          /// <param name="quickRestart">Whether a quick restart was requested (skipping intro etc.).</param>
          /// <returns>Whether this call resulted in a restart.</returns>
@@ -14441,7 +14473,7 @@ index 209e5e75b4..bb3477f8b9 100644
          {
              if (!Configuration.AllowRestart)
                  return false;
-@@ -969,6 +996,17 @@ public bool Restart(bool quickRestart = false)
+@@ -969,6 +996,17 @@ namespace osu.Game.Screens.Play
              musicController.Stop();
  
              skipExitTransition = quickRestart;
@@ -14459,6 +14491,15 @@ index 209e5e75b4..bb3477f8b9 100644
              PrepareLoaderForRestart?.Invoke(quickRestart);
  
              return PerformExit(quickRestart);
+@@ -1516,6 +1554,8 @@ namespace osu.Game.Screens.Play
+             {
+                 ritsuProfiles.AssociateNewScore(score.ScoreInfo.ID, localProfileId.Value, score.ScoreInfo.Ruleset.ShortName, calculatorVersion, score.ScoreInfo.ModsJson);
+                 LocalScoreWasAssociated = true;
++                if (this is SoloPlayer && score.ScoreInfo.Passed && api is Offline.OfflineAPIProvider offlineApi)
++                    _ = offlineApi.SubmitScoreAsync(score.ScoreInfo, localProfileId.Value);
+             }
+         }
+ 
 diff --git a/osu.Game/Screens/Play/PlayerLoader.cs b/osu.Game/Screens/Play/PlayerLoader.cs
 index bb9340d7fa..55edf3afe0 100644
 --- a/osu.Game/Screens/Play/PlayerLoader.cs
@@ -15061,7 +15102,7 @@ index c957548a57..b399db60d9 100644
  
              bool groupedSets = BeatmapCarouselFilterGrouping.ShouldGroupBeatmapsTogether(criteria);
 diff --git a/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs b/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs
-index 11ebd111f9..d82e63c82e 100644
+index 11ebd11..c1b1e4c 100644
 --- a/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs
 +++ b/osu.Game/Screens/Select/BeatmapDetailsArea.Header.cs
 @@ -9,6 +9,7 @@ using osu.Framework.Graphics;
@@ -15135,14 +15176,17 @@ index 11ebd111f9..d82e63c82e 100644
                          sortDropdown.Current.Value = LeaderboardSortMode.Score;
                          sortDropdown.Current.Disabled = true;
                      }
-@@ -233,6 +248,7 @@ namespace osu.Game.Screens.Select
+@@ -233,8 +248,9 @@ namespace osu.Game.Screens.Select
                  public ScopeDropdown()
                      : base(BeatmapLeaderboardWedgeStrings.Scope)
                  {
 +                    RitsuOrderKey = RitsuMenuOrdering.Scope;
                      Items = osu.Game.Offline.RitsuOffline.Enabled
-                         ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
+-                        ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
++                        ? osu.Game.Offline.RitsuScoreServer.Scopes
                          : Enum.GetValues<BeatmapLeaderboardScope>();
+                 }
+ 
 diff --git a/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs b/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs
 index 6aef162..1545100 100644
 --- a/osu.Game/Screens/Select/BeatmapLeaderboardScore.cs
@@ -16287,7 +16331,7 @@ index f0d630cdb8..2babfe691d 100644
                  case "creator":
                  case "author":
 diff --git a/osu.Game/Screens/Select/LegacyLeaderboard.cs b/osu.Game/Screens/Select/LegacyLeaderboard.cs
-index afd4a82de2..6efda3d798 100644
+index afd4a82..3eb561e 100644
 --- a/osu.Game/Screens/Select/LegacyLeaderboard.cs
 +++ b/osu.Game/Screens/Select/LegacyLeaderboard.cs
 @@ -16,6 +16,7 @@ using osu.Framework.Graphics.UserInterface;
@@ -16306,9 +16350,12 @@ index afd4a82de2..6efda3d798 100644
  using osu.Game.Overlays;
  using osu.Game.Rulesets;
  using osu.Game.Rulesets.Mods;
-@@ -168,6 +170,7 @@ namespace osu.Game.Screens.Select
+@@ -166,8 +168,9 @@ namespace osu.Game.Screens.Select
+                     AccentColour = new Color4(31 / 255f, 184 / 255f, 255 / 255f, 1f),
+                     HoverColour = new Color4(255 / 255f, 102 / 255f, 171 / 255f, 1f),
                      Items = osu.Game.Offline.RitsuOffline.Enabled
-                         ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
+-                        ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
++                        ? osu.Game.Offline.RitsuScoreServer.Scopes
                          : Enum.GetValues<BeatmapLeaderboardScope>(),
 +                    RitsuOrderKey = RitsuMenuOrdering.Scope,
                      ItemText = scope => scope == BeatmapLeaderboardScope.Local ? "Current profile" : scope == BeatmapLeaderboardScope.LocalAll ? "All profiles" : $@"{scope} Ranking",
@@ -16329,7 +16376,17 @@ index afd4a82de2..6efda3d798 100644
  
              beatmap.BindValueChanged(_ =>
              {
-@@ -428,6 +437,9 @@ namespace osu.Game.Screens.Select
+@@ -263,6 +272,9 @@ namespace osu.Game.Screens.Select
+         {
+             var info = beatmap.Value?.BeatmapInfo;
+ 
++            if (RitsuScoreServer.Enabled && RitsuScoreServer.IsBeatmapHash(info?.MD5Hash))
++                return true;
++
+             if (info == null || info.OnlineID <= 0)
+                 return false;
+ 
+@@ -428,6 +440,9 @@ namespace osu.Game.Screens.Select
              [Resolved]
              private ScoreManager scoreManager { get; set; } = null!;
  
@@ -16339,7 +16396,7 @@ index afd4a82de2..6efda3d798 100644
              [Resolved]
              private IAPIProvider api { get; set; } = null!;
  
-@@ -578,6 +590,17 @@ namespace osu.Game.Screens.Select
+@@ -578,6 +593,17 @@ namespace osu.Game.Screens.Select
                      if (copyableMods.Length > 0 && selectedMods != null)
                          items.Add(new OsuMenuItem(SongSelectStrings.UseTheseMods, MenuItemType.Highlighted, () => selectedMods.Value = copyableMods));
  
@@ -16357,7 +16414,7 @@ index afd4a82de2..6efda3d798 100644
                      if (score.OnlineID > 0)
                          items.Add(new OsuMenuItem(CommonStrings.CopyLink, MenuItemType.Standard, () => game?.CopyToClipboard($@"{api.Endpoints.WebsiteUrl}/scores/{score.OnlineID}")));
  
-@@ -591,6 +614,9 @@ namespace osu.Game.Screens.Select
+@@ -591,6 +617,9 @@ namespace osu.Game.Screens.Select
                          items.Add(new OsuMenuItem(SongSelectStrings.WatchReplay, MenuItemType.Standard, () => songSelect.PresentScore(score, ScorePresentType.Gameplay)));
  
                      items.Add(new OsuMenuItem(CommonStrings.Export, MenuItemType.Standard, () => scoreManager.Export(score)));
@@ -23124,3 +23181,223 @@ index bcc36d3..53c53bd 100644
          [Test]
          public void TestRulesetWithNoPerformanceCalculator()
          {
+diff --git a/osu.Game/Offline/RitsuScoreServer.cs b/osu.Game/Offline/RitsuScoreServer.cs
+new file mode 100644
+index 0000000..a6a9a63
+--- /dev/null
++++ b/osu.Game/Offline/RitsuScoreServer.cs
+@@ -0,0 +1,90 @@
++// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
++
++using System;
++using System.Linq;
++using System.Net.Http;
++using System.Text;
++using System.Threading.Tasks;
++using Newtonsoft.Json;
++using Newtonsoft.Json.Linq;
++using osu.Framework.Logging;
++using osu.Game.Online.API.Requests;
++using osu.Game.Online.API.Requests.Responses;
++using osu.Game.Scoring;
++using osu.Game.Screens.Play.Leaderboards;
++
++namespace osu.Game.Offline
++{
++    internal static class RitsuScoreServer
++    {
++        private static readonly Uri? endpoint = getEndpoint();
++        private static readonly HttpClient transport = new HttpClient(new HttpClientHandler
++        {
++            AllowAutoRedirect = false,
++            UseProxy = false,
++            UseCookies = false,
++        })
++        {
++            Timeout = TimeSpan.FromSeconds(3),
++        };
++
++        public static bool Enabled => endpoint != null;
++
++        public static BeatmapLeaderboardScope[] Scopes => Enabled
++            ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll, BeatmapLeaderboardScope.Global }
++            : new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll };
++
++        internal static bool IsBeatmapHash(string? hash) => hash is { Length: 32 } && hash.All(Uri.IsHexDigit);
++
++        private static Uri? getEndpoint()
++        {
++            string? configuredUrl = Environment.GetEnvironmentVariable("RITSU_SCORE_SERVER_URL");
++            if (!Uri.TryCreate(configuredUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttp
++                || uri.Host is not ("localhost" or "127.0.0.1") || uri.AbsolutePath != "/" || uri.UserInfo.Length != 0
++                || uri.Query.Length != 0 || uri.Fragment.Length != 0)
++                return null;
++
++            return new UriBuilder(Uri.UriSchemeHttp, "127.0.0.1", uri.Port, "/api/v2/").Uri;
++        }
++
++        internal static async Task FetchAsync(GetScoresRequest request)
++        {
++            try
++            {
++                string json = await transport.GetStringAsync(new Uri(endpoint!, request.LocalServerTarget)).ConfigureAwait(false);
++                var result = JsonConvert.DeserializeObject<APIScoresCollection>(json) ?? throw new JsonSerializationException("Missing leaderboard response.");
++                request.TriggerSuccess(result);
++            }
++            catch (Exception error) when (error is HttpRequestException or OperationCanceledException or JsonException)
++            {
++                request.TriggerFailure(error is OperationCanceledException ? new TimeoutException("The local score server did not respond.", error) : error);
++            }
++        }
++
++        internal static async Task<bool> SubmitAsync(ScoreInfo score, Guid profileId, string hash)
++        {
++            try
++            {
++                var payload = JObject.FromObject(SoloScoreInfo.ForSubmission(score));
++                payload["ended_at"] = score.Date;
++                payload["pp"] = score.PP is { } pp && double.IsFinite(pp) ? new JValue(pp) : JValue.CreateNull();
++
++                var submission = new JObject
++                {
++                    ["profile_id"] = profileId,
++                    ["username"] = score.User.Username,
++                    ["score"] = payload,
++                };
++                using var content = new StringContent(submission.ToString(Formatting.None), Encoding.UTF8, "application/json");
++                using var response = await transport.PutAsync(new Uri(endpoint!, $"beatmaps/{hash}/solo/scores/{score.ID}"), content).ConfigureAwait(false);
++                response.EnsureSuccessStatusCode();
++                return true;
++            }
++            catch (Exception error) when (error is HttpRequestException or OperationCanceledException or JsonException)
++            {
++                Logger.Log($"Could not submit the score to the local Ritsu server: {error.Message}", LoggingTarget.Network);
++                return false;
++            }
++        }
++    }
++}
+diff --git a/osu.Game/Online/API/Requests/GetScoresRequest.cs b/osu.Game/Online/API/Requests/GetScoresRequest.cs
+index 5ef83dc..2c5a635 100644
+--- a/osu.Game/Online/API/Requests/GetScoresRequest.cs
++++ b/osu.Game/Online/API/Requests/GetScoresRequest.cs
+@@ -22,14 +22,22 @@ namespace osu.Game.Online.API.Requests
+ 
+         public int ScoresRequested { get; }
+ 
++        internal bool UsesLocalServer { get; }
++
+         private readonly IBeatmapInfo beatmapInfo;
+         private readonly BeatmapLeaderboardScope scope;
+         private readonly IRulesetInfo ruleset;
+         private readonly IEnumerable<IMod> mods;
+ 
+         public GetScoresRequest(IBeatmapInfo beatmapInfo, IRulesetInfo ruleset, BeatmapLeaderboardScope scope = BeatmapLeaderboardScope.Global, IEnumerable<IMod>? mods = null)
++            : this(beatmapInfo, ruleset, scope, mods, false)
++        {
++        }
++
++        internal GetScoresRequest(IBeatmapInfo beatmapInfo, IRulesetInfo ruleset, BeatmapLeaderboardScope scope, IEnumerable<IMod>? mods, bool localServer)
+         {
+-            if (beatmapInfo.OnlineID <= 0)
++            UsesLocalServer = localServer;
++            if (!UsesLocalServer && beatmapInfo.OnlineID <= 0)
+                 throw new InvalidOperationException($"Cannot lookup a beatmap's scores without having a populated {nameof(IBeatmapInfo.OnlineID)}.");
+ 
+             if (scope is BeatmapLeaderboardScope.Local or BeatmapLeaderboardScope.LocalAll)
+@@ -45,6 +53,17 @@ namespace osu.Game.Online.API.Requests
+ 
+         protected override string Target => $@"beatmaps/{beatmapInfo.OnlineID}/scores";
+ 
++        internal string LocalServerTarget
++        {
++            get
++            {
++                string path = $"beatmaps/{beatmapInfo.MD5Hash}/scores?mode={System.Uri.EscapeDataString(ruleset.ShortName)}&limit={ScoresRequested}";
++                if (mods.Any())
++                    path += $"&mods={System.Uri.EscapeDataString(string.Join(",", mods.Select(mod => mod.Acronym).Where(acronym => acronym != "NM").OrderBy(acronym => acronym, StringComparer.Ordinal)))}";
++                return path;
++            }
++        }
++
+         protected override WebRequest CreateWebRequest()
+         {
+             var req = base.CreateWebRequest();
+diff --git a/osu.Game/Online/Leaderboards/LeaderboardManager.cs b/osu.Game/Online/Leaderboards/LeaderboardManager.cs
+index 60fb4f8..9efa68d 100644
+--- a/osu.Game/Online/Leaderboards/LeaderboardManager.cs
++++ b/osu.Game/Online/Leaderboards/LeaderboardManager.cs
+@@ -13,6 +13,7 @@ using osu.Framework.Logging;
+ using osu.Game.Beatmaps;
+ using osu.Game.Database;
+ using osu.Game.Extensions;
++using osu.Game.Offline;
+ using osu.Game.Online.API;
+ using osu.Game.Online.API.Requests;
+ using osu.Game.Rulesets;
+@@ -55,6 +56,15 @@ namespace osu.Game.Online.Leaderboards
+             base.LoadComplete();
+             if (ritsuProfiles != null)
+                 ritsuProfiles.Changed += onProfilesChanged;
++            if (api is OfflineAPIProvider offlineApi)
++                offlineApi.ScoreSubmitted += onScoreSubmitted;
++        }
++
++        private void onScoreSubmitted(string hash)
++        {
++            if (!IsDisposed && CurrentCriteria is { Scope: BeatmapLeaderboardScope.Global, Beatmap: { } beatmap } criteria
++                && string.Equals(beatmap.MD5Hash, hash, StringComparison.OrdinalIgnoreCase))
++                FetchWithCriteria(criteria, true);
+         }
+ 
+         private void onProfilesChanged() => Schedule(() =>
+@@ -108,7 +118,8 @@ namespace osu.Game.Online.Leaderboards
+                     if (newCriteria.Sorting != LeaderboardSortMode.Score)
+                         throw new NotSupportedException($@"Requesting online scores with a {nameof(LeaderboardSortMode)} other than {nameof(LeaderboardSortMode.Score)} is not supported");
+ 
+-                    if (!api.IsLoggedIn)
++                    bool localServer = api is OfflineAPIProvider && RitsuScoreServer.Enabled && newCriteria.Scope == BeatmapLeaderboardScope.Global;
++                    if (!localServer && !api.IsLoggedIn)
+                     {
+                         scores.Value = LeaderboardScores.Failure(LeaderboardFailState.NotLoggedIn);
+                         return;
+@@ -120,17 +131,18 @@ namespace osu.Game.Online.Leaderboards
+                         return;
+                     }
+ 
+-                    if (newCriteria.Beatmap.OnlineID <= 0 || newCriteria.Beatmap.Status <= BeatmapOnlineStatus.Pending)
++                    if (!localServer && (newCriteria.Beatmap.OnlineID <= 0 || newCriteria.Beatmap.Status <= BeatmapOnlineStatus.Pending))
+                         BeatmapOnlineInfoRecovery.RefreshFromRealm(newCriteria.Beatmap, realm);
+ 
+-                    if (newCriteria.Beatmap.OnlineID <= 0 || newCriteria.Beatmap.Status <= BeatmapOnlineStatus.Pending)
++                    if (localServer ? !RitsuScoreServer.IsBeatmapHash(newCriteria.Beatmap.MD5Hash)
++                        : newCriteria.Beatmap.OnlineID <= 0 || newCriteria.Beatmap.Status <= BeatmapOnlineStatus.Pending)
+                     {
+                         scores.Value = LeaderboardScores.Failure(LeaderboardFailState.BeatmapUnavailable);
+                         watchForBeatmapUpdate(newCriteria);
+                         return;
+                     }
+ 
+-                    if ((newCriteria.Scope.RequiresSupporter(newCriteria.ExactMods != null)) && !api.LocalUser.Value.IsSupporter)
++                    if (!localServer && newCriteria.Scope.RequiresSupporter(newCriteria.ExactMods != null) && !api.LocalUser.Value.IsSupporter)
+                     {
+                         scores.Value = LeaderboardScores.Failure(LeaderboardFailState.NotSupporter);
+                         return;
+@@ -153,7 +165,7 @@ namespace osu.Game.Online.Leaderboards
+                             requestMods = newCriteria.ExactMods;
+                     }
+ 
+-                    var newRequest = new GetScoresRequest(newCriteria.Beatmap, newCriteria.Ruleset, newCriteria.Scope, requestMods);
++                    var newRequest = new GetScoresRequest(newCriteria.Beatmap, newCriteria.Ruleset, newCriteria.Scope, requestMods, localServer);
+                     newRequest.Success += response =>
+                     {
+                         if (IsDisposed || !ReferenceEquals(inFlightOnlineRequest, newRequest))
+@@ -267,6 +279,8 @@ namespace osu.Game.Online.Leaderboards
+             inFlightOnlineRequest?.Cancel();
+             if (ritsuProfiles != null)
+                 ritsuProfiles.Changed -= onProfilesChanged;
++            if (api is OfflineAPIProvider offlineApi)
++                offlineApi.ScoreSubmitted -= onScoreSubmitted;
+         }
+     }
+ 

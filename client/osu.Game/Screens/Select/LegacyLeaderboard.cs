@@ -168,7 +168,7 @@ namespace osu.Game.Screens.Select
                     AccentColour = new Color4(31 / 255f, 184 / 255f, 255 / 255f, 1f),
                     HoverColour = new Color4(255 / 255f, 102 / 255f, 171 / 255f, 1f),
                     Items = osu.Game.Offline.RitsuOffline.Enabled
-                        ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
+                        ? osu.Game.Offline.RitsuScoreServer.Scopes
                         : Enum.GetValues<BeatmapLeaderboardScope>(),
                     RitsuOrderKey = RitsuMenuOrdering.Scope,
                     ItemText = scope => scope == BeatmapLeaderboardScope.Local ? "Current profile" : scope == BeatmapLeaderboardScope.LocalAll ? "All profiles" : $@"{scope} Ranking",
@@ -271,6 +271,9 @@ namespace osu.Game.Screens.Select
         private bool hasOnlineLeaderboard()
         {
             var info = beatmap.Value?.BeatmapInfo;
+
+            if (RitsuScoreServer.Enabled && RitsuScoreServer.IsBeatmapHash(info?.MD5Hash))
+                return true;
 
             if (info == null || info.OnlineID <= 0)
                 return false;

@@ -250,7 +250,7 @@ namespace osu.Game.Screens.Select
                 {
                     RitsuOrderKey = RitsuMenuOrdering.Scope;
                     Items = osu.Game.Offline.RitsuOffline.Enabled
-                        ? new[] { BeatmapLeaderboardScope.Local, BeatmapLeaderboardScope.LocalAll }
+                        ? osu.Game.Offline.RitsuScoreServer.Scopes
                         : Enum.GetValues<BeatmapLeaderboardScope>();
                 }
 

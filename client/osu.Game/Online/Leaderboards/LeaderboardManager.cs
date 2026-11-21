@@ -13,6 +13,7 @@ using osu.Framework.Logging;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
 using osu.Game.Extensions;
+using osu.Game.Offline;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests;
 using osu.Game.Rulesets;
@@ -55,6 +56,15 @@ namespace osu.Game.Online.Leaderboards
             base.LoadComplete();
             if (ritsuProfiles != null)
                 ritsuProfiles.Changed += onProfilesChanged;
+            if (api is OfflineAPIProvider offlineApi)
+                offlineApi.ScoreSubmitted += onScoreSubmitted;
+        }
+
+        private void onScoreSubmitted(string hash)
+        {
+            if (!IsDisposed && CurrentCriteria is { Scope: BeatmapLeaderboardScope.Global, Beatmap: { } beatmap } criteria
+                && string.Equals(beatmap.MD5Hash, hash, StringComparison.OrdinalIgnoreCase))
+                FetchWithCriteria(criteria, true);
         }
 
         private void onProfilesChanged() => Schedule(() =>
@@ -108,7 +118,8 @@ namespace osu.Game.Online.Leaderboards
                     if (newCriteria.Sorting != LeaderboardSortMode.Score)
                         throw new NotSupportedException($@"Requesting online scores with a {nameof(LeaderboardSortMode)} other than {nameof(LeaderboardSortMode.Score)} is not supported");
 
-                    if (!api.IsLoggedIn)
+                    bool localServer = api is OfflineAPIProvider && RitsuScoreServer.Enabled && newCriteria.Scope == BeatmapLeaderboardScope.Global;
+                    if (!localServer && !api.IsLoggedIn)
                     {
                         scores.Value = LeaderboardScores.Failure(LeaderboardFailState.NotLoggedIn);
                         return;
@@ -120,17 +131,18 @@ namespace osu.Game.Online.Leaderboards
                         return;
                     }
 
-                    if (newCriteria.Beatmap.OnlineID <= 0 || newCriteria.Beatmap.Status <= BeatmapOnlineStatus.Pending)
+                    if (!localServer && (newCriteria.Beatmap.OnlineID <= 0 || newCriteria.Beatmap.Status <= BeatmapOnlineStatus.Pending))
                         BeatmapOnlineInfoRecovery.RefreshFromRealm(newCriteria.Beatmap, realm);
 
-                    if (newCriteria.Beatmap.OnlineID <= 0 || newCriteria.Beatmap.Status <= BeatmapOnlineStatus.Pending)
+                    if (localServer ? !RitsuScoreServer.IsBeatmapHash(newCriteria.Beatmap.MD5Hash)
+                        : newCriteria.Beatmap.OnlineID <= 0 || newCriteria.Beatmap.Status <= BeatmapOnlineStatus.Pending)
                     {
                         scores.Value = LeaderboardScores.Failure(LeaderboardFailState.BeatmapUnavailable);
                         watchForBeatmapUpdate(newCriteria);
                         return;
                     }
 
-                    if ((newCriteria.Scope.RequiresSupporter(newCriteria.ExactMods != null)) && !api.LocalUser.Value.IsSupporter)
+                    if (!localServer && newCriteria.Scope.RequiresSupporter(newCriteria.ExactMods != null) && !api.LocalUser.Value.IsSupporter)
                     {
                         scores.Value = LeaderboardScores.Failure(LeaderboardFailState.NotSupporter);
                         return;
@@ -153,7 +165,7 @@ namespace osu.Game.Online.Leaderboards
                             requestMods = newCriteria.ExactMods;
                     }
 
-                    var newRequest = new GetScoresRequest(newCriteria.Beatmap, newCriteria.Ruleset, newCriteria.Scope, requestMods);
+                    var newRequest = new GetScoresRequest(newCriteria.Beatmap, newCriteria.Ruleset, newCriteria.Scope, requestMods, localServer);
                     newRequest.Success += response =>
                     {
                         if (IsDisposed || !ReferenceEquals(inFlightOnlineRequest, newRequest))
@@ -267,6 +279,8 @@ namespace osu.Game.Online.Leaderboards
             inFlightOnlineRequest?.Cancel();
             if (ritsuProfiles != null)
                 ritsuProfiles.Changed -= onProfilesChanged;
+            if (api is OfflineAPIProvider offlineApi)
+                offlineApi.ScoreSubmitted -= onScoreSubmitted;
         }
     }
 

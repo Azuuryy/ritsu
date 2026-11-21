@@ -1554,6 +1554,8 @@ namespace osu.Game.Screens.Play
             {
                 ritsuProfiles.AssociateNewScore(score.ScoreInfo.ID, localProfileId.Value, score.ScoreInfo.Ruleset.ShortName, calculatorVersion, score.ScoreInfo.ModsJson);
                 LocalScoreWasAssociated = true;
+                if (this is SoloPlayer && score.ScoreInfo.Passed && api is Offline.OfflineAPIProvider offlineApi)
+                    _ = offlineApi.SubmitScoreAsync(score.ScoreInfo, localProfileId.Value);
             }
         }
 
