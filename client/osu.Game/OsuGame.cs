@@ -50,6 +50,7 @@ using osu.Game.Input.Bindings;
 using osu.Game.IO;
 using osu.Game.IPC;
 using osu.Game.IPC.DataSources;
+using osu.Game.LocalPriority;
 using osu.Game.Localisation;
 using osu.Game.Online;
 using osu.Game.Online.API;
@@ -210,6 +211,10 @@ namespace osu.Game
         private Container leftFloatingOverlayContent;
 
         private Container topMostOverlayContent;
+
+        private LocalProfileSwitcher localProfileSwitcher;
+
+        private LocalProfileOverlay localProfileOverlay;
 
         private Container footerBasedOverlayContent;
 
@@ -773,9 +778,53 @@ namespace osu.Game
         /// Show a user's profile as an overlay.
         /// </summary>
         /// <param name="user">The user to display.</param>
-        public void ShowUser(IUser user) => waitForReady(() => userProfile, _ => userProfile.ShowUser(user));
+        public void ShowUser(IUser user)
+        {
+            // osu!local: local profiles open their own profile page (if the profile still exists); guest plays have no profile at all.
+            if (user.OnlineID <= LocalPriorityPolicy.LOCAL_PROFILE_ID_CEILING)
+            {
+                showLocalProfile(user);
+                return;
+            }
 
-        public void ToggleLocalProfile() => waitForReady(() => localProfiles, overlay => overlay.ToggleVisibility());
+            // Guest / system user (offline plays without a profile); a name without an ID (e.g. a beatmap's mapper) is looked up by name.
+            if (user.OnlineID <= 1 && (string.IsNullOrEmpty(user.Username) || string.Equals(user.Username, @"Guest", StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            waitForReady(() => userProfile, _ => userProfile.ShowUser(user));
+        }
+
+        private void showLocalProfile(IUser user)
+        {
+            var profile = Dependencies.Get<LocalProfileManager>()?.Store.GetProfileByUserId(user.OnlineID);
+
+            if (profile == null)
+            {
+                Notifications.Post(new SimpleNotification
+                {
+                    Text = $@"There is no local profile called ""{user.Username}"" anymore (it was deleted). Its scores are still in the database.",
+                });
+                return;
+            }
+
+            if (localProfileOverlay == null)
+                return;
+
+            waitForReady(() => localProfileOverlay, _ => localProfileOverlay.ShowProfile(profile.Id));
+        }
+
+        /// <summary>
+        /// osu!local: Ctrl+P and the Ritsu commands open the osu!local profile page (or the switcher while no profile is active).
+        /// </summary>
+        public void ToggleLocalProfile()
+        {
+            if (Dependencies.Get<LocalProfileManager>()?.IsLocalProfileActive == true && localProfileOverlay != null)
+                waitForReady(() => localProfileOverlay, overlay => overlay.ToggleVisibility());
+            else if (localProfileSwitcher != null)
+                localProfileSwitcher.ToggleVisibility();
+            else
+                waitForReady(() => localProfiles, overlay => overlay.ToggleVisibility());
+        }
 
         public void ToggleBeatmapListing() => waitForReady(() => beatmapListing, overlay => overlay.ToggleVisibility());
 
@@ -1743,6 +1792,41 @@ namespace osu.Game
                 Origin = Anchor.TopRight,
             }, rightFloatingOverlayContent.Add, true);
 
+            // osu!local: local profile page (left-click on the account button) and profile switcher (right-click).
+            bool profileUi = !LocalPriorityDiagnostics.IsDisabled(@"profile-ui");
+
+            if (profileUi)
+                loadComponentSingleFile(localProfileOverlay = new LocalProfileOverlay(), overlayContent.Add, true);
+
+            var osuLocalProfiles = Dependencies.Get<LocalProfileManager>();
+            if (osuLocalProfiles != null)
+            {
+                osuLocalProfiles.PostNotification = n => Notifications.Post(n);
+                osuLocalProfiles.PushDialog = d => dialogOverlay?.Push(d);
+            }
+
+            // The switcher's rows have right-click menus; they open in a full-screen layer so the small switcher panel doesn't cut them off.
+            if (profileUi)
+            {
+                loadComponentSingleFile(localProfileSwitcher = new LocalProfileSwitcher
+                {
+                    Anchor = Anchor.TopRight,
+                    Origin = Anchor.TopRight,
+                }, d =>
+                {
+                    if (LocalPriorityDiagnostics.IsDisabled(@"switcher-menu"))
+                        rightFloatingOverlayContent.Add(d);
+                    else
+                    {
+                        rightFloatingOverlayContent.Add(new osu.Game.Graphics.Cursor.OsuContextMenuContainer
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            Child = d,
+                        });
+                    }
+                }, true);
+            }
+
             loadComponentSingleFile(new AccountCreationOverlay(), topMostOverlayContent.Add, true);
             loadComponentSingleFile<IDialogOverlay>(dialogOverlay = new DialogOverlay(), topMostOverlayContent.Add, true);
             loadComponentSingleFile(localProfiles = new RitsuLocalProfileOverlay(), overlayContent.Add, true);
@@ -1762,7 +1846,7 @@ namespace osu.Game
             Add(new FriendPresenceNotifier());
 
             // side overlays which cancel each other.
-            var singleDisplaySideOverlays = new OverlayContainer[] { Settings, Notifications, FirstRunOverlay, loginOverlay, nowPlayingOverlay, toriiWelcomeOverlay };
+            var singleDisplaySideOverlays = new OverlayContainer[] { Settings, Notifications, FirstRunOverlay, loginOverlay, nowPlayingOverlay, toriiWelcomeOverlay, localProfileSwitcher }.Where(o => o != null).ToArray();
 
             foreach (var overlay in singleDisplaySideOverlays)
             {
@@ -2521,6 +2605,8 @@ namespace osu.Game
 
                 case Player player:
                     player.PlayingState.BindTo(UserPlayingState);
+                    // Local profile page: lists expanded with "show more" go back to compact once a beatmap is entered (replays too).
+                    Dependencies.Get<LocalProfileManager>()?.NotifyBeatmapEntered();
                     break;
 
                 default:

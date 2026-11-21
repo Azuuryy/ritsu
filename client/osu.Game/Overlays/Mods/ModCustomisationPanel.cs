@@ -178,10 +178,34 @@ namespace osu.Game.Overlays.Mods
             }
         }
 
+        private Drawable? extraSection;
+
+        /// <summary>
+        /// Ritsu: an extra section shown above the mods' settings (the local profile mod rules picker puts its rules here).
+        /// </summary>
+        public Drawable? ExtraSection
+        {
+            get => extraSection;
+            set
+            {
+                extraSection = value;
+
+                if (IsLoaded)
+                    updateMods();
+            }
+        }
+
         private void updateMods()
         {
             ExpandedState.Value = ModCustomisationPanelState.Collapsed;
+
+            if (extraSection != null && extraSection.Parent == sectionsFlow)
+                sectionsFlow.Remove(extraSection, false);
+
             sectionsFlow.Clear();
+
+            if (extraSection != null)
+                sectionsFlow.Add(extraSection);
 
             // Importantly, the selected mods bindable is already ordered by the mod select overlay (following the order of mod columns and panels).
             // Using AsOrdered produces a slightly different order (e.g. DT and NC no longer becoming adjacent),

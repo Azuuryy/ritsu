@@ -11,6 +11,8 @@ namespace osu.Game.Offline
             bool excluded = profile != null && (profile.ExcludedBeatmapIds.Contains(beatmap.ID)
                 || (beatmap.BeatmapSet != null && profile.ExcludedBeatmapSetIds.Contains(beatmap.BeatmapSet.ID)
                     && !profile.IncludedBeatmapIds.Contains(beatmap.ID)));
+            // osu!local: the PP exclusions set from song select / the profile page.
+            excluded |= LocalPriority.LocalPriorityPolicy.IsExcludedFromPerformance(beatmap);
             return displayStatus(beatmap.Status, excluded);
         }
 
@@ -20,6 +22,7 @@ namespace osu.Game.Offline
                 ? profile.ExcludedBeatmapSetIds.Contains(set.ID)
                 : set.Beatmaps.All(beatmap => profile.ExcludedBeatmapIds.Contains(beatmap.ID)
                     || (profile.ExcludedBeatmapSetIds.Contains(set.ID) && !profile.IncludedBeatmapIds.Contains(beatmap.ID))));
+            excluded |= LocalPriority.LocalPriorityPolicy.IsExcludedFromPerformance(set);
             return displayStatus(set.Status, excluded);
         }
 

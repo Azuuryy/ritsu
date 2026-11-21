@@ -1484,7 +1484,10 @@ namespace osu.Game.Screens.Play
             {
                 ScoreInfo = new ScoreInfo
                 {
-                    User = profile == null ? api.LocalUser.Value : osu.Game.Offline.RitsuProfileManager.CreateUser(profile),
+                    // osu!local: an active local profile is the player (its scores are counted by user ID); otherwise Ritsu's profile.
+                    User = profile == null || osu.Game.LocalPriority.LocalPriorityPolicy.IsOfflineProfileUser(api.LocalUser.Value)
+                        ? api.LocalUser.Value
+                        : osu.Game.Offline.RitsuProfileManager.CreateUser(profile),
                     ClientVersion = game.Version,
                 },
             };

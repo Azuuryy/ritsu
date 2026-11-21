@@ -440,6 +440,9 @@ namespace osu.Game.Screens.Select
             [Resolved(CanBeNull = true)]
             private RitsuProfileManager? ritsuProfiles { get; set; }
 
+            [Resolved(canBeNull: true)]
+            private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
             [Resolved]
             private IAPIProvider api { get; set; } = null!;
 
@@ -590,15 +593,11 @@ namespace osu.Game.Screens.Select
                     if (copyableMods.Length > 0 && selectedMods != null)
                         items.Add(new OsuMenuItem(SongSelectStrings.UseTheseMods, MenuItemType.Highlighted, () => selectedMods.Value = copyableMods));
 
-                    var transfer = RitsuScoreTransferMenu.Create(ritsuProfiles, dialogOverlay, score.ID);
-                    if (transfer != null)
-                        items.Add(transfer);
-
-                    if (ritsuProfiles?.BelongsToActiveProfile(score.ID) == true)
+                    // osu!local: transfer the score / exclude it from PP (instead of Ritsu's own items).
+                    if (localProfiles != null)
                     {
-                        bool included = ritsuProfiles.IsScoreIncludedInPP(score.ID);
-                        items.Add(new OsuMenuItem(included ? "Exclude this score from profile PP" : "Include this score in profile PP", MenuItemType.Standard,
-                            () => ritsuProfiles.SetScoreIncludedInPP(score.ID, !included)));
+                        items.Add(osu.Game.LocalPriority.LocalProfileScoreTransfer.CreateMenuItem(localProfiles, score));
+                        items.Add(osu.Game.LocalPriority.LocalPerformanceExclusions.CreateScoreMenuItem(localProfiles, score));
                     }
 
                     if (score.OnlineID > 0)

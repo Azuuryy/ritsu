@@ -13,12 +13,15 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserEffects;
 using osu.Game.Graphics.UserInterface;
+using osu.Framework.Input.Events;
+using osu.Game.LocalPriority;
 using osu.Game.Localisation;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Users.Drawables;
 using osuTK;
 using osuTK.Graphics;
+using osuTK.Input;
 
 namespace osu.Game.Overlays.Toolbar
 {
@@ -42,6 +45,21 @@ namespace osu.Game.Overlays.Toolbar
         // it survives login-after-load. Potato mode / the aura setting suppress it
         // from inside the container.
         private UserAuraContainer usernameAura = null!;
+
+        // osu!local: local profile picture, shown instead of the avatar while a local profile is active.
+        private LocalProfileAvatar localAvatar = null!;
+
+        [Resolved]
+        private LocalProfileManager localProfiles { get; set; } = null!;
+
+        [Resolved]
+        private LocalProfileSwitcher? profileSwitcher { get; set; }
+
+        [Resolved]
+        private LocalProfileOverlay? localProfileOverlay { get; set; }
+
+        private readonly IBindable<int> localProfileRevision = new Bindable<int>();
+        private readonly IBindable<LocalProfile?> activeLocalProfile = new Bindable<LocalProfile?>();
 
         /// <summary>
         /// Aire entre la foto y el borde de la pastilla del boton. Tambien es lo que se le
@@ -107,6 +125,11 @@ namespace osu.Game.Overlays.Toolbar
                         {
                             RelativeSizeAxes = Axes.Both,
                         },
+                        localAvatar = new LocalProfileAvatar
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            Alpha = 0,
+                        },
                         spinner = new LoadingLayer(dimBackground: true, withBox: false)
                         {
                             BlockPositionalInput = false,
@@ -156,17 +179,86 @@ namespace osu.Game.Overlays.Toolbar
             localUser.BindValueChanged(userChanged, true);
 
             StateContainer = login;
+
+            // osu!local diagnostics (OSU_LOCAL_DISABLE=toolbar): the button only shows the profile name / picture once, at startup.
+            if (LocalPriorityDiagnostics.IsDisabled(@"toolbar"))
+            {
+                Schedule(updateLocalProfileDisplay);
+                return;
+            }
+
+            localProfileRevision.BindTo(localProfiles.Revision);
+            localProfileRevision.BindValueChanged(_ => Schedule(updateLocalProfileDisplay));
+            activeLocalProfile.BindTo(localProfiles.ActiveProfile);
+            activeLocalProfile.BindValueChanged(_ => Schedule(updateLocalProfileDisplay));
         }
 
-        private void userChanged(ValueChangedEvent<APIUser> user) => Schedule(() =>
+        private void userChanged(ValueChangedEvent<APIUser> user) => Schedule(updateLocalProfileDisplay);
+
+        /// <summary>
+        /// osu!local: show the active local profile's name and picture (or the guest user).
+        /// </summary>
+        private void updateLocalProfileDisplay()
         {
-            usernameText.Text = user.NewValue.Username;
-            avatar.User = user.NewValue;
-            // Point the aura wrapper at the (now signed-in) local user so their
-            // cosmetic renders behind the toolbar name. Text is set first so the
-            // glow layer, which mirrors the text shape, rebuilds against it.
-            usernameAura.SetUser(user.NewValue);
-        });
+            var profile = localProfiles.ActiveProfile.Value;
+            bool local = profile != null;
+
+            avatar.Alpha = local ? 0 : 1;
+            localAvatar.Alpha = local ? 1 : 0;
+
+            var user = localUser.Value;
+
+            if (profile != null)
+            {
+                usernameText.Text = profile.Name;
+                localAvatar.AvatarFile = profile.AvatarFile;
+            }
+            else
+            {
+                usernameText.Text = LocalPriorityPolicy.IsOfflineProfileUser(user) ? string.Empty : user.Username;
+                avatar.User = LocalPriorityPolicy.IsOfflineProfileUser(user) ? null : user;
+            }
+
+            // Point the aura wrapper at the local user so their cosmetic renders behind the toolbar name.
+            // Text is set first so the glow layer, which mirrors the text shape, rebuilds against it.
+            usernameAura.SetUser(user);
+
+            TooltipSub = local
+                ? "Local profile. Click: profile page. Right-click: switch profile."
+                : "No local profile. Click or right-click: choose a local profile.";
+        }
+
+        /// <summary>
+        /// osu!local: a click opens the active profile's page, or the profile switcher while no profile is active (Ritsu has no login panel).
+        /// </summary>
+        protected override bool OnClick(ClickEvent e)
+        {
+            if (localProfiles.IsLocalProfileActive && localProfileOverlay != null)
+            {
+                localProfileOverlay.ToggleVisibility();
+                return true;
+            }
+
+            if (profileSwitcher != null)
+            {
+                profileSwitcher.ToggleVisibility();
+                return true;
+            }
+
+            return base.OnClick(e);
+        }
+
+        /// <summary>
+        /// osu!local: right-click opens the profile switcher.
+        /// </summary>
+        protected override bool OnMouseDown(MouseDownEvent e)
+        {
+            if (e.Button != MouseButton.Right)
+                return base.OnMouseDown(e);
+
+            profileSwitcher?.ToggleVisibility();
+            return true;
+        }
 
         private void onlineStateChanged(ValueChangedEvent<APIState> state) => Schedule(() =>
         {

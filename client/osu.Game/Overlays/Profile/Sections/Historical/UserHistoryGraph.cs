@@ -14,6 +14,9 @@ namespace osu.Game.Overlays.Profile.Sections.Historical
     {
         private readonly LocalisableString tooltipCounterName;
 
+        // Ritsu: the local profile also shows play history per week.
+        public string TooltipDateFormat { get; set; } = "MMMM yyyy";
+
         public APIUserHistoryCount[]? Values
         {
             set => Data = value?.Select(v => new KeyValuePair<DateTime, long>(v.Date, v.Count)).ToArray();
@@ -31,7 +34,7 @@ namespace osu.Game.Overlays.Profile.Sections.Historical
             {
                 Name = tooltipCounterName,
                 Count = playCount.ToLocalisableString("N0"),
-                Time = date.ToLocalisableString("MMMM yyyy")
+                Time = date.ToLocalisableString(TooltipDateFormat)
             };
     }
 }

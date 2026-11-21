@@ -33,9 +33,21 @@ namespace osu.Game.Users.Drawables
             Origin = Anchor.Centre;
         }
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.LocalPriority.LocalProfileManager localProfiles { get; set; }
+
         [BackgroundDependencyLoader]
         private void load(LargeTextureStore textures, UserLookupCache userLookupCache)
         {
+            // osu!local: local profiles (negative IDs) show their own picture, wherever an avatar is drawn (leaderboards, results...).
+            if (user != null && localProfiles != null && !osu.Game.LocalPriority.LocalPriorityDiagnostics.IsDisabled(@"avatars") && user.OnlineID <= osu.Game.LocalPriority.LocalPriorityPolicy.LOCAL_PROFILE_ID_CEILING)
+            {
+                string file = localProfiles.Store.GetAvatarFile(user.OnlineID);
+
+                if (file != null)
+                    Texture = localProfiles.GetAvatarTexture(file);
+            }
+
             string avatarUrl = (user as APIUser)?.AvatarUrl;
             string localAvatar = (user as APIUser)?.LocalAvatarFileName;
             if (!string.IsNullOrEmpty(localAvatar))

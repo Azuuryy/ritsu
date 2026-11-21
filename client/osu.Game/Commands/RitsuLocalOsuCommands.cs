@@ -64,6 +64,13 @@ namespace osu.Game
 
         private void showRitsuProfile(bool top)
         {
+            // osu!local: the active profile's statistics and best scores are on its profile page.
+            if (Dependencies.Get<LocalPriority.LocalProfileManager>()?.IsLocalProfileActive == true && localProfileOverlay != null)
+            {
+                waitForReady(() => localProfileOverlay, overlay => overlay.Show());
+                return;
+            }
+
             var profiles = Dependencies.Get<RitsuProfileManager>();
             var profile = profiles.GetActiveProfile();
             var statistics = profiles.GetStatistics(profile.Id, Ruleset.Value.ShortName);

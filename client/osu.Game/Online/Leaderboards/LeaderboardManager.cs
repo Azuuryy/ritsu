@@ -50,6 +50,9 @@ namespace osu.Game.Online.Leaderboards
         [Resolved(canBeNull: true)]
         private osu.Game.Offline.RitsuProfileManager? ritsuProfiles { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
         protected override void LoadComplete()
         {
             base.LoadComplete();
@@ -222,8 +225,11 @@ namespace osu.Game.Online.Leaderboards
 
             var newScores = sender.AsEnumerable();
 
-            if (CurrentCriteria.Scope == BeatmapLeaderboardScope.Local && ritsuProfiles != null)
-                newScores = newScores.Where(s => ritsuProfiles.BelongsToActiveProfile(s.ID));
+            // osu!local: while a local profile is active, "your" scores are that profile's (transfers move them).
+            bool localProfileActive = localProfiles?.IsLocalProfileActive == true;
+
+            if (CurrentCriteria.Scope == BeatmapLeaderboardScope.Local && (ritsuProfiles != null || localProfileActive))
+                newScores = newScores.Where(s => osu.Game.LocalPriority.RitsuProfileBridge.BelongsToActiveProfile(localProfiles, ritsuProfiles, s));
 
             if (CurrentCriteria.ExactMods != null)
             {
@@ -249,12 +255,15 @@ namespace osu.Game.Online.Leaderboards
                 newScores = newScores.OrderBy(s => !s.PP.HasValue);
 
             var newScoresArray = newScores.ToArray();
-            if (ritsuProfiles != null)
+            // osu!local scores already carry their profile's name (renames and transfers update it).
+            if (ritsuProfiles != null && !localProfileActive)
             {
                 foreach (var score in newScoresArray)
                     ritsuProfiles.ApplyProfileNameToDetachedScore(score);
             }
-            var personalBest = ritsuProfiles == null ? null : newScoresArray.Where(s => ritsuProfiles.BelongsToActiveProfile(s.ID)).OrderByDescending(s => s.TotalScore).FirstOrDefault();
+            var personalBest = ritsuProfiles == null && !localProfileActive
+                ? null
+                : newScoresArray.Where(s => osu.Game.LocalPriority.RitsuProfileBridge.BelongsToActiveProfile(localProfiles, ritsuProfiles, s)).OrderByDescending(s => s.TotalScore).FirstOrDefault();
             scores.Value = LeaderboardScores.Success(newScoresArray, scoresRequested: newScoresArray.Length, totalScores: newScoresArray.Length, personalBest);
         }
 

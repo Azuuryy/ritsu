@@ -356,18 +356,7 @@ namespace osu.Game.Screens.Select
                 if (songSelect != null)
                     items.AddRange(songSelect.GetForwardActions(beatmap));
 
-                if (ritsuProfiles != null)
-                {
-                    Guid profileId = ritsuProfiles.ActiveProfileId;
-                    bool included = ritsuProfiles.AreBeatmapScoresIncludedInPP(profileId, beatmap.ID, beatmap.BeatmapSet?.ID);
-                    var ppItem = new OsuMenuItem(included ? "Exclude this beatmap's scores from profile PP" : "Include this beatmap's scores in profile PP", MenuItemType.Standard,
-                        () => ritsuProfiles.SetBeatmapScoresIncludedInPP(profileId, beatmap.ID, !included, beatmap.BeatmapSet?.ID));
-                    int editSeparator = songSelect is SoloSongSelect ? items.FindIndex(item => item is OsuMenuItemSpacer) : -1;
-                    if (editSeparator >= 0)
-                        items.InsertRange(editSeparator + 1, new MenuItem[] { ppItem, new OsuMenuItemSpacer() });
-                    else
-                        items.Add(ppItem);
-                }
+                // osu!local: "Exclude this difficulty from PP" comes from the song select's actions above (instead of Ritsu's own item).
 
                 return items.ToArray();
             }
