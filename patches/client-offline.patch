@@ -21677,7 +21677,7 @@ index fe33e3163c..1193ab7fd6 100644
              };
              yield return new RulesetBeatmapAttribute(SongSelectStrings.HPDrain, @"HP", originalDifficulty.DrainRate, effectiveDifficulty.DrainRate, 10)
 diff --git a/osu.Game.Tests/Visual/UserInterface/TestSceneModDifficultyAdjustSettings.cs b/osu.Game.Tests/Visual/UserInterface/TestSceneModDifficultyAdjustSettings.cs
-index 30470c9c17..d06653f1b5 100644
+index 30470c9..607cefd 100644
 --- a/osu.Game.Tests/Visual/UserInterface/TestSceneModDifficultyAdjustSettings.cs
 +++ b/osu.Game.Tests/Visual/UserInterface/TestSceneModDifficultyAdjustSettings.cs
 @@ -129,8 +129,8 @@ namespace osu.Game.Tests.Visual.UserInterface
@@ -21686,8 +21686,8 @@ index 30470c9c17..d06653f1b5 100644
  
 -            checkSliderAtValue("Circle Size", 11);
 -            checkBindableAtValue("Circle Size", 11);
-+            checkSliderAtValue("Circle Size", 15);
-+            checkBindableAtValue("Circle Size", 15);
++            checkSliderAtValue("Circle Size", 13);
++            checkBindableAtValue("Circle Size", 13);
  
              setSliderValue("Approach Rate", -5);
  

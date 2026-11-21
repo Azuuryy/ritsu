@@ -129,8 +129,8 @@ namespace osu.Game.Tests.Visual.UserInterface
 
             setSliderValue("Circle Size", 99);
 
-            checkSliderAtValue("Circle Size", 15);
-            checkBindableAtValue("Circle Size", 15);
+            checkSliderAtValue("Circle Size", 13);
+            checkBindableAtValue("Circle Size", 13);
 
             setSliderValue("Approach Rate", -5);
 
