@@ -7,13 +7,18 @@ using NUnit.Framework;
 using osu.Framework.Allocation;
 using osu.Framework.Extensions;
 using osu.Framework.Extensions.ObjectExtensions;
+using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Platform;
 using osu.Framework.Testing;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
+using osu.Game.Graphics;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
@@ -79,6 +84,78 @@ namespace osu.Game.Tests.Visual.SongSelect
         public void TestLastItemIsPlaceholder()
         {
             AddAssert("last item is placeholder", () => !dialog.ChildrenOfType<DrawableCollectionListItem>().Last().Model.IsManaged);
+        }
+
+        [Test]
+        public void TestBeatmapMembershipActions()
+        {
+            const string firstHash = "first";
+            const string secondHash = "second";
+            var set = new BeatmapSetInfo();
+            var first = new BeatmapInfo { MD5Hash = firstHash, BeatmapSet = set };
+            set.Beatmaps.Add(first);
+            set.Beatmaps.Add(new BeatmapInfo { MD5Hash = secondHash, BeatmapSet = set });
+            var collection = new BeatmapCollection("Training");
+
+            AddStep("add a collection and open for a difficulty", () =>
+            {
+                Realm.Write(r => r.Add(collection));
+                dialog.ShowForBeatmap(first);
+            });
+
+            assertActions(true, true, false, false);
+            assertHighlight(false);
+            AddUntilStep("membership buttons are to the right of delete", () =>
+                dialog.ChildrenOfType<DrawableCollectionListItem.DeleteButton>().Single().ScreenSpaceDrawQuad.TopRight.X
+                <= buttons()[0].ScreenSpaceDrawQuad.TopLeft.X + 1);
+            AddAssert("both set icons load their textures", () => new[] { buttons()[0], buttons()[3] }.All(
+                button => button.ChildrenOfType<Sprite>().Single(icon => icon.Name == "Beatmap set icon").Texture != null));
+            click(1);
+            assertActions(true, false, true, true);
+            assertMembers(firstHash);
+            assertHighlight(true);
+            click(0);
+            assertActions(false, false, true, true);
+            assertMembers(firstHash, secondHash);
+            click(2);
+            assertActions(true, true, false, true);
+            assertMembers(secondHash);
+            assertHighlight(false);
+            click(3);
+            assertActions(true, true, false, false);
+            assertMembers();
+            AddStep("undo removal", () => dialog.UndoRemoval());
+            assertMembers(secondHash);
+
+            AddStep("open for a set with no selected difficulty", () => dialog.ShowForSet(set, null));
+            assertActions(true, false, false, true);
+            assertHighlight(true);
+            AddStep("open without a beatmap", () => dialog.Show());
+            assertHighlight(false);
+
+            void assertHighlight(bool highlighted) => AddUntilStep("collection name background matches membership", () =>
+            {
+                var colour = Dependencies.Get<OsuColour>().Green3.Darken(0.73f);
+                return dialog.ChildrenOfType<DrawableCollectionListItem>().Single(item => item.Model.IsManaged)
+                             .ChildrenOfType<OsuTextBox>().Single().ChildrenOfType<Box>()
+                             .Any(box => box.Colour.Equals((ColourInfo)colour)) == highlighted;
+            });
+
+            OsuAnimatedButton[] buttons() => dialog.ChildrenOfType<DrawableCollectionListItem>().Single(item => item.Model.IsManaged)
+                                                   .ChildrenOfType<OsuAnimatedButton>().ToArray();
+
+            void assertActions(params bool[] enabled) => AddUntilStep("available actions match the membership", () =>
+                dialog.ChildrenOfType<DrawableCollectionListItem>().Count(item => item.Model.IsManaged) == 1
+                && buttons().Select(button => button.Enabled.Value).SequenceEqual(enabled));
+
+            void click(int index) => AddStep($"click membership action {index}", () =>
+            {
+                InputManager.MoveMouseTo(buttons()[index]);
+                InputManager.Click(MouseButton.Left);
+            });
+
+            void assertMembers(params string[] expected) => AddUntilStep("collection membership matches", () =>
+                Realm.Run(r => r.Find<BeatmapCollection>(collection.ID)!.BeatmapMD5Hashes.ToHashSet().SetEquals(expected)));
         }
 
         [Test]

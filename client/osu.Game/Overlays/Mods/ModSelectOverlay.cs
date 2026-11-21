@@ -279,8 +279,6 @@ namespace osu.Game.Overlays.Mods
                 mod.Preselected.Value = false;
         }
 
-        internal Action? OpenRitsuSimulation { get; init; }
-
         public new ModSelectFooterContent? DisplayedFooterContent => base.DisplayedFooterContent as ModSelectFooterContent;
 
         public override VisibilityContainer CreateFooterContent() => new ModSelectFooterContent(this)
@@ -299,7 +297,7 @@ namespace osu.Game.Overlays.Mods
             base.Update();
 
             SearchTextBox.PlaceholderText = SearchTextBox.HasFocus ? input_search_placeholder : tab_to_search_placeholder;
-            aboveColumnsContent.Padding = aboveColumnsContent.Padding with { Bottom = DisplayedFooterContent?.DisplaysStackedVertically == true ? 75f : 15f };
+            aboveColumnsContent.Padding = aboveColumnsContent.Padding with { Bottom = 15 + (DisplayedFooterContent?.ExtraHeight ?? 0) };
         }
 
         /// <summary>

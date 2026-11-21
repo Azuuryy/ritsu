@@ -5,11 +5,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Game.Beatmaps;
 using osu.Game.Library;
 using osu.Game.Database;
 using osu.Game.Graphics;
@@ -28,6 +30,7 @@ namespace osu.Game.Collections
 {
     public partial class ManageCollectionsDialog : OsuFocusedOverlayContainer
     {
+        private const float maximum_width = 760;
         private const double enter_duration = 500;
         private const double exit_duration = 200;
 
@@ -36,6 +39,11 @@ namespace osu.Game.Collections
 
         private IDisposable? duckOperation;
 
+        internal readonly Bindable<MembershipTarget?> Target = new Bindable<MembershipTarget?>();
+
+        internal sealed record MembershipTarget(string Label, string? DifficultyHash, string[] SetHashes);
+
+        private TruncatingSpriteText targetLabel = null!;
         private BasicSearchTextBox searchTextBox = null!;
         private DrawableCollectionList list = null!;
         private Action? undo;
@@ -48,6 +56,43 @@ namespace osu.Game.Collections
 
         [Resolved(canBeNull: true)]
         private IDialogOverlay? dialogs { get; set; }
+
+        public override void Show()
+        {
+            Target.Value = null;
+            base.Show();
+        }
+
+        public void ShowForBeatmap(BeatmapInfo difficulty) => showFor(difficulty.BeatmapSet, difficulty);
+
+        public void ShowForSet(BeatmapSetInfo set, BeatmapInfo? selection) =>
+            showFor(set, selection?.BeatmapSet?.ID == set.ID ? selection : null);
+
+        private void showFor(BeatmapSetInfo? set, BeatmapInfo? difficulty)
+        {
+            var hashes = set is { DeletePending: false, Protected: false }
+                ? set.Beatmaps.Select(beatmap => beatmap.MD5Hash).Where(hash => !string.IsNullOrEmpty(hash)).Distinct().ToArray()
+                : Array.Empty<string>();
+            string? difficultyHash = set is { DeletePending: true } ? null : difficulty?.MD5Hash;
+            if (string.IsNullOrEmpty(difficultyHash))
+                difficultyHash = null;
+            string label = difficulty != null
+                ? $"{difficulty.Metadata.Title} · {difficulty.DifficultyName}"
+                : set?.Metadata.Title ?? string.Empty;
+            Target.Value = new MembershipTarget(label, difficultyHash, hashes);
+            base.Show();
+        }
+
+        internal void ChangeMembership(Guid collectionId, IEnumerable<string> hashes, bool add)
+        {
+            if (add)
+                RitsuCollectionMenu.Add(realm, collectionId, hashes);
+            else
+                RemoveMembers(collectionId, null, hashes);
+
+            if (library != null)
+                RitsuMenuOrdering.RecordUse(library, RitsuMenuOrdering.Collections, collectionId.ToString());
+        }
 
         internal void RemoveMembers(Guid collectionId, Guid? subgroupId, IEnumerable<string> hashes)
         {
@@ -168,8 +213,8 @@ namespace osu.Game.Collections
             Anchor = Anchor.Centre;
             Origin = Anchor.Centre;
 
-            RelativeSizeAxes = Axes.Both;
-            Size = new Vector2(0.5f, 0.8f);
+            RelativeSizeAxes = Axes.Y;
+            Size = new Vector2(maximum_width, 0.8f);
 
             Masking = true;
             CornerRadius = 10;
@@ -270,7 +315,7 @@ namespace osu.Game.Collections
                                             Padding = new MarginPadding(10),
                                             Children = new Drawable[]
                                             {
-                                                list = new DrawableCollectionList
+                                                list = new DrawableCollectionList(this)
                                                 {
                                                     Padding = new MarginPadding { Vertical = 50 },
                                                     RelativeSizeAxes = Axes.Both,
@@ -282,6 +327,13 @@ namespace osu.Game.Collections
                                                     ReleaseFocusOnCommit = false,
                                                     HoldFocus = true,
                                                     PlaceholderText = HomeStrings.SearchPlaceholder,
+                                                },
+                                                targetLabel = new TruncatingSpriteText
+                                                {
+                                                    RelativeSizeAxes = Axes.X,
+                                                    Y = 45,
+                                                    Padding = new MarginPadding { Horizontal = 6 },
+                                                    Alpha = 0,
                                                 },
                                                 new Container
                                                 {
@@ -309,10 +361,25 @@ namespace osu.Game.Collections
         {
             base.LoadComplete();
 
+            Target.BindValueChanged(change =>
+            {
+                targetLabel.Text = change.NewValue?.Label ?? string.Empty;
+                targetLabel.Alpha = change.NewValue == null ? 0 : 1;
+                list.Padding = new MarginPadding { Top = change.NewValue == null ? 50 : 73, Bottom = 50 };
+            }, true);
+
             searchTextBox.Current.BindValueChanged(_ =>
             {
                 list.SearchTerm = searchTextBox.Current.Value;
             });
+        }
+
+        protected override void Update()
+        {
+            base.Update();
+
+            if (Parent != null)
+                Width = Math.Min(maximum_width, Parent.ChildSize.X * 0.92f);
         }
 
         protected override void Dispose(bool isDisposing)

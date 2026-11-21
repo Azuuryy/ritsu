@@ -14,8 +14,10 @@ using osu.Game.Library;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Configuration;
+using osu.Game.Collections;
 using osu.Game.Database;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Localisation;
 using osu.Game.Online.Leaderboards;
 using osu.Game.Offline;
 using osu.Game.Overlays;
@@ -41,6 +43,50 @@ namespace osu.Game.Tests.Visual.Navigation
 {
     public partial class TestSceneSongSelectNavigation : OsuGameTestScene
     {
+        [Test]
+        public void TestCollectionsEntryPointsShareTheSelectedBeatmap()
+        {
+            BeatmapInfo beatmap = null!;
+            AddStep("import a beatmap", () =>
+            {
+                var manager = Game.Dependencies.Get<BeatmapManager>();
+                var imported = manager.Import(new ImportTask(TestResources.GetQuickTestBeatmapForImport())).GetResultSafely();
+                beatmap = manager.GetAllUsableBeatmapSets().Single(s => s.ID == imported!.ID).Beatmaps.First();
+                Game.PresentBeatmap(beatmap.BeatmapSet!, candidate => candidate.ID == beatmap.ID);
+            });
+            AddUntilStep("wait for beatmap and footer", () => Game.ScreenStack.CurrentScreen is SoloSongSelect select && select.CarouselItemsPresented
+                && Game.Beatmap.Value.BeatmapInfo.MD5Hash == beatmap.MD5Hash && Game.ChildrenOfType<FooterButtonCollections>().Any(b => b.IsPresent));
+
+            AddStep("dismiss the welcome overlay", () => Game.ChildrenOfType<ToriiBriefingOverlay>().FirstOrDefault()?.Hide());
+
+            openCollections("Collections footer", () => Game.ChildrenOfType<FooterButtonCollections>().Single(b => b.IsPresent).TriggerClick());
+            openCollections("Manage collections dropdown item", () =>
+            {
+                var dropdown = ((SoloSongSelect)Game.ScreenStack.CurrentScreen).ChildrenOfType<CollectionDropdown>().First(d => d.IsPresent);
+                dropdown.Current.Value = dropdown.ItemSource.OfType<ManageCollectionsFilterMenuItem>().Single();
+                Assert.That(dropdown.Current.Value, Is.Not.InstanceOf<ManageCollectionsFilterMenuItem>());
+            });
+            openCollections("beatmap context menu", () => ((SoloSongSelect)Game.ScreenStack.CurrentScreen).GetForwardActions(beatmap)
+                .Single(item => item.Text.Value.Equals(CommonStrings.Collections)).Action.Value!.Invoke());
+
+            AddStep("open Options", () => Game.ChildrenOfType<FooterButtonOptions>().Single(b => b.IsPresent).TriggerClick());
+            AddUntilStep("wait for the only Collections option", () => collectionOptions().Count() == 1);
+            openCollections("Collections option", () => collectionOptions().Single().TriggerClick());
+
+            System.Collections.Generic.IEnumerable<OsuButton> collectionOptions() => Game.ChildrenOfType<FooterButtonOptions.Popover>()
+                .Where(p => p.IsPresent).SelectMany(p => p.ChildrenOfType<OsuButton>()).Where(b => b.Text.Equals(CommonStrings.Collections));
+
+            void openCollections(string entryPoint, Action action)
+            {
+                AddStep("open from " + entryPoint, action);
+                AddUntilStep("the same manager targets the beatmap", () => Game.ChildrenOfType<ManageCollectionsDialog>().Single() is { } manager
+                    && manager.State.Value == osu.Framework.Graphics.Containers.Visibility.Visible && manager.Target.Value?.DifficultyHash == beatmap.MD5Hash);
+                AddStep("close collections", () => InputManager.Key(Key.Escape));
+                AddUntilStep("manager closed", () => Game.ChildrenOfType<ManageCollectionsDialog>().Single().State.Value
+                    == osu.Framework.Graphics.Containers.Visibility.Hidden);
+            }
+        }
+
         [Test]
         public void TestRitsuPaletteQueueAndSessionPreset()
         {
@@ -71,10 +117,21 @@ namespace osu.Game.Tests.Visual.Navigation
             AddStep("select osu!standard for simulation", () => Game.Ruleset.Value = new OsuRuleset().RulesetInfo);
             runCommand("/simulate");
             AddUntilStep("simulator calculated perfect PP", () => Game.ScreenStack.CurrentScreen is RitsuSimulationScreen simulation
-                && simulation.ChildrenOfType<osu.Game.Graphics.Sprites.OsuSpriteText>().Any(text => text.Text.ToString().Contains(" PP", StringComparison.Ordinal)));
-            AddStep("close simulation", () => ((RitsuSimulationScreen)Game.ScreenStack.CurrentScreen)
-                .ChildrenOfType<osu.Game.Graphics.UserInterfaceV2.RoundedButton>().Single(button => button.Text.ToString() == "Back to Song Select").TriggerClick());
+                && simulation.ChildrenOfType<osu.Game.Graphics.Sprites.OsuSpriteText>().Any(text => text.Text.ToString().Equals("PERFECT PP", StringComparison.Ordinal)));
+            AddStep("F4 again does not stack a second simulation", () => InputManager.Key(osuTK.Input.Key.F4));
+            AddStep("close simulation", () => InputManager.Key(osuTK.Input.Key.Escape));
             AddUntilStep("wait for Song Select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
+            AddStep("Alt+F4 does not open the simulation", () =>
+            {
+                InputManager.PressKey(osuTK.Input.Key.AltLeft);
+                InputManager.Key(osuTK.Input.Key.F4);
+                InputManager.ReleaseKey(osuTK.Input.Key.AltLeft);
+            });
+            AddAssert("Song Select is still current", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
+            AddStep("press F4 alone", () => InputManager.Key(osuTK.Input.Key.F4));
+            AddUntilStep("simulation opens from the F4 shortcut", () => Game.ScreenStack.CurrentScreen is RitsuSimulationScreen);
+            AddStep("leave simulation", () => InputManager.Key(osuTK.Input.Key.Escape));
+            AddUntilStep("back in Song Select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
             AddStep("set initial search", () => select().RitsuFilters.Search("length<2m"));
 
             openPalette();

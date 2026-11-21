@@ -8,6 +8,7 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions.LocalisationExtensions;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
@@ -19,6 +20,7 @@ using osu.Game.Graphics.UserInterface;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Utils;
+using osuTK.Input;
 
 namespace osu.Game.Overlays.Mods
 {
@@ -26,7 +28,7 @@ namespace osu.Game.Overlays.Mods
     /// On the mod select overlay, this provides a local updating view of BPM, star rating and other
     /// difficulty attributes so the user can have a better insight into what mods are changing.
     /// </summary>
-    public partial class BeatmapAttributesDisplay : ModFooterInformationDisplay
+    public partial class BeatmapAttributesDisplay : ModFooterInformationDisplay, IHasTooltip
     {
         private StarRatingDisplay starRatingDisplay = null!;
         private BPMDisplay bpmDisplay = null!;
@@ -36,6 +38,8 @@ namespace osu.Game.Overlays.Mods
         public Bindable<IReadOnlyList<Mod>> Mods { get; } = new Bindable<IReadOnlyList<Mod>>();
 
         public BindableBool Collapsed { get; } = new BindableBool(true);
+
+        public LocalisableString TooltipText => Collapsed.Value ? "Right-click to expand difficulty statistics" : "Right-click to collapse difficulty statistics";
 
         private ModSettingChangeTracker? modSettingChangeTracker;
 
@@ -124,20 +128,13 @@ namespace osu.Game.Overlays.Mods
             });
         }
 
-        protected override bool OnHover(HoverEvent e)
+        protected override bool OnMouseDown(MouseDownEvent e)
         {
-            startAnimating();
-            updateCollapsedState();
+            if (e.Button == MouseButton.Right)
+                Collapsed.Toggle();
+
             return true;
         }
-
-        protected override void OnHoverLost(HoverLostEvent e)
-        {
-            updateCollapsedState();
-            base.OnHoverLost(e);
-        }
-
-        protected override bool OnMouseDown(MouseDownEvent e) => true;
 
         protected override bool OnClick(ClickEvent e) => true;
 
@@ -178,7 +175,7 @@ namespace osu.Game.Overlays.Mods
 
         private void updateCollapsedState()
         {
-            RightContent.FadeTo(Collapsed.Value && !IsHovered ? 0 : 1, transition_duration, Easing.OutQuint);
+            RightContent.FadeTo(Collapsed.Value ? 0 : 1, transition_duration, Easing.OutQuint);
         }
 
         public partial class BPMDisplay : RollingCounter<int>

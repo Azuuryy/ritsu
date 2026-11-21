@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions.Color4Extensions;
@@ -20,7 +19,6 @@ using osu.Framework.Threading;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Drawables;
 using osu.Game.Collections;
-using osu.Game.Database;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Backdrops;
 using osu.Game.Graphics.Carousel;
@@ -251,9 +249,6 @@ namespace osu.Game.Screens.Select
         }
 
         [Resolved]
-        private RealmAccess realm { get; set; } = null!;
-
-        [Resolved]
         private ManageCollectionsDialog? manageCollectionsDialog { get; set; }
 
         public override MenuItem[] ContextMenuItems
@@ -316,16 +311,9 @@ namespace osu.Game.Screens.Select
                     items.Add(new OsuMenuItemSpacer());
                 }
 
-                var collectionItems = realm.Realm.All<BeatmapCollection>()
-                                           .OrderBy(c => c.Name)
-                                           .AsEnumerable()
-                                           .Select(createCollectionMenuItem)
-                                           .ToList();
-
                 if (manageCollectionsDialog != null)
-                    collectionItems.Add(new OsuMenuItem(CommonStrings.Manage, MenuItemType.Standard, manageCollectionsDialog.Show));
-
-                items.Add(new OsuMenuItem(CommonStrings.Collections) { Items = collectionItems });
+                    items.Add(new OsuMenuItem(CommonStrings.Collections, MenuItemType.Standard,
+                        () => manageCollectionsDialog.ShowForSet(beatmapSet, (songSelect as SongSelect)?.Beatmap.Value.BeatmapInfo)));
 
                 if (beatmapSet.Beatmaps.Any(b => b.Hidden))
                     items.Add(new OsuMenuItem(SongSelectStrings.RestoreAllHidden, MenuItemType.Standard, () => songSelect?.RestoreAllHidden(beatmapSet)));
@@ -333,50 +321,6 @@ namespace osu.Game.Screens.Select
                 items.Add(new OsuMenuItem(CommonStrings.DeleteWithConfirmation, MenuItemType.Destructive, () => songSelect?.Delete(beatmapSet)));
                 return items.ToArray();
             }
-        }
-
-        private MenuItem createCollectionMenuItem(BeatmapCollection collection)
-        {
-            var beatmapSet = groupedBeatmapSet.BeatmapSet;
-
-            TernaryState state;
-
-            int countExisting = beatmapSet.Beatmaps.Count(b => collection.BeatmapMD5Hashes.Contains(b.MD5Hash));
-
-            if (countExisting == beatmapSet.Beatmaps.Count)
-                state = TernaryState.True;
-            else if (countExisting > 0)
-                state = TernaryState.Indeterminate;
-            else
-                state = TernaryState.False;
-
-            var liveCollection = collection.ToLive(realm);
-
-            return new TernaryStateToggleMenuItem(collection.Name, MenuItemType.Standard, s =>
-            {
-                Task.Run(() => liveCollection.PerformWrite(c =>
-                {
-                    foreach (var b in beatmapSet.Beatmaps)
-                    {
-                        switch (s)
-                        {
-                            case TernaryState.True:
-                                if (c.BeatmapMD5Hashes.Contains(b.MD5Hash))
-                                    continue;
-
-                                c.BeatmapMD5Hashes.Add(b.MD5Hash);
-                                break;
-
-                            case TernaryState.False:
-                                c.BeatmapMD5Hashes.Remove(b.MD5Hash);
-                                break;
-                        }
-                    }
-                }));
-            })
-            {
-                State = { Value = state }
-            };
         }
     }
 }

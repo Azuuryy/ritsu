@@ -24,6 +24,11 @@ namespace osu.Game.Overlays.Settings.Sections.Gameplay
             {
                 new SettingsItemV2(new FormCheckBox
                 {
+                    Caption = "Show difficulty statistics in mod selection",
+                    Current = config.GetBindable<bool>(OsuSetting.ShowModDifficultyAttributes),
+                }),
+                new SettingsItemV2(new FormCheckBox
+                {
                     Caption = GameplaySettingsStrings.IncreaseFirstObjectVisibility,
                     Current = config.GetBindable<bool>(OsuSetting.IncreaseFirstObjectVisibility),
                 })
