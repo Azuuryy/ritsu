@@ -10,7 +10,7 @@ using osu.Game.Rulesets.Mods;
 
 namespace osu.Game.Rulesets.Mania.Mods
 {
-    public class ManiaModDualStages : Mod, IPlayfieldTypeMod, IApplicableToBeatmapConverter
+    public class ManiaModDualStages : Mod, IPlayfieldTypeMod, IApplicableToBeatmapConverter, IAffectsDifficulty
     {
         public override string Name => "Dual Stages";
         public override string Acronym => "DS";

@@ -42,9 +42,11 @@ namespace osu.Game.Overlays.Mods
         protected virtual bool ShowModEffects => true;
 
         /// <summary>
-        /// Whether the ranking information and beatmap attributes displays are stacked vertically due to small space.
+        /// Additional vertical space used when the statistics are above the buttons.
         /// </summary>
-        public bool DisplaysStackedVertically { get; private set; }
+        public float ExtraHeight { get; private set; }
+
+        private Bindable<bool> showAttributes = null!;
 
         public ModSelectFooterContent(ModSelectOverlay overlay)
         {
@@ -52,9 +54,10 @@ namespace osu.Game.Overlays.Mods
         }
 
         [BackgroundDependencyLoader]
-        private void load()
+        private void load(OsuConfigManager config)
         {
             RelativeSizeAxes = Axes.Both;
+            showAttributes = config.GetBindable<bool>(OsuSetting.ShowModDifficultyAttributes);
 
             InternalChild = buttonFlow = new FillFlowContainer<ShearedButton>
             {
@@ -103,6 +106,12 @@ namespace osu.Game.Overlays.Mods
             base.LoadComplete();
 
             if (profiles != null) profiles.Changed += onProfileChanged;
+
+            if (beatmapAttributesDisplay is { } attributes)
+            {
+                showAttributes.BindValueChanged(change => attributes.Collapsed.Value = !change.NewValue, true);
+                attributes.Collapsed.BindValueChanged(change => showAttributes.Value = !change.NewValue);
+            }
 
             Beatmap.BindValueChanged(b =>
             {
@@ -163,27 +172,19 @@ namespace osu.Game.Overlays.Mods
             {
                 float rightEdgeOfLastButton = buttonFlow[^1].ScreenSpaceDrawQuad.TopRight.X;
 
-                // this is cheating a bit; the 640 value is hardcoded based on how wide the expanded panel _generally_ is.
-                // due to the transition applied, the raw screenspace quad of the panel cannot be used, as it will trigger an ugly feedback cycle of expanding and collapsing.
-                float projectedLeftEdgeOfExpandedBeatmapAttributesDisplay = buttonFlow.ToScreenSpace(buttonFlow.DrawSize - new Vector2(640, 0)).X;
+                float estimatedWidth = showAttributes.Value ? 640 : 410;
+                float projectedLeftEdge = buttonFlow.ToScreenSpace(new Vector2(buttonFlow.DrawWidth - estimatedWidth, 0)).X;
+                bool moveAboveButtons = rightEdgeOfLastButton > projectedLeftEdge;
 
-                DisplaysStackedVertically = rightEdgeOfLastButton > projectedLeftEdgeOfExpandedBeatmapAttributesDisplay;
-
-                // only update preview panel's collapsed state after we are fully visible, to ensure all the buttons are where we expect them to be.
-                if (Alpha == 1)
-                    beatmapAttributesDisplay.Collapsed.Value = DisplaysStackedVertically;
-
-                contentFlow.LayoutDuration = 200;
-                contentFlow.LayoutEasing = Easing.OutQuint;
-                contentFlow.Direction = DisplaysStackedVertically ? FillDirection.Vertical : FillDirection.Horizontal;
+                contentFlow.Direction = DrawWidth < estimatedWidth + 40 ? FillDirection.Vertical : FillDirection.Horizontal;
+                contentFlow.Margin = new MarginPadding { Horizontal = 20, Bottom = moveAboveButtons ? buttonFlow.DrawHeight + 10 : 0 };
+                ExtraHeight = moveAboveButtons ? contentFlow.DrawHeight + 10 : 0;
             }
         }
 
         protected virtual IEnumerable<ShearedButton> CreateButtons()
         {
             yield return DeselectAllModsButton = new DeselectAllModsButton(overlay);
-            if (overlay.OpenRitsuSimulation is { } open)
-                yield return new ShearedButton { Width = ModSelectOverlay.BUTTON_WIDTH, Text = "Simulate PP", Action = open };
         }
 
         protected override void PopIn()

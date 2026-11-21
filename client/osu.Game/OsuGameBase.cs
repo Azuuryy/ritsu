@@ -289,7 +289,8 @@ namespace osu.Game
             Resources.AddStore(new DllResourceStore(OsuResources.ResourceAssembly));
             Resources.AddStore(new DllResourceStore(typeof(OsuGameBase).Assembly));
 
-            dependencies.Cache(realm = new RealmAccess(Storage, CLIENT_DATABASE_FILENAME, Host.UpdateThread));
+            bool sharedRitsuStorage = Offline.RitsuOffline.Enabled && Host.Name == Offline.RitsuOffline.StorageName;
+            dependencies.Cache(realm = new RealmAccess(Storage, CLIENT_DATABASE_FILENAME, Host.UpdateThread, useVersionedDatabase: !sharedRitsuStorage));
 
             dependencies.CacheAs<RulesetStore>(RulesetStore = new RealmRulesetStore(realm, Storage));
             dependencies.CacheAs<IRulesetStore>(RulesetStore);

@@ -4,6 +4,26 @@ Notable Ritsu changes are listed here. Dates use the ISO calendar; planned featu
 
 ## Unreleased
 
+## [0.5.1] - 2026-11-21
+
+### Added
+
+- Open the same collection manager from the orange **Collections** footer button, **Options**, the collection dropdown or a beatmap’s context menu. Add or remove a difficulty or its entire set. A dark-green background marks collections that already contain the selected difficulty.
+- Modern V2 results now include a **Play progression** graph in the score details.
+- Show or hide difficulty statistics in the mod picker from Gameplay settings or by right-clicking the statistics.
+
+### Changed
+
+- Score simulation now uses the Modern V2 results layout, with editable accuracy, combo and judgement counts beside estimated PP. Open it from **Simulate** in Song Select, with **F4** by itself, or with the existing commands.
+- In the local library, **Unranked** marks maps excluded from the active profile’s PP. Maps with an unknown, Unranked or Blacklisted source status display as **Approved** when included. The original status is preserved.
+- Difficulty Adjust supports wider settings in extended mode and retains historical values in saved scores. Target BPM can enable extended limits to preserve the original approach rate.
+
+### Fixed
+
+- Song Select ranking badges and Modern V2 results now use the inspected score’s mods and settings for star difficulty, including Spacing Overtime and Random. The ranking badge appears when the displayed star rating changes.
+- PP calculations in Song Select report progress more frequently and continue after an individual calculation is cancelled.
+- Windows development builds open the same Ritsu database as packaged builds when using the same storage.
+
 ## [0.5.0] - 2026-11-18
 
 ### Added

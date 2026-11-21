@@ -21,12 +21,7 @@ namespace osu.Desktop
 {
     public static class Program
     {
-#if DEBUG
-        private const string base_game_name = @"Ritsu";
-#else
-        // Keep this offline foundation separate from existing Torii and osu! data.
-        private const string base_game_name = @"Ritsu";
-#endif
+        private const string base_game_name = osu.Game.Offline.RitsuOffline.StorageName;
 
         /// <summary>
         /// Compute the path to the folder containing this install's storage,

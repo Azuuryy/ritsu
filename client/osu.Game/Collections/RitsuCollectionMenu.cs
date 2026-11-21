@@ -50,14 +50,7 @@ namespace osu.Game.Collections
                                    };
 
                                    foreach (var subgroup in library.Subgroups.Where(s => s.CollectionId == collection.ID))
-                                   {
-                                       actions.Add(new OsuMenuItem($"Add difficulty to {subgroup.Name}", MenuItemType.Standard, () =>
-                                       {
-                                           if (!Add(realm, collection.ID, new[] { beatmap.MD5Hash }))
-                                               return;
-                                           library.SaveSubgroup(subgroup with { Hashes = subgroup.Hashes.Append(beatmap.MD5Hash).Distinct().ToArray() });
-                                       }));
-                                   }
+                                       actions.Add(createSubgroupAction(realm, library, subgroup, beatmap.MD5Hash, $"Add difficulty to {subgroup.Name}"));
 
                                    return new OsuMenuItem(collection.Name) { Items = actions };
                                }).ToList();
@@ -74,15 +67,37 @@ namespace osu.Game.Collections
             }
 
             if (game != null && profiles != null)
-            {
-                var memo = library.GetMemo(profiles.ActiveProfileId, beatmap.MD5Hash);
-                string label = string.IsNullOrEmpty(memo?.Text) ? "Difficulty memo" :
-                    $"Memo · {memo.Text[..Math.Min(memo.Text.Length, 45)]}";
-                items.Add(new OsuMenuItem(label, MenuItemType.Standard, () => game.ShowRitsuMemo(beatmap, score)));
-            }
+                items.Add(CreateMemoAction(library, profiles, beatmap, game, score));
 
             items.Add(new OsuMenuItem(CommonStrings.Manage, MenuItemType.Standard, () => manager?.Show()));
             return items.ToArray();
+        }
+
+        internal static OsuMenuItem? CreateSubgroupMenu(RealmAccess realm, RitsuLibrary library, BeatmapInfo beatmap)
+        {
+            var subgroups = library.Subgroups;
+            if (subgroups.Length == 0)
+                return null;
+
+            var groupNames = realm.Run(r => r.All<BeatmapCollection>().AsEnumerable().ToDictionary(collection => collection.ID, collection => collection.Name));
+            var items = subgroups.Where(subgroup => groupNames.ContainsKey(subgroup.CollectionId))
+                                 .Select(subgroup => createSubgroupAction(realm, library, subgroup, beatmap.MD5Hash, $"{groupNames[subgroup.CollectionId]} · {subgroup.Name}"))
+                                 .ToArray();
+            return items.Length == 0 ? null : new OsuMenuItem("Add to subgroup") { Items = items };
+        }
+
+        private static OsuMenuItem createSubgroupAction(RealmAccess realm, RitsuLibrary library, RitsuSubgroup subgroup, string hash, string label)
+            => new OsuMenuItem(label, MenuItemType.Standard, () =>
+            {
+                if (Add(realm, subgroup.CollectionId, new[] { hash }))
+                    library.SaveSubgroup(subgroup with { Hashes = subgroup.Hashes.Append(hash).Distinct().ToArray() });
+            });
+
+        internal static OsuMenuItem CreateMemoAction(RitsuLibrary library, RitsuProfileManager profiles, BeatmapInfo beatmap, OsuGame game, ScoreInfo? score = null)
+        {
+            var memo = library.GetMemo(profiles.ActiveProfileId, beatmap.MD5Hash);
+            string label = string.IsNullOrEmpty(memo?.Text) ? "Difficulty memo" : $"Memo · {memo.Text[..Math.Min(memo.Text.Length, 45)]}";
+            return new OsuMenuItem(label, MenuItemType.Standard, () => game.ShowRitsuMemo(beatmap, score));
         }
 
         private static void AddSet(RealmAccess realm, Guid collection, BeatmapInfo beatmap)

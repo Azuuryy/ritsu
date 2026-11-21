@@ -100,6 +100,8 @@ namespace osu.Game.Rulesets.Mods
             }
         }
 
+        public float? HistoricalMaxValue { get; init; }
+
         public DifficultyBindable()
             : this(null)
         {
@@ -122,7 +124,7 @@ namespace osu.Game.Rulesets.Mods
                     CurrentNumber.MinValue = Math.Clamp(MathF.Min(CurrentNumber.MinValue, value.Value), ExtendedMinValue ?? MinValue, MinValue);
                     CurrentNumber.MaxValue = Math.Clamp(MathF.Max(CurrentNumber.MaxValue, value.Value), MaxValue, ExtendedMaxValue ?? MaxValue);
 
-                    base.Value = Math.Clamp(value.Value, CurrentNumber.MinValue, CurrentNumber.MaxValue);
+                    base.Value = Math.Clamp(value.Value, CurrentNumber.MinValue, HistoricalMaxValue ?? CurrentNumber.MaxValue);
                 }
                 else
                     base.Value = value;

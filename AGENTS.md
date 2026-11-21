@@ -8,3 +8,5 @@
 - Keep authentication, score submission, updates, telemetry, and unrelated server integrations disabled for the current milestone. Unauthenticated Torii catalogue searches, media, and beatmap downloads are explicitly allowed. Local scores may coexist with a future private server.
 - Keep dependency revisions and patches in sync: every change to the bundled client must also be reflected in `patches/client-offline.patch`, then checked with `Bootstrap.ps1` and appropriate validations.
 - Document behavior and limitations that have actually been verified; distinguish historical validation from new changes. Preserve credits and licenses from the original projects.
+
+- For game UI changes, use the [Ritsu UI skill](skills/ritsu-ui/SKILL.md). When Nathan validates a UI design, update the skill or its guide with the reusable decisions and approved examples.

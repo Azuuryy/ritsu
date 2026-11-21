@@ -48,6 +48,9 @@ namespace osu.Game.Screens.Select
         [Resolved]
         private ManageCollectionsDialog? manageCollectionsDialog { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private ISongSelect? songSelect { get; set; }
+
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
@@ -191,7 +194,10 @@ namespace osu.Game.Screens.Select
             if (filter.NewValue is ManageCollectionsFilterMenuItem)
             {
                 Current.Value = filter.OldValue;
-                manageCollectionsDialog?.Show();
+                if (songSelect != null)
+                    songSelect.ManageCollections();
+                else
+                    manageCollectionsDialog?.Show();
                 return;
             }
 

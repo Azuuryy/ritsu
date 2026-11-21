@@ -9,12 +9,15 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Screens;
 using osu.Framework.Testing;
 using osu.Framework.Utils;
 using osu.Game.Beatmaps;
+using osu.Game.Beatmaps.Drawables;
+using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Online;
@@ -23,7 +26,9 @@ using osu.Game.Online.API.Requests;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Difficulty;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Osu;
+using osu.Game.Rulesets.Osu.Mods;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 using osu.Game.Screens;
@@ -35,6 +40,7 @@ using osu.Game.Screens.Ranking.Statistics;
 using osu.Game.Skinning;
 using osu.Game.Tests.Resources;
 using osu.Game.Users;
+using osu.Game.Utils;
 using osuTK;
 using osuTK.Input;
 using Realms;
@@ -465,6 +471,44 @@ namespace osu.Game.Tests.Visual.Ranking
             });
 
             AddAssert("download button is enabled", () => screen.ChildrenOfType<DownloadButton>().Last().Enabled.Value);
+        }
+
+        [Test]
+        public void TestModernV2DifficultyBadgeFollowsInspectedScore()
+        {
+            ResultsScreen screen = null;
+            ScoreInfo noModScore = null;
+            double moddedStars = 0;
+            double noModStars = 0;
+
+            AddStep("open a modded score in Modern V2", () =>
+            {
+                var config = Dependencies.Get<OsuConfigManager>();
+                config.SetValue(OsuSetting.UseV2ResultsScreen, true);
+                config.SetValue(OsuSetting.ToriiStableResults, false);
+
+                var imported = beatmaps.Import(new ImportTask(TestResources.GetTestBeatmapForImport(virtualTrack: true))).GetResultSafely();
+                var chart = beatmaps.GetAllUsableBeatmapSets().Single(set => set.ID == imported.ID).Beatmaps
+                                    .Single(b => b.Ruleset.ShortName == "osu" && b.DifficultyName == "Insane");
+                var moddedScore = TestResources.CreateTestScoreInfo(chart);
+                moddedScore.Mods = new Mod[] { new OsuModSpacingOvertime { EndSpacing = { Value = 0.4f } } };
+                noModScore = TestResources.CreateTestScoreInfo(chart);
+                noModScore.Mods = Array.Empty<Mod>();
+
+                var calculator = chart.Ruleset.CreateInstance().CreateDifficultyCalculator(beatmaps.GetWorkingBeatmap(chart));
+                moddedStars = calculator.Calculate(moddedScore.Mods).StarRating.FloorToDecimalDigits(2);
+                noModStars = calculator.Calculate().StarRating.FloorToDecimalDigits(2);
+                Assert.That(moddedStars, Is.Not.EqualTo(chart.StarRating.FloorToDecimalDigits(2)).And.Not.EqualTo(noModStars));
+
+                Child = resultsContainer = new TestResultsContainer(screen = createResultsScreen(moddedScore));
+            });
+            AddUntilStep("the badge shows the configured spacing difficulty", displayedStars, () => Is.EqualTo(moddedStars));
+
+            AddStep("inspect the no-mod score", () => screen.SelectOverviewScore(noModScore));
+            AddUntilStep("the badge shows the difficulty of the newly inspected score", displayedStars, () => Is.EqualTo(noModStars));
+
+            double? displayedStars() => screen.ChildrenOfType<V2ResultsPanel>().SingleOrDefault()?
+                .ChildrenOfType<StarRatingDisplay>().Single(badge => badge.Name == "Difficulty rating").DisplayedStars.Value.FloorToDecimalDigits(2);
         }
 
         [Test]

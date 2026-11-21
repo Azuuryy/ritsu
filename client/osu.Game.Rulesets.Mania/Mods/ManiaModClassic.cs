@@ -8,7 +8,7 @@ using osu.Game.Rulesets.Mods;
 
 namespace osu.Game.Rulesets.Mania.Mods
 {
-    public class ManiaModClassic : ModClassic, IApplicableToBeatmap
+    public class ManiaModClassic : ModClassic, IApplicableToBeatmap, IAffectsDifficulty
     {
         public void ApplyToBeatmap(IBeatmap beatmap)
         {

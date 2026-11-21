@@ -307,29 +307,38 @@ namespace osu.Game.Tests.Offline
             Assert.That(set.Status, Is.EqualTo(BeatmapOnlineStatus.Ranked));
         });
 
-        [Test]
-        public void TestReincludedUnrankedMapIsLocallyApproved()
-        {
-            var map = new BeatmapInfo { Status = BeatmapOnlineStatus.Unranked };
-            var profile = new RitsuProfile();
-            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(map, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
-            profile.ReincludedBeatmapIds.Add(map.ID);
-            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(map, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
-            profile.ExcludedBeatmapIds.Add(map.ID);
-            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(map, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
-            Assert.That(map.Status, Is.EqualTo(BeatmapOnlineStatus.Unranked));
-        }
-
+        [TestCase(BeatmapOnlineStatus.Unranked)]
         [TestCase(BeatmapOnlineStatus.None)]
         [TestCase(BeatmapOnlineStatus.Blacklisted)]
-        public void TestUnknownAndBlacklistedAreLocallyUnrankedButPPEligible(BeatmapOnlineStatus status)
+        public void TestLocalApprovalFollowsExclusions(BeatmapOnlineStatus status)
         {
-            var map = new BeatmapInfo { Status = status };
-            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(map, null), Is.EqualTo(BeatmapOnlineStatus.Unranked));
-            Assert.That(status.GrantsPerformancePoints(), Is.True);
-            Assert.That(map.Status, Is.EqualTo(status));
+            var set = CreateBeatmapSet(CreateRuleset());
+            var first = set.Beatmaps[0];
+            var second = set.Beatmaps[1];
+            set.Status = first.Status = second.Status = status;
+            var profile = new RitsuProfile();
+
+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, null), Is.EqualTo(BeatmapOnlineStatus.Approved));
+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
+            Assert.That(RitsuLocalBeatmapStatus.ForSet(set, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
+
+            profile.ExcludedBeatmapSetIds.Add(set.ID);
+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
+            Assert.That(RitsuLocalBeatmapStatus.ForSet(set, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
+
+            profile.IncludedBeatmapIds.Add(first.ID);
+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(second, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
+            Assert.That(RitsuLocalBeatmapStatus.ForSet(set, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
+
+            profile.ExcludedBeatmapIds.Add(first.ID);
+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
+            Assert.That(RitsuLocalBeatmapStatus.ForSet(set, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
+            Assert.That(first.Status, Is.EqualTo(status));
+            Assert.That(set.Status, Is.EqualTo(status));
         }
 
+        [TestCase(BeatmapOnlineStatus.Unranked)]
         [TestCase(BeatmapOnlineStatus.None)]
         [TestCase(BeatmapOnlineStatus.Blacklisted)]
         public Task TestLocalProfileCountsPPForEveryMapStatus(BeatmapOnlineStatus status) => Task.Run(() =>

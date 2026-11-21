@@ -1344,6 +1344,12 @@ namespace osu.Game
         /// </remarks>
         protected override bool OnKeyDown(KeyDownEvent e)
         {
+            if (e.Key == osuTK.Input.Key.F4 && !e.Repeat && !e.ControlPressed && !e.AltPressed && !e.ShiftPressed && !e.SuperPressed && CanShowRitsuSimulation)
+            {
+                ShowRitsuSimulation();
+                return true;
+            }
+
             if (Performance.DrawCensus.Enabled
                 && e.Key == osuTK.Input.Key.F11
                 && e.ControlPressed

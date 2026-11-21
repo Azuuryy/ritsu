@@ -15,6 +15,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Platform;
 using osu.Framework.Testing;
 using osu.Game.Beatmaps;
+using osu.Game.Beatmaps.Drawables;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Online.API.Requests.Responses;
@@ -29,6 +30,7 @@ using osu.Game.Screens.Play.Leaderboards;
 using osu.Game.Screens.Select;
 using osu.Game.Tests.Resources;
 using osu.Game.Users;
+using osu.Game.Utils;
 using osuTK.Input;
 
 namespace osu.Game.Tests.Visual.SongSelect
@@ -207,6 +209,57 @@ namespace osu.Game.Tests.Visual.SongSelect
 
             clearScores();
             checkDisplayedCount(0);
+        }
+
+        [Test]
+        public void TestModdedStarBadgesUseScoreSettings()
+        {
+            ScoreInfo defaultSpacing = null!;
+            ScoreInfo reducedSpacing = null!;
+            ScoreInfo random = null!;
+            ScoreInfo noFail = null!;
+            double defaultStars = 0;
+            double reducedStars = 0;
+            double randomStars = 0;
+
+            setScope(BeatmapLeaderboardScope.Local);
+            AddStep("show scores with different Spacing Overtime settings", () =>
+            {
+                beatmapManager.Import(TestResources.GetTestBeatmapForImport(virtualTrack: true)).WaitSafely();
+                var beatmapInfo = beatmapManager.GetAllUsableBeatmapSets().First().Beatmaps
+                                                .Single(b => b.Ruleset.ShortName == "osu" && b.DifficultyName == "Insane");
+                var workingBeatmap = beatmapManager.GetWorkingBeatmap(beatmapInfo);
+                var calculator = beatmapInfo.Ruleset.CreateInstance().CreateDifficultyCalculator(workingBeatmap);
+                var scores = GenerateSampleScores(beatmapInfo);
+                defaultSpacing = scores[0];
+                reducedSpacing = scores[1];
+                random = scores[2];
+                noFail = scores[3];
+                defaultSpacing.Mods = new Mod[] { new OsuModSpacingOvertime() };
+                reducedSpacing.Mods = new Mod[] { new OsuModSpacingOvertime { EndSpacing = { Value = 0.4f } } };
+                defaultStars = calculator.Calculate(defaultSpacing.Mods).StarRating.FloorToDecimalDigits(2);
+                reducedStars = calculator.Calculate(reducedSpacing.Mods).StarRating.FloorToDecimalDigits(2);
+                random.Mods = new Mod[] { new OsuModRandom { Seed = { Value = 42 } } };
+                noFail.Mods = new Mod[] { new OsuModNoFail() };
+                randomStars = calculator.Calculate(random.Mods).StarRating.FloorToDecimalDigits(2);
+                double noModStars = calculator.Calculate().StarRating.FloorToDecimalDigits(2);
+                Assert.That(randomStars, Is.Not.EqualTo(noModStars));
+                Assert.That(defaultStars, Is.Not.EqualTo(noModStars));
+                Assert.That(reducedStars, Is.Not.EqualTo(noModStars).And.Not.EqualTo(defaultStars));
+
+                leaderboard.SetScores(new[] { defaultSpacing, reducedSpacing, random, noFail }, defaultSpacing);
+            });
+
+            AddUntilStep("show default spacing stars on the score and personal best", () => displayedStars(defaultSpacing), () => Is.EqualTo(new[] { defaultStars, defaultStars }));
+            AddUntilStep("show adjusted spacing stars on the other score", () => displayedStars(reducedSpacing), () => Is.EqualTo(new[] { reducedStars }));
+            AddUntilStep("show stars for regular Random", () => displayedStars(random), () => Is.EqualTo(new[] { randomStars }));
+            AddAssert("No Fail has no badge", () => displayedStars(noFail), () => Is.Empty);
+
+            double[] displayedStars(ScoreInfo score) => leaderboard.ChildrenOfType<BeatmapLeaderboardScore>()
+                                                                    .Where(row => ReferenceEquals(row.Score, score))
+                                                                    .SelectMany(row => row.ChildrenOfType<StarRatingDisplay>())
+                                                                    .Select(badge => badge.DisplayedStars.Value.FloorToDecimalDigits(2))
+                                                                    .ToArray();
         }
 
         [Test]

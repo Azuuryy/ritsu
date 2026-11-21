@@ -60,9 +60,6 @@ namespace osu.Game.Screens.Select
                     Spacing = new Vector2(3),
                 };
 
-                addHeader(CommonStrings.General);
-                addButton(CollectionsStrings.ManageCollections, FontAwesome.Solid.Book, () => SongSelect?.ManageCollections());
-
                 Debug.Assert(beatmap.BeatmapSet != null);
                 addHeader(SongSelectStrings.ForAllDifficulties, beatmap.BeatmapSet.ToString());
                 addButton(CommonStrings.DeleteWithConfirmation, FontAwesome.Solid.Trash, () => SongSelect?.Delete(beatmap.BeatmapSet), colours.Red1);

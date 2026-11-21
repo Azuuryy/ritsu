@@ -29,7 +29,6 @@ namespace osu.Game.Screens.Select
         private readonly Action<PerfectPerformanceSession> changed;
         private readonly Stopwatch elapsed = Stopwatch.StartNew();
         private bool running;
-        private bool progressStarted;
         private int completed;
         private int cacheHits;
         private int failures;
@@ -92,14 +91,10 @@ namespace osu.Game.Screens.Select
                 var pending = new PerfectPerformanceResult(PerfectPerformanceState.Pending);
                 results[beatmap.ID] = pending;
                 queue.Enqueue(beatmap);
-                if (!progressStarted)
-                {
-                    progressStarted = true;
-                    changed(this);
-                }
                 if (!running)
                 {
                     running = true;
+                    changed(this);
                     _ = Task.Run(run);
                 }
                 return pending;
@@ -136,7 +131,8 @@ namespace osu.Game.Screens.Select
                     }
                     double? pp;
                     try { pp = calculate(beatmap, cancellation.Token); }
-                    catch (OperationCanceledException) { throw; }
+                    catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
+                    catch (OperationCanceledException) { pp = null; }
                     catch (Exception e)
                     {
                         if (failures < 5) Logger.Error(e, $"Ritsu PP calculation failed for beatmap {beatmap.ID}");
@@ -149,7 +145,7 @@ namespace osu.Game.Screens.Select
                         completed++;
                         if (!pp.HasValue) failures++;
                     }
-                    if (++lastReported >= 25)
+                    if (++lastReported >= 5)
                     {
                         lastReported = 0;
                         var current = Progress;

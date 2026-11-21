@@ -6,7 +6,7 @@ using osu.Framework.Bindables;
 
 namespace osu.Game.Rulesets.Mods
 {
-    public interface IBeatmapVariant
+    public interface IBeatmapVariant : IAffectsDifficulty
     {
         BindableInt TransformationVersion { get; }
         int DefaultTransformationVersion => 1;

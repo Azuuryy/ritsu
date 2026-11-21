@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Localisation;
@@ -53,7 +54,9 @@ namespace osu.Game.Rulesets.Mods
             Precision = 0.1f,
             MinValue = 0,
             MaxValue = 10,
-            ExtendedMaxValue = 11,
+            ExtendedMinValue = -5,
+            ExtendedMaxValue = 13,
+            HistoricalMaxValue = 15,
             ReadCurrentFromDifficulty = diff => diff.OverallDifficulty,
         };
 
@@ -67,6 +70,25 @@ namespace osu.Game.Rulesets.Mods
                 if (property.GetValue(this) is DifficultyBindable diffAdjustBindable)
                     diffAdjustBindable.ExtendedLimits.BindTo(ExtendedLimits);
             }
+        }
+
+        internal Mod WithEditableLimits()
+        {
+            var settings = this.GetOrderedSettingsSourceProperties()
+                               .Select(source => source.Item2)
+                               .Where(property => property.GetValue(this) is DifficultyBindable setting && setting.HistoricalMaxValue != null && setting.Value > setting.ExtendedMaxValue)
+                               .ToArray();
+            if (settings.Length == 0)
+                return this;
+
+            var copy = (ModDifficultyAdjust)DeepClone();
+            foreach (var property in settings)
+            {
+                var setting = (DifficultyBindable)property.GetValue(copy)!;
+                setting.Value = setting.ExtendedMaxValue;
+            }
+
+            return copy;
         }
 
         public override string ExtendedIconInformation

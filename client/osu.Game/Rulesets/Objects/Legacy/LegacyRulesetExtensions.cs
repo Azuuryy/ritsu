@@ -55,7 +55,10 @@ namespace osu.Game.Rulesets.Objects.Legacy
             // It works out to under 1 game pixel and is generally not meaningful to gameplay, but is to replay playback accuracy.
             const float broken_gamefield_rounding_allowance = 1.00041f;
 
-            return (float)(1.0f - 0.7f * IBeatmapDifficultyInfo.DifficultyRange(circleSize)) / 2 * (applyFudge ? broken_gamefield_rounding_allowance : 1);
+            float scale = circleSize > 11
+                ? 0.08f / (1 + (circleSize - 11) * 0.875f)
+                : (float)(1.0f - 0.7f * IBeatmapDifficultyInfo.DifficultyRange(circleSize)) / 2;
+            return scale * (applyFudge ? broken_gamefield_rounding_allowance : 1);
         }
 
         public static int CalculateDifficultyPeppyStars(BeatmapDifficulty difficulty, int objectCount, int drainLength)

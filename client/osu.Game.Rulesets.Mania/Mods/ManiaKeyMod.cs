@@ -9,7 +9,7 @@ using osu.Game.Rulesets.Mods;
 
 namespace osu.Game.Rulesets.Mania.Mods
 {
-    public abstract class ManiaKeyMod : Mod, IApplicableToBeatmapConverter
+    public abstract class ManiaKeyMod : Mod, IApplicableToBeatmapConverter, IAffectsDifficulty
     {
         public override string Acronym => Name;
         public abstract int KeyCount { get; }

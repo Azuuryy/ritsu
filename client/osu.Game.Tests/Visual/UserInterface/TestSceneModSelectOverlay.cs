@@ -66,6 +66,7 @@ namespace osu.Game.Tests.Visual.UserInterface
             AddStep("reset ruleset", () => Ruleset.Value = rulesetStore.GetRuleset(0));
             AddStep("reset mods", () => SelectedMods.SetDefault());
             AddStep("reset config", () => configManager.SetValue(OsuSetting.ModSelectTextSearchStartsActive, true));
+            AddStep("reset difficulty statistics preference", () => configManager.SetValue(OsuSetting.ShowModDifficultyAttributes, true));
             AddStep("reset mouse", () => InputManager.MoveMouseTo(Vector2.One));
             AddStep("set beatmap", () => Beatmap.Value = CreateWorkingBeatmap(new OsuRuleset().RulesetInfo));
             AddStep("set up presets", () =>
@@ -115,6 +116,23 @@ namespace osu.Game.Tests.Visual.UserInterface
         {
             createScreen();
             AddStep("toggle state", () => modSelectOverlay.ToggleVisibility());
+        }
+
+        [Test]
+        public void TestDifficultyStatisticsCollapsePreference()
+        {
+            createScreen();
+            AddUntilStep("statistics start expanded", () => this.ChildrenOfType<BeatmapAttributesDisplay>().SingleOrDefault()?.Collapsed.Value == false);
+            AddStep("right-click difficulty statistics", () =>
+            {
+                InputManager.MoveMouseTo(attributes());
+                InputManager.Click(MouseButton.Right);
+            });
+            AddAssert("collapsed through the shared preference", () => attributes().Collapsed.Value && !configManager.Get<bool>(OsuSetting.ShowModDifficultyAttributes));
+            AddStep("expand from settings", () => configManager.SetValue(OsuSetting.ShowModDifficultyAttributes, true));
+            AddAssert("panel follows the setting", () => !attributes().Collapsed.Value);
+
+            BeatmapAttributesDisplay attributes() => this.ChildrenOfType<BeatmapAttributesDisplay>().Single();
         }
 
         [Test]

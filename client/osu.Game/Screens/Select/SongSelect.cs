@@ -606,16 +606,6 @@ namespace osu.Game.Screens.Select
         protected virtual ModSelectOverlay CreateModSelectOverlay() => new UserModSelectOverlay
         {
             ShowPresets = true,
-            OpenRitsuSimulation = this is SoloSongSelect && Offline.RitsuOffline.Enabled
-                ? () =>
-                {
-                    if (game is OsuGame osuGame && !Beatmap.IsDefault)
-                    {
-                        modSelectOverlay.Hide();
-                        osuGame.ShowRitsuMap(true);
-                    }
-                }
-                : null,
         };
 
         private void requestRecommendedSelection(IEnumerable<GroupedBeatmap> groupedBeatmaps)
@@ -662,7 +652,9 @@ namespace osu.Game.Screens.Select
             new FooterButtonOptions
             {
                 Hotkey = GlobalAction.ToggleBeatmapOptions,
-            }
+            },
+            new FooterButtonSimulate(),
+            new FooterButtonCollections { Action = ManageCollections },
         };
 
         protected override void LoadComplete()
@@ -1656,9 +1648,6 @@ namespace osu.Game.Screens.Select
         #region Beatmap management
 
         [Resolved]
-        private ManageCollectionsDialog? manageCollectionsDialog { get; set; }
-
-        [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
         public virtual IEnumerable<OsuMenuItem> GetForwardActions(BeatmapInfo beatmap)
@@ -1704,14 +1693,29 @@ namespace osu.Game.Screens.Select
 
         protected IEnumerable<OsuMenuItem> CreateCollectionMenuActions(BeatmapInfo beatmap)
         {
-            yield return new OsuMenuItem(CommonStrings.Collections)
+            if (collectionsDialog != null)
+                yield return new OsuMenuItem(CommonStrings.Collections, MenuItemType.Standard, () => collectionsDialog.ShowForBeatmap(beatmap))
+                {
+                    Icon = FontAwesome.Solid.Book,
+                };
+
+            if (Offline.RitsuOffline.Enabled && Dependencies.Get<RitsuLibrary>() is { } library)
             {
-                Items = RitsuCollectionMenu.Create(realm, manageCollectionsDialog, beatmap, Dependencies.Get<RitsuLibrary>(),
-                    Dependencies.Get<Offline.RitsuProfileManager>(), game: game as OsuGame),
-            };
+                if (RitsuCollectionMenu.CreateSubgroupMenu(realm, library, beatmap) is { } subgroupMenu)
+                    yield return subgroupMenu;
+
+                if (game is OsuGame osuGame && Dependencies.Get<Offline.RitsuProfileManager>() is { } profiles)
+                    yield return RitsuCollectionMenu.CreateMemoAction(library, profiles, beatmap, osuGame);
+            }
         }
 
-        public void ManageCollections() => collectionsDialog?.Show();
+        public void ManageCollections()
+        {
+            if (Beatmap.Value is not DummyWorkingBeatmap && Beatmap.Value.BeatmapInfo is { MD5Hash.Length: > 0, BeatmapSet.DeletePending: false } beatmap)
+                collectionsDialog?.ShowForBeatmap(beatmap);
+            else
+                collectionsDialog?.Show();
+        }
 
         public void Delete(BeatmapSetInfo beatmapSet) => dialogOverlay?.Push(new BeatmapDeleteDialog(beatmapSet));
 

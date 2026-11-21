@@ -9,32 +9,57 @@ using osu.Game.Beatmaps;
 using osu.Game.Commands;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Offline;
+using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
+using osu.Game.Screens.Edit;
 using osu.Game.Screens.Select;
 
 namespace osu.Game
 {
     public partial class OsuGame
     {
+        /// <summary>
+        /// Whether the keyboard shortcut can open the score simulation right now: a difficulty is selected, overlays are allowed
+        /// and the current screen is neither gameplay, the editor nor the simulation itself.
+        /// </summary>
+        internal bool CanShowRitsuSimulation => RitsuOffline.Enabled
+                                               && !Beatmap.IsDefault
+                                               && OverlayActivationMode.Value == OverlayActivation.All
+                                               && ScreenStack?.CurrentScreen is { } screen
+                                               && screen is not (Editor or RitsuSimulationScreen);
+
+        internal void ShowRitsuSimulation()
+        {
+            if (CanShowRitsuSimulation)
+                ShowRitsuMap(true);
+        }
+
         internal void ShowRitsuMap(bool simulate, BeatmapInfo? difficulty = null)
         {
             if ((difficulty == null && Beatmap.IsDefault) || dialogOverlay == null)
                 return;
 
+            if (simulate && ScreenStack.CurrentScreen is RitsuSimulationScreen)
+                return;
+
             var working = difficulty == null ? Beatmap.Value : BeatmapManager.GetWorkingBeatmap(difficulty);
+            if (simulate)
+            {
+                if (ScreenStack.CurrentScreen is SoloSongSelect select)
+                    select.Push(new RitsuSimulationScreen(working));
+                else
+                    withRitsuSongSelect(songSelect => songSelect.Push(new RitsuSimulationScreen(working)));
+                return;
+            }
+
             var mode = Ruleset.Value;
             if (working.BeatmapInfo.Ruleset.OnlineID != 0 && !working.BeatmapInfo.Ruleset.Equals(mode))
                 mode = working.BeatmapInfo.Ruleset;
 
             var mods = mode.Equals(Ruleset.Value) ? SelectedMods.Value.Select(m => m.DeepClone()).ToArray() : Array.Empty<Mod>();
-            if (!simulate)
-                dialogOverlay.Push(new RitsuMapCalculationDialog(working, mode, mods));
-            else if (ScreenStack.CurrentScreen is SoloSongSelect select)
-                select.Push(new RitsuSimulationScreen(working, mode, mods, RulesetStore.AvailableRulesets.Where(r => r.OnlineID is >= 0 and <= 3).ToArray()));
-            else
-                withRitsuSongSelect(select => select.Push(new RitsuSimulationScreen(working, mode, mods, RulesetStore.AvailableRulesets.Where(r => r.OnlineID is >= 0 and <= 3).ToArray())));
+            dialogOverlay.Push(new RitsuMapCalculationDialog(working, mode, mods));
         }
 
         private void showRitsuProfile(bool top)

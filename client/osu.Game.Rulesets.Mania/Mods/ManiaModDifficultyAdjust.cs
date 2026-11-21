@@ -13,7 +13,8 @@ namespace osu.Game.Rulesets.Mania.Mods
             MinValue = 0,
             MaxValue = 10,
             // Use larger extended limits for mania to include OD values that occur with EZ or HR enabled
-            ExtendedMaxValue = 15,
+            ExtendedMaxValue = 13,
+            HistoricalMaxValue = 15,
             ExtendedMinValue = -15,
             ReadCurrentFromDifficulty = diff => diff.OverallDifficulty,
         };

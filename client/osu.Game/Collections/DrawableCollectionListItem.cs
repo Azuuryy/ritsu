@@ -3,12 +3,15 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.Textures;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
@@ -31,8 +34,14 @@ namespace osu.Game.Collections
     {
         private const float item_height = 45;
         private const float button_width = item_height * 0.75f;
+        private const float action_button_height = 36;
+        private const float membership_button_width = 34;
+        private const float action_spacing = 4;
+        private const float membership_actions_width = 4 * membership_button_width + 3 * action_spacing;
 
         protected TextBox TextBox => content.TextBox;
+
+        internal ManageCollectionsDialog? MembershipManager { get; init; }
 
         private ItemContent content = null!;
 
@@ -60,7 +69,7 @@ namespace osu.Game.Collections
             CornerExponent = 2.5f;
         }
 
-        protected override Drawable CreateContent() => content = new ItemContent(Model);
+        protected override Drawable CreateContent() => content = new ItemContent(Model, MembershipManager);
 
         /// <summary>
         /// The main content of the <see cref="DrawableCollectionListItem"/>.
@@ -71,28 +80,40 @@ namespace osu.Game.Collections
 
             public ItemTextBox TextBox { get; private set; } = null!;
 
-            public ItemContent(Live<BeatmapCollection> collection)
+            private readonly ManageCollectionsDialog? manager;
+            private readonly IBindable<ManageCollectionsDialog.MembershipTarget?>? target;
+            private Container nameArea = null!;
+            private DeleteButton? delete;
+            private FillFlowContainer<OsuAnimatedButton>? membershipActions;
+            private OsuAnimatedButton addSet = null!;
+            private OsuAnimatedButton addDifficulty = null!;
+            private OsuAnimatedButton removeDifficulty = null!;
+            private OsuAnimatedButton removeSet = null!;
+
+            public ItemContent(Live<BeatmapCollection> collection, ManageCollectionsDialog? manager)
             {
                 this.collection = collection;
+                this.manager = manager;
+                target = manager?.Target.GetBoundCopy();
 
                 RelativeSizeAxes = Axes.X;
                 Height = item_height;
             }
 
             [BackgroundDependencyLoader]
-            private void load()
+            private void load(OsuColour colours, TextureStore textures)
             {
                 InternalChildren = new[]
                 {
                     collection.IsManaged
-                        ? new DeleteButton(collection)
+                        ? delete = new DeleteButton(collection)
                         {
                             Anchor = Anchor.CentreRight,
                             Origin = Anchor.CentreRight,
                             IsTextBoxHovered = v => TextBox.ReceivePositionalInputAt(v)
                         }
                         : Empty(),
-                    new Container
+                    nameArea = new Container
                     {
                         RelativeSizeAxes = Axes.Both,
                         Padding = new MarginPadding { Right = collection.IsManaged ? button_width : 0 },
@@ -107,6 +128,88 @@ namespace osu.Game.Collections
                         }
                     },
                 };
+
+                if (manager == null)
+                    return;
+
+                var buttonBackground = colours.GreySeaFoamDarker.Darken(0.5f);
+                AddInternal(membershipActions = new FillFlowContainer<OsuAnimatedButton>
+                {
+                    Anchor = Anchor.CentreRight,
+                    Origin = Anchor.CentreRight,
+                    AutoSizeAxes = Axes.Both,
+                    Direction = FillDirection.Horizontal,
+                    Spacing = new Vector2(action_spacing, 0),
+                    Children = new[]
+                    {
+                        addSet = membershipButton(new Sprite { Name = "Beatmap set icon", Texture = textures.Get("Ritsu/collection-set-add") },
+                            colours.GreenDark, buttonBackground, "Add the beatmap set", true, true),
+                        addDifficulty = membershipButton(new SpriteIcon { Icon = FontAwesome.Solid.Plus },
+                            colours.Green3, buttonBackground, "Add this difficulty", true, false),
+                        removeDifficulty = membershipButton(new SpriteIcon { Icon = FontAwesome.Solid.Minus },
+                            colours.Yellow, buttonBackground, "Remove this difficulty", false, false),
+                        removeSet = membershipButton(new Sprite { Name = "Beatmap set icon", Texture = textures.Get("Ritsu/collection-set-remove") },
+                            colours.YellowDark, buttonBackground, "Remove the beatmap set", false, true),
+                    },
+                });
+            }
+
+            private OsuAnimatedButton membershipButton(Drawable icon, Colour4 colour, Colour4 backgroundColour, string description, bool add, bool wholeSet)
+            {
+                icon.Anchor = Anchor.Centre;
+                icon.Origin = Anchor.Centre;
+                icon.Colour = colour;
+                icon.Size = new Vector2(wholeSet ? 19 : 13);
+
+                return new OsuAnimatedButton
+                {
+                    Name = description,
+                    TooltipText = description,
+                    Size = new Vector2(membership_button_width, action_button_height),
+                    Children = new Drawable[]
+                    {
+                        new Box { RelativeSizeAxes = Axes.Both, Colour = backgroundColour, Depth = 1 },
+                        icon,
+                    },
+                    Action = () =>
+                    {
+                        if (target?.Value is not { } selection)
+                            return;
+
+                        string[] hashes = wholeSet ? selection.SetHashes : selection.DifficultyHash == null ? Array.Empty<string>() : new[] { selection.DifficultyHash };
+                        manager!.ChangeMembership(collection.ID, hashes, add);
+                        updateMembership();
+                    },
+                };
+            }
+
+            private void updateMembership()
+            {
+                if (membershipActions == null || target == null)
+                    return;
+
+                var selection = target.Value;
+                membershipActions.Alpha = selection == null ? 0 : 1;
+                float actionWidth = selection == null ? 0 : membership_actions_width;
+                nameArea.Padding = new MarginPadding { Right = button_width + actionWidth };
+                delete!.X = -actionWidth;
+                if (selection == null)
+                {
+                    TextBox.SetMembership(false);
+                    return;
+                }
+
+                collection.PerformRead(c =>
+                {
+                    var members = c.IsValid ? c.BeatmapMD5Hashes.ToHashSet() : new HashSet<string>();
+                    bool hasDifficulty = selection.DifficultyHash != null && members.Contains(selection.DifficultyHash);
+                    addSet.Enabled.Value = c.IsValid && selection.SetHashes.Any(hash => !members.Contains(hash));
+                    addDifficulty.Enabled.Value = c.IsValid && selection.DifficultyHash != null && !hasDifficulty;
+                    removeDifficulty.Enabled.Value = hasDifficulty;
+                    bool hasSetMember = selection.SetHashes.Any(members.Contains);
+                    removeSet.Enabled.Value = hasSetMember;
+                    TextBox.SetMembership(selection.DifficultyHash != null ? hasDifficulty : hasSetMember);
+                });
             }
 
             protected override void LoadComplete()
@@ -116,6 +219,7 @@ namespace osu.Game.Collections
                 // Bind late, as the collection name may change externally while still loading.
                 TextBox.Current.Value = collection.PerformRead(c => c.IsValid ? c.Name : string.Empty);
                 TextBox.OnCommit += onCommit;
+                target?.BindValueChanged(_ => updateMembership(), true);
             }
 
             private void onCommit(TextBox sender, bool newText)
@@ -135,6 +239,15 @@ namespace osu.Game.Collections
 
             private OsuSpriteText countText = null!;
 
+            [Resolved]
+            private OsuColour colours { get; set; } = null!;
+
+            public void SetMembership(bool containsBeatmap)
+            {
+                BackgroundUnfocused = containsBeatmap ? colours.Green3.Darken(0.73f) : colours.GreySeaFoamDarker.Darken(0.5f);
+                BackgroundFocused = containsBeatmap ? colours.Green3.Darken(0.56f) : colours.GreySeaFoam;
+            }
+
             public ItemTextBox(Live<BeatmapCollection> collection)
             {
                 this.collection = collection;
@@ -144,10 +257,9 @@ namespace osu.Game.Collections
             }
 
             [BackgroundDependencyLoader]
-            private void load(OsuColour colours)
+            private void load()
             {
-                BackgroundUnfocused = colours.GreySeaFoamDarker.Darken(0.5f);
-                BackgroundFocused = colours.GreySeaFoam;
+                SetMembership(false);
 
                 if (collection.IsManaged)
                 {
@@ -187,37 +299,45 @@ namespace osu.Game.Collections
 
             private readonly Live<BeatmapCollection> collection;
 
-            private Drawable fadeContainer = null!;
             private Drawable background = null!;
+            private Colour4 idleColour;
+            private Colour4 hoverColour;
 
             public DeleteButton(Live<BeatmapCollection> collection)
             {
                 this.collection = collection;
                 RelativeSizeAxes = Axes.Y;
 
-                Width = button_width + item_height / 2; // add corner radius to cover with fill
+                Width = button_width + item_height / 2;
             }
 
             [BackgroundDependencyLoader]
             private void load(OsuColour colours)
             {
-                Child = fadeContainer = new Container
+                idleColour = colours.Red.Darken(0.78f);
+                hoverColour = colours.Red.Darken(0.25f);
+
+                Child = new Container
                 {
-                    RelativeSizeAxes = Axes.Both,
-                    Alpha = 0.1f,
+                    Anchor = Anchor.CentreRight,
+                    Origin = Anchor.CentreRight,
+                    X = -action_spacing,
+                    Size = new Vector2(button_width - action_spacing, action_button_height),
+                    Masking = true,
+                    CornerRadius = 10,
+                    CornerExponent = 2.5f,
                     Children = new[]
                     {
                         background = new Box
                         {
                             RelativeSizeAxes = Axes.Both,
-                            Colour = colours.Red
+                            Colour = idleColour
                         },
                         new SpriteIcon
                         {
-                            Anchor = Anchor.CentreRight,
+                            Anchor = Anchor.Centre,
                             Origin = Anchor.Centre,
-                            X = -button_width * 0.6f,
-                            Size = new Vector2(10),
+                            Size = new Vector2(12),
                             Icon = FontAwesome.Solid.Trash
                         }
                     }
@@ -236,13 +356,13 @@ namespace osu.Game.Collections
 
             protected override bool OnHover(HoverEvent e)
             {
-                fadeContainer.FadeTo(1f, 100, Easing.Out);
+                background.FadeColour(hoverColour, 100, Easing.Out);
                 return false;
             }
 
             protected override void OnHoverLost(HoverLostEvent e)
             {
-                fadeContainer.FadeTo(0.1f, 100);
+                background.FadeColour(idleColour, 100);
             }
 
             protected override bool OnClick(ClickEvent e)

@@ -255,6 +255,7 @@ namespace osu.Game.Configuration
 
             SetDefault(OsuSetting.FloatingComments, false);
 
+            SetDefault(OsuSetting.ShowModDifficultyAttributes, true);
             SetDefault(OsuSetting.ScoreDisplayMode, ScoringMode.Standardised);
 
             SetDefault(OsuSetting.IncreaseFirstObjectVisibility, true);
@@ -640,6 +641,7 @@ namespace osu.Game.Configuration
         BeatmapHitsounds,
         IncreaseFirstObjectVisibility,
         ScoreDisplayMode,
+        ShowModDifficultyAttributes,
         ExternalLinkWarning,
         PreferNoVideo,
         Scaling,

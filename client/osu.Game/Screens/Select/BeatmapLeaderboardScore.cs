@@ -4,8 +4,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Extensions.LocalisationExtensions;
 using osu.Framework.Graphics;
@@ -135,6 +138,8 @@ namespace osu.Game.Screens.Select
         private Container centreContent = null!;
         private Container rightContent = null!;
 
+        private FillFlowContainer scoreIdentity = null!;
+        private CancellationTokenSource? starBadgeCancellation;
         private FillFlowContainer<Drawable> modsContainer = null!;
 
         private Box totalScoreBackground = null!;
@@ -285,7 +290,7 @@ namespace osu.Game.Screens.Select
                                                     }
                                                 },
                                             },
-                                            new FillFlowContainer
+                                            scoreIdentity = new FillFlowContainer
                                             {
                                                 Anchor = Anchor.CentreLeft,
                                                 Origin = Anchor.CentreLeft,
@@ -339,7 +344,6 @@ namespace osu.Game.Screens.Select
                                                         Font = OsuFont.Style.Heading2,
                                                         Colour = ToriiColourHelper.GetTopColour(Score.User) ?? Colour4.White,
                                                     }),
-                                                    createModdedStarBadge(),
                                                 }
                                             },
                                             new Container
@@ -513,22 +517,35 @@ namespace osu.Game.Screens.Select
             innerAvatar.OnLoadComplete += d => d.FadeInFromZero(200);
         }
 
-        private Drawable createModdedStarBadge()
+        private void loadModdedStarBadge()
         {
             var beatmap = Score.BeatmapInfo;
-            if (beatmap == null || Score.Mods.Length == 0)
-                return new Container();
+            var mods = Score.Mods;
+            if (beatmap == null || !ModUtils.FlattenMods(mods).Any(StarRatingApproximator.ModAffectsDifficulty))
+                return;
 
-            double noModStars = beatmap.StarRating;
-            double moddedStars = difficultyCache.GetEffectiveStarRating(beatmap, Score.Ruleset, Score.Mods);
+            var token = (starBadgeCancellation = new CancellationTokenSource()).Token;
+            var noModTask = difficultyCache.GetDifficultyAsync(beatmap, Score.Ruleset, cancellationToken: token);
+            var moddedTask = difficultyCache.GetDifficultyAsync(beatmap, Score.Ruleset, mods, token);
 
-            if (noModStars < 0 || Math.Abs(moddedStars - noModStars) < 0.01)
-                return new Container();
-
-            return new StarRatingDisplay(new StarDifficulty(moddedStars, 0), StarRatingDisplaySize.Small)
+            Task.WhenAll(noModTask, moddedTask).ContinueWith(task =>
             {
-                Scale = new Vector2(0.875f),
-            };
+                var difficulties = task.GetResultSafely();
+                if (difficulties[0] is not { Stars: >= 0 } noMod || difficulties[1] is not { Stars: >= 0 } modded
+                    || noMod.Stars.FloorToDecimalDigits(2) == modded.Stars.FloorToDecimalDigits(2))
+                    return;
+
+                Schedule(() =>
+                {
+                    if (token.IsCancellationRequested)
+                        return;
+
+                    scoreIdentity.Add(new StarRatingDisplay(modded, StarRatingDisplaySize.Small)
+                    {
+                        Scale = new Vector2(0.875f),
+                    });
+                });
+            }, token, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
         }
 
         private ColourInfo getHighlightColour(HighlightType? highlightType, float lightenAmount = 0)
@@ -550,6 +567,7 @@ namespace osu.Game.Screens.Select
         {
             base.LoadComplete();
 
+            loadModdedStarBadge();
             scoringMode = config.GetBindable<ScoringMode>(OsuSetting.ScoreDisplayMode);
             scoringMode.BindValueChanged(s =>
             {
@@ -566,6 +584,13 @@ namespace osu.Game.Screens.Select
 
                 updateModDisplay();
             }, true);
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            starBadgeCancellation?.Cancel();
+            starBadgeCancellation?.Dispose();
+            base.Dispose(isDisposing);
         }
 
         private void updateModDisplay()

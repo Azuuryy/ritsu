@@ -205,6 +205,7 @@ namespace osu.Game.Screens.RankingV2.Argon
             Debug.Assert(score.Value.Beatmap != null);
 
             statusPill.Status = score.Value.Beatmap.Status;
+            statusPill.LocalBeatmap = score.Value.Beatmap as BeatmapInfo;
             titleText.CreateContent = () => new OsuSpriteText
             {
                 Text = new RomanisableString(score.Value.Beatmap.Metadata.TitleUnicode, score.Value.Beatmap.Metadata.Title),

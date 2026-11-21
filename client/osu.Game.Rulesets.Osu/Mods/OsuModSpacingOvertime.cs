@@ -16,7 +16,7 @@ using osu.Game.Rulesets.Modosu.Utils;
 
 namespace osu.Game.Rulesets.Osu.Mods
 {
-    public class OsuModSpacingOvertime : Mod, IApplicableToBeatmap, IRitsuExclusiveMod
+    public class OsuModSpacingOvertime : Mod, IApplicableToBeatmap, IRitsuExclusiveMod, IAffectsDifficulty
     {
         public override bool Ranked => false;
         public override bool AlwaysValidForSubmission => false;

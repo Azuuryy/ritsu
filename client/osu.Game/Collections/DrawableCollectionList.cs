@@ -31,6 +31,13 @@ namespace osu.Game.Collections
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
+        private readonly ManageCollectionsDialog? manager;
+
+        public DrawableCollectionList(ManageCollectionsDialog? manager = null)
+        {
+            this.manager = manager;
+        }
+
         private Scroll scroll = null!;
 
         private IDisposable? realmSubscription;
@@ -106,7 +113,7 @@ namespace osu.Game.Collections
         }
 
         protected override OsuRearrangeableListItem<Live<BeatmapCollection>> CreateOsuDrawable(Live<BeatmapCollection> item) =>
-            new DrawableCollectionListItem(item, true);
+            new DrawableCollectionListItem(item, true) { MembershipManager = manager };
 
         protected override void Dispose(bool isDisposing)
         {

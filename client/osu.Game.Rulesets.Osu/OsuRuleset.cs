@@ -470,7 +470,7 @@ namespace osu.Game.Rulesets.Osu
                 AdditionalMetrics =
                 [
                     new RulesetBeatmapAttribute.AdditionalMetric(OsuRulesetStrings.ApproachTime,
-                        LocalisableString.Interpolate($@"{IBeatmapDifficultyInfo.DifficultyRangeInt(effectiveDifficulty.ApproachRate, OsuHitObject.PREEMPT_RANGE):#,0.##} ms"))
+                        LocalisableString.Interpolate($@"{Math.Max(1, IBeatmapDifficultyInfo.DifficultyRangeInt(effectiveDifficulty.ApproachRate, OsuHitObject.PREEMPT_RANGE)):#,0.##} ms"))
                 ]
             };
 

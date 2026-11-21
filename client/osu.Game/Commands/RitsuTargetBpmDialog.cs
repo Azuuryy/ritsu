@@ -168,8 +168,13 @@ namespace osu.Game.Commands
                 return "This mode cannot preserve approach rate.";
 
             double originalPreempt = IBeatmapDifficultyInfo.DifficultyRangeInt(originalAr, ar.PreemptRange);
-            double targetPreempt = originalPreempt * rate;
+            double targetPreempt = Math.Max(1, originalPreempt) * rate;
+            if (targetPreempt < 1)
+                return "Keeping the original approach rate would require less than one millisecond of preempt time.";
             float configuredAr = (float)IBeatmapDifficultyInfo.InverseDifficultyRange(targetPreempt, ar.PreemptRange);
+            if (configuredAr < ar.Setting.MinValue || configuredAr > ar.Setting.MaxValue)
+                adjust.ExtendedLimits.Value = true;
+
             float min = adjust.ExtendedLimits.Value ? ar.Setting.ExtendedMinValue ?? ar.Setting.MinValue : ar.Setting.MinValue;
             float max = adjust.ExtendedLimits.Value ? ar.Setting.ExtendedMaxValue ?? ar.Setting.MaxValue : ar.Setting.MaxValue;
             if (!float.IsFinite(configuredAr) || configuredAr < min || configuredAr > max)

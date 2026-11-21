@@ -129,73 +129,7 @@ namespace osu.Game.Screens.Ranking
                 if (gameplayEnd <= drainStart)
                     return fallbackData();
 
-                // el processor posta, como lo arma Player (mods tipo Classic traen el suyo).
-                var processor = score.Mods.OfType<IApplicableHealthProcessor>().FirstOrDefault()?.CreateHealthProcessor(drainStart)
-                                ?? score.Ruleset.CreateInstance().CreateHealthProcessor(drainStart);
-
-                // sin esto el primer 0 HP prende HasFailed y ApplyResult ignora el resto:
-                // el graph quedaria plano despues del primer casi-muerto.
-                processor.Failed += () => false;
-                processor.ApplyBeatmap(playable);
-
-                double drainRate = (processor as DrainingHealthProcessor)?.DrainRate ?? 0;
-
-                // los mismos periodos sin drain que arma DrainingHealthProcessor (breaks:
-                // del fin del ultimo objeto previo al arranque del siguiente).
-                var noDrain = new PeriodTracker(playable.Breaks.Select(b => new Period(
-                    playable.HitObjects.Select(h => h.GetEndTime()).Where(t => t <= b.StartTime).DefaultIfEmpty(double.MinValue).Last(),
-                    playable.HitObjects.Select(h => h.StartTime).Where(t => t >= b.EndTime).DefaultIfEmpty(double.MaxValue).First())));
-
-                double[] samples = new double[samples_count];
-                Array.Fill(samples, double.MaxValue);
-
-                double cursor = drainStart;
-
-                void record(double time)
-                {
-                    int i = (int)Math.Clamp((time - drainStart) / (gameplayEnd - drainStart) * (samples_count - 1), 0, samples_count - 1);
-                    // minimo por bucket: preserva las V de los miss que un sampleo comun se come.
-                    samples[i] = Math.Min(samples[i], processor.Health.Value);
-                }
-
-                void drainTo(double target)
-                {
-                    target = Math.Clamp(target, drainStart, gameplayEnd);
-
-                    while (cursor < target)
-                    {
-                        double next = Math.Min(cursor + 50, target);
-
-                        if (drainRate > 0 && !noDrain.IsInAny((cursor + next) / 2))
-                            processor.Health.Value -= drainRate * (next - cursor);
-
-                        record(next);
-                        cursor = next;
-                    }
-                }
-
-                record(drainStart);
-
-                // re-jugamos los judgements EN ORDEN DE LISTA (el orden real de aplicacion:
-                // los bonus de fin de combo del processor dependen de el, no reordenar).
-                foreach (var e in score.HitEvents)
-                {
-                    token.ThrowIfCancellationRequested();
-
-                    // los replays legacy convertidos pueden traer este result y ApplyResult tira.
-                    if (e.Result == HitResult.LegacyComboIncrease)
-                        continue;
-
-                    double eventTime = e.HitObject.GetEndTime() + e.TimeOffset;
-
-                    drainTo(eventTime);
-                    processor.ApplyResult(new JudgementResult(e.HitObject, e.HitObject.Judgement) { Type = e.Result });
-                    record(Math.Clamp(eventTime, drainStart, gameplayEnd));
-                }
-
-                drainTo(gameplayEnd);
-                fillEmpty(samples);
-
+                double[] samples = SampleHealth(score, playable, drainStart, gameplayEnd, samples_count, token);
                 return new GraphData(samples, buildMarkers(drainStart, gameplayEnd));
             }
             catch (OperationCanceledException)
@@ -208,6 +142,78 @@ namespace osu.Game.Screens.Ranking
                 // un marco vacio.
                 return fallbackData();
             }
+        }
+
+        internal static double[] SampleHealth(ScoreInfo score, IBeatmap playable, double drainStart, double gameplayEnd, int sampleCount, CancellationToken token)
+        {
+            // el processor posta, como lo arma Player (mods tipo Classic traen el suyo).
+            var processor = score.Mods.OfType<IApplicableHealthProcessor>().FirstOrDefault()?.CreateHealthProcessor(drainStart)
+                            ?? score.Ruleset.CreateInstance().CreateHealthProcessor(drainStart);
+
+            // sin esto el primer 0 HP prende HasFailed y ApplyResult ignora el resto:
+            // el graph quedaria plano despues del primer casi-muerto.
+            processor.Failed += () => false;
+            processor.ApplyBeatmap(playable);
+
+            double drainRate = (processor as DrainingHealthProcessor)?.DrainRate ?? 0;
+
+            // los mismos periodos sin drain que arma DrainingHealthProcessor (breaks:
+            // del fin del ultimo objeto previo al arranque del siguiente).
+            var noDrain = new PeriodTracker(playable.Breaks.Select(b => new Period(
+                playable.HitObjects.Select(h => h.GetEndTime()).Where(t => t <= b.StartTime).DefaultIfEmpty(double.MinValue).Last(),
+                playable.HitObjects.Select(h => h.StartTime).Where(t => t >= b.EndTime).DefaultIfEmpty(double.MaxValue).First())));
+
+            double[] samples = new double[sampleCount];
+            Array.Fill(samples, double.MaxValue);
+
+            double cursor = drainStart;
+
+            void record(double time)
+            {
+                int i = (int)Math.Clamp((time - drainStart) / (gameplayEnd - drainStart) * (sampleCount - 1), 0, sampleCount - 1);
+                // minimo por bucket: preserva las V de los miss que un sampleo comun se come.
+                samples[i] = Math.Min(samples[i], processor.Health.Value);
+            }
+
+            void drainTo(double target)
+            {
+                target = Math.Clamp(target, drainStart, gameplayEnd);
+
+                while (cursor < target)
+                {
+                    double next = Math.Min(cursor + 50, target);
+
+                    if (drainRate > 0 && !noDrain.IsInAny((cursor + next) / 2))
+                        processor.Health.Value -= drainRate * (next - cursor);
+
+                    record(next);
+                    cursor = next;
+                }
+            }
+
+            record(drainStart);
+
+            // re-jugamos los judgements EN ORDEN DE LISTA (el orden real de aplicacion:
+            // los bonus de fin de combo del processor dependen de el, no reordenar).
+            foreach (var e in score.HitEvents)
+            {
+                token.ThrowIfCancellationRequested();
+
+                // los replays legacy convertidos pueden traer este result y ApplyResult tira.
+                if (e.Result == HitResult.LegacyComboIncrease)
+                    continue;
+
+                double eventTime = e.HitObject.GetEndTime() + e.TimeOffset;
+
+                drainTo(eventTime);
+                processor.ApplyResult(new JudgementResult(e.HitObject, e.HitObject.Judgement) { Type = e.Result });
+                record(Math.Clamp(eventTime, drainStart, gameplayEnd));
+            }
+
+            drainTo(gameplayEnd);
+            fillEmpty(samples);
+
+            return samples;
         }
 
         /// <summary>

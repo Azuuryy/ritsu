@@ -4,10 +4,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Audio;
 using osu.Framework.Audio.Sample;
+using osu.Framework.Extensions;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Colour;
@@ -20,6 +23,7 @@ using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Drawables;
+using osu.Game.Database;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -66,6 +70,7 @@ namespace osu.Game.Screens.Ranking
 
         private readonly ScoreInfo score;
         private readonly bool withFlair;
+        private readonly CancellationTokenSource difficultyCancellation = new CancellationTokenSource();
         public readonly Bindable<ScoreInfo?> ComparisonScore = new Bindable<ScoreInfo?>();
         public readonly BindableBool DetailsVisible = new BindableBool();
         public readonly BindableBool LeaderboardVisible = new BindableBool();
@@ -89,6 +94,7 @@ namespace osu.Game.Screens.Ranking
         private Container footerStrip = null!;
         private Container rightColumn = null!;
         private Container detailsPanel = null!;
+        private ScoreProgressionGraph progression = null!;
         private bool detailsVisible;
         private Sample? appearanceSample;
         private V2ResultsScoreButton scoreButton = null!;
@@ -137,6 +143,7 @@ namespace osu.Game.Screens.Ranking
 
             if (detailsVisible)
             {
+                progression.Start();
                 rightColumn.MoveToX(760, details_transition_duration, Easing.OutQuint)
                            .FadeOut(details_transition_duration * 0.7, Easing.OutQuint);
 
@@ -185,7 +192,7 @@ namespace osu.Game.Screens.Ranking
         }
 
         [BackgroundDependencyLoader]
-        private void load(ResultsScreen? resultsScreen, OsuColour colours, AudioManager audio)
+        private void load(ResultsScreen? resultsScreen, OsuColour colours, AudioManager audio, BeatmapDifficultyCache difficultyCache, RealmAccess realm)
         {
             appearanceSample = audio.Samples.Get(@"Results/score-panel-top-appear");
 
@@ -207,9 +214,21 @@ namespace osu.Game.Screens.Ranking
             var beatmap = score.BeatmapInfo!;
             var metadata = beatmap.BeatmapSet?.Metadata ?? beatmap.Metadata;
             var ruleset = score.Ruleset.CreateInstance();
+            var scoreMods = score.Mods;
+            var cancellationToken = difficultyCancellation.Token;
+            var storedDifficulty = new StarDifficulty(beatmap.StarRating, 0);
+            var difficultyTask = realm.Run(r => r.Find<BeatmapInfo>(beatmap.ID) != null)
+                ? difficultyCache.GetDifficultyAsync(beatmap, score.Ruleset, scoreMods, cancellationToken)
+                : null;
+            var initialDifficulty = difficultyTask switch
+            {
+                null => storedDifficulty,
+                { IsCompletedSuccessfully: true } => difficultyTask.GetResultSafely() ?? storedDifficulty,
+                _ => new StarDifficulty(-1, 0),
+            };
 
             // Theme colours: everything comes from the provider / star rating, nothing is hard-coded except semantic colours.
-            var difficultyColour = colours.ForStarDifficulty(beatmap.StarRating);
+            var difficultyColour = colours.ForStarDifficulty(initialDifficulty.Stars);
             var titleBackground = colourProvider.Background3;
             var stripBackground = colourProvider.Background5;
             var scoreBackground = colourProvider.Background6;
@@ -302,13 +321,23 @@ namespace osu.Game.Screens.Ranking
                     {
                         RelativeSizeAxes = Axes.Both,
                         Padding = new MarginPadding { Top = 48, Bottom = 12 },
-                        Child = new StatisticsPanel(embedded: true)
+                        Child = new FillFlowContainer
                         {
                             RelativeSizeAxes = Axes.X,
                             AutoSizeAxes = Axes.Y,
-                            Score = { Value = score },
-                            AchievedScore = resultsScreen?.Score,
-                            State = { Value = Visibility.Visible },
+                            Direction = FillDirection.Vertical,
+                            Children = new Drawable[]
+                            {
+                                new StatisticsPanel(embedded: true)
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    AutoSizeAxes = Axes.Y,
+                                    Score = { Value = score },
+                                    AchievedScore = resultsScreen?.Score,
+                                    State = { Value = Visibility.Visible },
+                                },
+                                new StatisticItemContainer(new StatisticItem("Play progression", () => progression = new ScoreProgressionGraph(score))),
+                            },
                         },
                     },
                 },
@@ -448,6 +477,9 @@ namespace osu.Game.Screens.Ranking
             // Left column content.
             // ------------------------------------------------------------------------------------------------
 
+            Drawable difficultyIcon;
+            StarRatingDisplay difficultyRating;
+            TruncatingSpriteText difficultyName;
             leftColumn.AddRange(new Drawable[]
             {
                 // Two independent wedges (title + score) separated by a 4px gap, like song select.
@@ -545,6 +577,7 @@ namespace osu.Game.Screens.Ranking
                         {
                             AutoSizeAxes = Axes.Both,
                             Status = beatmap.Status,
+                            LocalBeatmap = beatmap,
                             TextSize = 10,
                             TextPadding = new MarginPadding { Horizontal = 6, Vertical = 1 },
                         },
@@ -587,14 +620,14 @@ namespace osu.Game.Screens.Ranking
                     Size = new Vector2(78, 34),
                     Children = new Drawable[]
                     {
-                        ruleset.CreateIcon().With(d =>
+                        difficultyIcon = ruleset.CreateIcon().With(d =>
                         {
                             d.Name = "Difficulty ruleset icon";
                             d.Anchor = d.Origin = Anchor.CentreLeft;
                             d.Size = new Vector2(20);
                             d.Colour = difficultyColour;
                         }),
-                        new StarRatingDisplay(new StarDifficulty(beatmap.StarRating, 0), StarRatingDisplaySize.Small)
+                        difficultyRating = new StarRatingDisplay(initialDifficulty, StarRatingDisplaySize.Small)
                         {
                             Name = "Difficulty rating",
                             Anchor = Anchor.CentreLeft,
@@ -603,7 +636,7 @@ namespace osu.Game.Screens.Ranking
                         },
                     },
                 },
-                new TruncatingSpriteText
+                difficultyName = new TruncatingSpriteText
                 {
                     Position = new Vector2(144, 131),
                     MaxWidth = 407,
@@ -711,13 +744,26 @@ namespace osu.Game.Screens.Ranking
                 });
             }
 
-            if (score.Mods.Length > 0)
+            if (difficultyTask != null && initialDifficulty.Stars < 0)
+            {
+                _ = difficultyTask.ContinueWith(task => Schedule(() =>
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
+
+                    var difficulty = task.GetResultSafely() ?? storedDifficulty;
+                    difficultyRating.Current.Value = difficulty;
+                    difficultyName.Colour = difficultyIcon.Colour = colours.ForStarDifficulty(difficulty.Stars);
+                }), cancellationToken, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+            }
+
+            if (scoreMods.Length > 0)
             {
                 mods.Add(new ModDisplay(false)
                 {
                     Scale = new Vector2(0.87f),
                     ExpansionMode = ExpansionMode.ExpandOnHover,
-                    Current = { Value = score.Mods },
+                    Current = { Value = scoreMods },
                 });
             }
 
@@ -913,6 +959,8 @@ namespace osu.Game.Screens.Ranking
         protected override void Dispose(bool isDisposing)
         {
             metadataRequest?.Cancel();
+            difficultyCancellation.Cancel();
+            difficultyCancellation.Dispose();
             base.Dispose(isDisposing);
         }
 
