@@ -76,6 +76,34 @@ namespace osu.Game.Online.API
             };
         }
 
+        /// <summary>
+        /// Ritsu: show a local, offline-only profile as the local user. Scores set while it is active are stored locally under this user.
+        /// </summary>
+        /// <param name="user">The local profile's user (negative ID, name and flag).</param>
+        /// <param name="immediate">Set the user right away instead of on the next update frame (only safe before this component is loaded).</param>
+        public void SetOfflineLocalUser(APIUser user, bool immediate = false)
+        {
+            if (immediate)
+                apply();
+            else
+                Schedule(apply);
+
+            void apply()
+            {
+                localUser.Value = new APIUser
+                {
+                    Username = user.Username,
+                    Id = user.Id,
+                    CountryCode = user.CountryCode,
+                };
+
+                configSupporter.Value = false;
+                friends.Clear();
+                blocks.Clear();
+                favouriteBeatmapSets.Clear();
+            }
+        }
+
         public void SetLocalUser(APIMe me)
         {
             localUser.Value = me;

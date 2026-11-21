@@ -47,6 +47,9 @@ namespace osu.Game.Screens.Select
         [Resolved(canBeNull: true)]
         private osu.Game.Offline.RitsuProfileManager? ritsuProfiles { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
         private readonly IBindable<APIUser> localUser = new Bindable<APIUser>();
 
         private IDisposable? scoreSubscription;
@@ -100,13 +103,14 @@ namespace osu.Game.Screens.Select
         {
             // This subscription may fire from changes to linked beatmaps, which we don't care about.
             // It's currently not possible for a score to be modified after insertion, so we can safely ignore callbacks with only modifications.
-            if (changes?.HasCollectionChanges() == false)
+            // osu!local: a score transfer changes the score's player, so with a local profile active, modifications count too.
+            if (changes?.HasCollectionChanges() == false && localProfiles?.IsLocalProfileActive != true)
                 return;
 
             ScoreInfo? topScore = sender
                                   // doing these post realm filter is most efficient.
                                   .Where(s => s.UserID == localUser.Value.Id || s.UserID <= 1)
-                                  .Where(s => ritsuProfiles == null || ritsuProfiles.BelongsToActiveProfile(s.ID))
+                                  .Where(s => osu.Game.LocalPriority.RitsuProfileBridge.BelongsToActiveProfile(localProfiles, ritsuProfiles, s))
                                   .Where(s => ruleset.Value.Equals(s.Ruleset))
                                   .MaxBy(info => (info.TotalScore, -info.Date.UtcDateTime.Ticks));
 

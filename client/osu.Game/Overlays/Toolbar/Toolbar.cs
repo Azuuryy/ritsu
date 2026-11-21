@@ -292,7 +292,8 @@ namespace osu.Game.Overlays.Toolbar
                                             new ToolbarMusicButton(),
                                             new ToolbarClock(),
                                             new ToolbarNotificationButton(),
-                                            new ToolbarLocalProfileButton(),
+                                            // osu!local: the account button shows the active local profile (click: profile page, right-click: switcher).
+                                            userButton = new ToolbarUserButton(),
                                         }
                                     },
                                 }

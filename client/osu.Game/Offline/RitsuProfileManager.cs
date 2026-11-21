@@ -8,6 +8,7 @@ using Realms;
 using osu.Framework.Statistics;
 using osu.Framework.Platform;
 using osu.Game.Database;
+using osu.Game.LocalPriority;
 using osu.Game.Beatmaps;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
@@ -37,15 +38,12 @@ namespace osu.Game.Offline
             avatarStorage = this.storage.GetStorageForDirectory("avatars");
             this.realm = realm;
 
-            if (this.storage.Exists(filename))
+            // An empty or damaged file falls back to its backup, then to a fresh Guest profile (the damaged file is kept).
+            var stored = LocalDurableFile.Read(this.storage, filename, parseStore);
+
+            if (stored != null)
             {
-                using (var stream = this.storage.GetStream(filename, FileAccess.Read, FileMode.Open))
-                using (var reader = new StreamReader(stream))
-                data = JsonConvert.DeserializeObject<ProfileStore>(reader.ReadToEnd())
-                       ?? throw new InvalidDataException("Ritsu profile metadata is empty or invalid.");
-                if ((data.Version != 1 && data.Version != 2) || data.Profiles == null || data.Scores == null || data.Profiles.Count == 0
-                    || data.Profiles.All(p => p.Id != data.ActiveProfileId))
-                    throw new InvalidDataException("Ritsu profile metadata is invalid or has an unsupported version.");
+                data = stored;
 
                 foreach (var profile in data.Profiles)
                 {
@@ -107,8 +105,7 @@ namespace osu.Game.Offline
                     throw new InvalidDataException("Profile pictures must be 4096 × 4096 pixels or smaller.");
 
                 avatarFileName = $"{prefix}-{profileId:N}-{Guid.NewGuid():N}";
-                using var stream = avatarStorage.CreateFileSafely($"{avatarFileName}.png");
-                image.SaveAsPng(stream);
+                LocalDurableFile.Write(avatarStorage, $"{avatarFileName}.png", stream => image.SaveAsPng(stream));
             }
 
             return avatarFileName;
@@ -752,10 +749,24 @@ namespace osu.Game.Offline
         private void save()
         {
             using var measurement = FrameProfileCapture.Measure("Profiles.Save");
-            using var stream = storage.CreateFileSafely(filename);
-            using var writer = new StreamWriter(stream);
-            using var json = new JsonTextWriter(writer) { Formatting = Formatting.Indented };
-            JsonSerializer.CreateDefault().Serialize(json, data);
+            LocalDurableFile.WriteText(storage, filename, JsonConvert.SerializeObject(data, Formatting.Indented));
+        }
+
+        private static ProfileStore? parseStore(string json)
+        {
+            var store = JsonConvert.DeserializeObject<ProfileStore>(json);
+
+            if (store == null)
+                return null;
+
+            // A newer Ritsu's file: stop instead of replacing it with defaults.
+            if (store.Version != 1 && store.Version != 2)
+                throw new NotSupportedException($"Ritsu profile metadata has an unsupported version ({store.Version}).");
+
+            if (store.Profiles == null || store.Scores == null || store.Profiles.Count == 0 || store.Profiles.All(p => p.Id != store.ActiveProfileId))
+                throw new InvalidDataException("Ritsu profile metadata is invalid.");
+
+            return store;
         }
 
         public sealed class ProfileStore

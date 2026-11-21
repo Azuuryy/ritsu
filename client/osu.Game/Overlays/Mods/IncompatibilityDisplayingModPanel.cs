@@ -42,7 +42,36 @@ namespace osu.Game.Overlays.Mods
 
         protected void UpdateIncompatibility()
         {
-            incompatible.Value = IsIncompatibleWithSelected(selectedMods.Value);
+            conflicting = IsIncompatibleWithSelected(selectedMods.Value);
+
+            // osu!local: mods the active local profile's rules don't allow are shown like incompatible ones (and can't be selected).
+            disallowedByProfile = !IgnoreLocalProfileRules && localProfiles?.IsModAllowed(Mod) == false && !Active.Value;
+
+            incompatible.Value = conflicting || disallowedByProfile;
+        }
+
+        [Resolved(canBeNull: true)]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
+        private bool conflicting;
+        private bool disallowedByProfile;
+
+        /// <summary>
+        /// osu!local: conflicting mods can't be clicked at all (instead of replacing the conflicting selection).
+        /// </summary>
+        protected bool BlockConflictingSelection { get; set; }
+
+        /// <summary>
+        /// osu!local: don't apply the active profile's mod rules (used while choosing a profile's mod rules).
+        /// </summary>
+        protected bool IgnoreLocalProfileRules { get; set; }
+
+        protected override void Select()
+        {
+            if (disallowedByProfile || (BlockConflictingSelection && conflicting))
+                return;
+
+            base.Select();
         }
 
         protected virtual bool IsIncompatibleWithSelected(IReadOnlyList<Mod> selectedMods) =>

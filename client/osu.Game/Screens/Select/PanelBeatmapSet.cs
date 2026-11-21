@@ -69,6 +69,9 @@ namespace osu.Game.Screens.Select
         private OsuGame? game { get; set; }
 
         [Resolved]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
+        [Resolved]
         private IAPIProvider api { get; set; } = null!;
 
         [Resolved]
@@ -280,12 +283,10 @@ namespace osu.Game.Screens.Select
                     items.Add(new OsuMenuItemSpacer());
                 }
 
-                if (ritsuProfiles != null)
+                // osu!local: never give PP on local profiles for any difficulty of this set (instead of Ritsu's own item).
+                if (localProfiles != null)
                 {
-                    Guid profileId = ritsuProfiles.ActiveProfileId;
-                    bool included = ritsuProfiles.AreBeatmapSetScoresIncludedInPP(profileId, beatmapSet.ID);
-                    items.Add(new OsuMenuItem(included ? "Exclude this beatmap set's scores from profile PP" : "Include this beatmap set's scores in profile PP", MenuItemType.Standard,
-                        () => ritsuProfiles.SetBeatmapSetScoresIncludedInPP(profileId, beatmapSet.ID, !included)));
+                    items.Add(osu.Game.LocalPriority.LocalPerformanceExclusions.CreateBeatmapSetMenuItem(localProfiles, beatmapSet));
                     items.Add(new OsuMenuItemSpacer());
                 }
 
