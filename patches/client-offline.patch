@@ -12,7 +12,7 @@ index 90fe4a05c7..32e02b01ab 100644
              double clockRate = ModUtils.CalculateRateWithMods(score.Mods);
  
 diff --git a/osu.Game.Rulesets.Catch/Mods/CatchModDifficultyAdjust.cs b/osu.Game.Rulesets.Catch/Mods/CatchModDifficultyAdjust.cs
-index e0705e4bbb..6c797b57b5 100644
+index e0705e4bbb..13db1d037f 100644
 --- a/osu.Game.Rulesets.Catch/Mods/CatchModDifficultyAdjust.cs
 +++ b/osu.Game.Rulesets.Catch/Mods/CatchModDifficultyAdjust.cs
 @@ -8,6 +8,7 @@
@@ -23,7 +23,28 @@ index e0705e4bbb..6c797b57b5 100644
  using osu.Game.Rulesets.Mods;
  
  namespace osu.Game.Rulesets.Catch.Mods
-@@ -37,6 +38,8 @@ public class CatchModDifficultyAdjust : ModDifficultyAdjust, IApplicableToBeatma
+@@ -20,7 +21,9 @@ public class CatchModDifficultyAdjust : ModDifficultyAdjust, IApplicableToBeatma
+             Precision = 0.1f,
+             MinValue = 0,
+             MaxValue = 10,
+-            ExtendedMaxValue = 11,
++            ExtendedMinValue = -5,
++            ExtendedMaxValue = 13,
++            HistoricalMaxValue = 15,
+             ReadCurrentFromDifficulty = diff => diff.CircleSize,
+         };
+ 
+@@ -30,13 +33,17 @@ public class CatchModDifficultyAdjust : ModDifficultyAdjust, IApplicableToBeatma
+             Precision = 0.1f,
+             MinValue = 0,
+             MaxValue = 10,
+-            ExtendedMaxValue = 11,
++            ExtendedMinValue = -5,
++            ExtendedMaxValue = 13,
++            HistoricalMaxValue = 15,
+             ReadCurrentFromDifficulty = diff => diff.ApproachRate,
+         };
+ 
          [SettingSource("Spicy Patterns", "Adjust the patterns as if Hard Rock is enabled.")]
          public BindableBool HardRockOffsets { get; } = new BindableBool();
  
@@ -1400,10 +1421,27 @@ index 0000000000..bbfbf642e1
 +    }
 +}
 diff --git a/osu.Game.Rulesets.Osu/Mods/OsuModDifficultyAdjust.cs b/osu.Game.Rulesets.Osu/Mods/OsuModDifficultyAdjust.cs
-index 65ab6001c9..af074a6955 100644
+index 65ab6001c9..08acc26a5e 100644
 --- a/osu.Game.Rulesets.Osu/Mods/OsuModDifficultyAdjust.cs
 +++ b/osu.Game.Rulesets.Osu/Mods/OsuModDifficultyAdjust.cs
-@@ -39,6 +39,8 @@ public partial class OsuModDifficultyAdjust : ModDifficultyAdjust
+@@ -24,7 +24,9 @@ public partial class OsuModDifficultyAdjust : ModDifficultyAdjust
+             Precision = 0.1f,
+             MinValue = 0,
+             MaxValue = 10,
+-            ExtendedMaxValue = 11,
++            ExtendedMinValue = -5,
++            ExtendedMaxValue = 13,
++            HistoricalMaxValue = 15,
+             ReadCurrentFromDifficulty = diff => diff.CircleSize,
+         };
+ 
+@@ -35,10 +37,13 @@ public partial class OsuModDifficultyAdjust : ModDifficultyAdjust
+             MinValue = 0,
+             MaxValue = 10,
+             ExtendedMinValue = -10,
+-            ExtendedMaxValue = 11,
++            ExtendedMaxValue = 13,
++            HistoricalMaxValue = 15,
              ReadCurrentFromDifficulty = diff => diff.ApproachRate,
          };
  
@@ -2990,10 +3028,10 @@ index 15cb895c1e..0db7f85028 100644
          {
              private bool allowGameplayInputs = true;
 diff --git a/osu.Game.Rulesets.Osu/OsuRuleset.cs b/osu.Game.Rulesets.Osu/OsuRuleset.cs
-index a84d208672..0036e00e5c 100644
+index a84d208672..0d24914b87 100644
 --- a/osu.Game.Rulesets.Osu/OsuRuleset.cs
 +++ b/osu.Game.Rulesets.Osu/OsuRuleset.cs
-@@ -184,6 +184,7 @@ public override IEnumerable<Mod> GetModsFor(ModType type)
+@@ -184,6 +184,7 @@ namespace osu.Game.Rulesets.Osu
                      return new Mod[]
                      {
                          new OsuModEasy(),
@@ -3001,7 +3039,7 @@ index a84d208672..0036e00e5c 100644
                          new OsuModNoFail(),
                          new MultiMod(new OsuModHalfTime(), new OsuModDaycore()),
                      };
-@@ -199,6 +200,11 @@ public override IEnumerable<Mod> GetModsFor(ModType type)
+@@ -199,6 +200,11 @@ namespace osu.Game.Rulesets.Osu
                          new OsuModStrictTracking(),
                          new OsuModAccuracyChallenge(),
                          new OsuModMissChallenge(),
@@ -3013,7 +3051,7 @@ index a84d208672..0036e00e5c 100644
                      };
  
                  case ModType.Conversion:
-@@ -209,7 +215,6 @@ public override IEnumerable<Mod> GetModsFor(ModType type)
+@@ -209,7 +215,6 @@ namespace osu.Game.Rulesets.Osu
                          new OsuModClassic(),
                          new OsuModCircleGeneration(),
                          new OsuModRandomV2(),
@@ -3021,7 +3059,7 @@ index a84d208672..0036e00e5c 100644
                          new OsuModRandom(),
                          new MultiMod(new OsuModSpacingAdjust(), new OsuModSpacingOvertime()),
                          new OsuModMirror(),
-@@ -254,6 +259,9 @@ public override IEnumerable<Mod> GetModsFor(ModType type)
+@@ -254,6 +259,9 @@ namespace osu.Game.Rulesets.Osu
                      {
                          new OsuModTouchDevice(),
                          new ModScoreV2(),
@@ -3031,6 +3069,15 @@ index a84d208672..0036e00e5c 100644
                      };
  
                  default:
+@@ -462,7 +470,7 @@ namespace osu.Game.Rulesets.Osu
+                 AdditionalMetrics =
+                 [
+                     new RulesetBeatmapAttribute.AdditionalMetric(OsuRulesetStrings.ApproachTime,
+-                        LocalisableString.Interpolate($@"{IBeatmapDifficultyInfo.DifficultyRangeInt(effectiveDifficulty.ApproachRate, OsuHitObject.PREEMPT_RANGE):#,0.##} ms"))
++                        LocalisableString.Interpolate($@"{Math.Max(1, IBeatmapDifficultyInfo.DifficultyRangeInt(effectiveDifficulty.ApproachRate, OsuHitObject.PREEMPT_RANGE)):#,0.##} ms"))
+                 ]
+             };
+ 
 diff --git a/osu.Game.Rulesets.Osu/OsuSkinComponents.cs b/osu.Game.Rulesets.Osu/OsuSkinComponents.cs
 index 52fdfea95f..08d9e9fbd7 100644
 --- a/osu.Game.Rulesets.Osu/OsuSkinComponents.cs
@@ -4044,10 +4091,10 @@ index 3bcdff3912..c281794add 100644
  }
 diff --git a/osu.Game.Tests/NonVisual/RitsuLibraryTest.cs b/osu.Game.Tests/NonVisual/RitsuLibraryTest.cs
 new file mode 100644
-index 0000000000..04c0484bfc
+index 0000000000..18131fa611
 --- /dev/null
 +++ b/osu.Game.Tests/NonVisual/RitsuLibraryTest.cs
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,290 @@
 +// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 +
 +using System;
@@ -4232,11 +4279,23 @@ index 0000000000..04c0484bfc
 +        }
 +
 +        [Test]
++        public void TestApproachRateCompensationEnablesExtendedLimits()
++        {
++            var ruleset = new OsuRuleset();
++            Mod[]? mods = Array.Empty<Mod>();
++            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 0, 1.5, ref mods, out double? effectiveAr), Is.Null);
++            Assert.That(effectiveAr, Is.EqualTo(0).Within(0.02));
++            var adjust = mods!.OfType<ModDifficultyAdjust>().Single();
++            Assert.That(adjust.ExtendedLimits.Value, Is.True);
++            Assert.That(adjust.RitsuApproachRate!.Value.Setting.Value, Is.LessThan(0));
++        }
++
++        [Test]
 +        public void TestApproachRateCompensationRejectsLimitsAndConflicts()
 +        {
 +            var ruleset = new OsuRuleset();
 +            Mod[]? mods = Array.Empty<Mod>();
-+            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 0, 1.5, ref mods, out _), Is.Not.Null);
++            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 0, 3, ref mods, out _), Is.Not.Null);
 +            mods = new Mod[] { new OsuModHardRock() };
 +            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 8, 1.3, ref mods, out _), Is.Not.Null);
 +        }
@@ -8198,10 +8257,10 @@ index 0000000000..4831945ad3
 +}
 diff --git a/osu.Game/Commands/RitsuTargetBpmDialog.cs b/osu.Game/Commands/RitsuTargetBpmDialog.cs
 new file mode 100644
-index 0000000000..6e823b8ff0
+index 0000000000..80b904cbf7
 --- /dev/null
 +++ b/osu.Game/Commands/RitsuTargetBpmDialog.cs
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,212 @@
 +// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 +
 +using System;
@@ -8372,8 +8431,13 @@ index 0000000000..6e823b8ff0
 +                return "This mode cannot preserve approach rate.";
 +
 +            double originalPreempt = IBeatmapDifficultyInfo.DifficultyRangeInt(originalAr, ar.PreemptRange);
-+            double targetPreempt = originalPreempt * rate;
++            double targetPreempt = Math.Max(1, originalPreempt) * rate;
++            if (targetPreempt < 1)
++                return "Keeping the original approach rate would require less than one millisecond of preempt time.";
 +            float configuredAr = (float)IBeatmapDifficultyInfo.InverseDifficultyRange(targetPreempt, ar.PreemptRange);
++            if (configuredAr < ar.Setting.MinValue || configuredAr > ar.Setting.MaxValue)
++                adjust.ExtendedLimits.Value = true;
++
 +            float min = adjust.ExtendedLimits.Value ? ar.Setting.ExtendedMinValue ?? ar.Setting.MinValue : ar.Setting.MinValue;
 +            float max = adjust.ExtendedLimits.Value ? ar.Setting.ExtendedMaxValue ?? ar.Setting.MaxValue : ar.Setting.MaxValue;
 +            if (!float.IsFinite(configuredAr) || configuredAr < min || configuredAr > max)
@@ -12662,10 +12726,18 @@ index 0000000000..2a857d4244
 +    }
 +}
 diff --git a/osu.Game/Rulesets/Mods/ModDifficultyAdjust.cs b/osu.Game/Rulesets/Mods/ModDifficultyAdjust.cs
-index bc73f4ca4d..478d4ef9a8 100644
+index bc73f4ca4d..f445cc653f 100644
 --- a/osu.Game/Rulesets/Mods/ModDifficultyAdjust.cs
 +++ b/osu.Game/Rulesets/Mods/ModDifficultyAdjust.cs
-@@ -31,6 +31,8 @@ public abstract class ModDifficultyAdjust : Mod, IApplicableToDifficulty
+@@ -3,6 +3,7 @@
+ 
+ using System;
+ using System.Collections.Generic;
++using System.Linq;
+ using osu.Framework.Bindables;
+ using osu.Framework.Graphics.Sprites;
+ using osu.Framework.Localisation;
+@@ -31,6 +32,8 @@ public abstract class ModDifficultyAdjust : Mod, IApplicableToDifficulty
  
          public override Type[] IncompatibleMods => new[] { typeof(ModEasy), typeof(ModHardRock) };
  
@@ -12674,6 +12746,43 @@ index bc73f4ca4d..478d4ef9a8 100644
          protected const int FIRST_SETTING_ORDER = 1;
  
          protected const int LAST_SETTING_ORDER = 2;
+@@ -51,7 +54,9 @@ public abstract class ModDifficultyAdjust : Mod, IApplicableToDifficulty
+             Precision = 0.1f,
+             MinValue = 0,
+             MaxValue = 10,
+-            ExtendedMaxValue = 11,
++            ExtendedMinValue = -5,
++            ExtendedMaxValue = 13,
++            HistoricalMaxValue = 15,
+             ReadCurrentFromDifficulty = diff => diff.OverallDifficulty,
+         };
+ 
+@@ -67,6 +72,25 @@ protected ModDifficultyAdjust()
+             }
+         }
+ 
++        internal Mod WithEditableLimits()
++        {
++            var settings = this.GetOrderedSettingsSourceProperties()
++                               .Select(source => source.Item2)
++                               .Where(property => property.GetValue(this) is DifficultyBindable setting && setting.HistoricalMaxValue != null && setting.Value > setting.ExtendedMaxValue)
++                               .ToArray();
++            if (settings.Length == 0)
++                return this;
++
++            var copy = (ModDifficultyAdjust)DeepClone();
++            foreach (var property in settings)
++            {
++                var setting = (DifficultyBindable)property.GetValue(copy)!;
++                setting.Value = setting.ExtendedMaxValue;
++            }
++
++            return copy;
++        }
++
+         public override string ExtendedIconInformation
+         {
+             get
 diff --git a/osu.Game/Rulesets/Objects/Drawables/DrawableHitObject.cs b/osu.Game/Rulesets/Objects/Drawables/DrawableHitObject.cs
 index a012c34e26..09d9080c54 100644
 --- a/osu.Game/Rulesets/Objects/Drawables/DrawableHitObject.cs
@@ -19515,6 +19624,61 @@ index cf375cb0d3..b3d4dc627d 100644
                  applyFilenameSchemaSuffix(ref Filename);
  #endif
  
+diff --git a/osu.Game/Rulesets/Objects/Legacy/LegacyRulesetExtensions.cs b/osu.Game/Rulesets/Objects/Legacy/LegacyRulesetExtensions.cs
+index 2a5a11161b..a2c77bf15c 100644
+--- a/osu.Game/Rulesets/Objects/Legacy/LegacyRulesetExtensions.cs
++++ b/osu.Game/Rulesets/Objects/Legacy/LegacyRulesetExtensions.cs
+@@ -55,7 +55,10 @@ namespace osu.Game.Rulesets.Objects.Legacy
+             // It works out to under 1 game pixel and is generally not meaningful to gameplay, but is to replay playback accuracy.
+             const float broken_gamefield_rounding_allowance = 1.00041f;
+ 
+-            return (float)(1.0f - 0.7f * IBeatmapDifficultyInfo.DifficultyRange(circleSize)) / 2 * (applyFudge ? broken_gamefield_rounding_allowance : 1);
++            float scale = circleSize > 11
++                ? 0.08f / (1 + (circleSize - 11) * 0.875f)
++                : (float)(1.0f - 0.7f * IBeatmapDifficultyInfo.DifficultyRange(circleSize)) / 2;
++            return scale * (applyFudge ? broken_gamefield_rounding_allowance : 1);
+         }
+ 
+         public static int CalculateDifficultyPeppyStars(BeatmapDifficulty difficulty, int objectCount, int drainLength)
+diff --git a/osu.Game.Rulesets.Osu/Objects/OsuHitObject.cs b/osu.Game.Rulesets.Osu/Objects/OsuHitObject.cs
+index f40060af5c..44d45207ed 100644
+--- a/osu.Game.Rulesets.Osu/Objects/OsuHitObject.cs
++++ b/osu.Game.Rulesets.Osu/Objects/OsuHitObject.cs
+@@ -171,7 +171,7 @@ namespace osu.Game.Rulesets.Osu.Objects
+         {
+             base.ApplyDefaultsToSelf(controlPointInfo, difficulty);
+ 
+-            TimePreempt = IBeatmapDifficultyInfo.DifficultyRangeInt(difficulty.ApproachRate, PREEMPT_RANGE);
++            TimePreempt = Math.Max(1, IBeatmapDifficultyInfo.DifficultyRangeInt(difficulty.ApproachRate, PREEMPT_RANGE));
+ 
+             // Preempt time can go below 450ms. Normally, this is achieved via the DT mod which uniformly speeds up all animations game wide regardless of AR.
+             // This uniform speedup is hard to match 1:1, however we can at least make AR>10 (via mods) feel good by extending the upper linear function above.
+diff --git a/osu.Game.Rulesets.Catch/Objects/CatchHitObject.cs b/osu.Game.Rulesets.Catch/Objects/CatchHitObject.cs
+index 1d9868ee39..9f8752c38c 100644
+--- a/osu.Game.Rulesets.Catch/Objects/CatchHitObject.cs
++++ b/osu.Game.Rulesets.Catch/Objects/CatchHitObject.cs
+@@ -150,7 +150,7 @@ namespace osu.Game.Rulesets.Catch.Objects
+         {
+             base.ApplyDefaultsToSelf(controlPointInfo, difficulty);
+ 
+-            TimePreempt = IBeatmapDifficultyInfo.DifficultyRangeInt(difficulty.ApproachRate, PREEMPT_RANGE);
++            TimePreempt = Math.Max(1, IBeatmapDifficultyInfo.DifficultyRangeInt(difficulty.ApproachRate, PREEMPT_RANGE));
+ 
+             Scale = LegacyRulesetExtensions.CalculateScaleFromCircleSize(difficulty.CircleSize);
+         }
+diff --git a/osu.Game.Rulesets.Osu/Scoring/OsuHitWindows.cs b/osu.Game.Rulesets.Osu/Scoring/OsuHitWindows.cs
+index a0f235c8c7..9d4d08fe34 100644
+--- a/osu.Game.Rulesets.Osu/Scoring/OsuHitWindows.cs
++++ b/osu.Game.Rulesets.Osu/Scoring/OsuHitWindows.cs
+@@ -38,7 +38,7 @@ namespace osu.Game.Rulesets.Osu.Scoring
+ 
+         public override void SetDifficulty(double difficulty)
+         {
+-            great = Math.Floor(IBeatmapDifficultyInfo.DifficultyRange(difficulty, GREAT_WINDOW_RANGE)) - 0.5;
++            great = Math.Max(0.5, Math.Floor(IBeatmapDifficultyInfo.DifficultyRange(difficulty, GREAT_WINDOW_RANGE)) - 0.5);
+             ok = Math.Floor(IBeatmapDifficultyInfo.DifficultyRange(difficulty, OK_WINDOW_RANGE)) - 0.5;
+             meh = Math.Floor(IBeatmapDifficultyInfo.DifficultyRange(difficulty, MEH_WINDOW_RANGE)) - 0.5;
+         }
 diff --git a/osu.Game/Screens/Select/PerfectPerformanceSession.cs b/osu.Game/Screens/Select/PerfectPerformanceSession.cs
 index 6e8ceec705..bb9a97c6e3 100644
 --- a/osu.Game/Screens/Select/PerfectPerformanceSession.cs
@@ -19562,6 +19726,160 @@ index 6e8ceec705..bb9a97c6e3 100644
                      {
                          lastReported = 0;
                          var current = Progress;
+diff --git a/osu.Game.Rulesets.Catch/CatchRuleset.cs b/osu.Game.Rulesets.Catch/CatchRuleset.cs
+index fe33e3163c..1193ab7fd6 100644
+--- a/osu.Game.Rulesets.Catch/CatchRuleset.cs
++++ b/osu.Game.Rulesets.Catch/CatchRuleset.cs
+@@ -330,7 +330,7 @@ namespace osu.Game.Rulesets.Catch
+                 Description = CatchRulesetStrings.ApproachRateDescription,
+                 AdditionalMetrics =
+                 [
+-                    new RulesetBeatmapAttribute.AdditionalMetric(CatchRulesetStrings.FadeInTime, LocalisableString.Interpolate($@"{IBeatmapDifficultyInfo.DifficultyRangeInt(effectiveDifficulty.ApproachRate, CatchHitObject.PREEMPT_RANGE):#,0.##} ms"))
++                    new RulesetBeatmapAttribute.AdditionalMetric(CatchRulesetStrings.FadeInTime, LocalisableString.Interpolate($@"{Math.Max(1, IBeatmapDifficultyInfo.DifficultyRangeInt(effectiveDifficulty.ApproachRate, CatchHitObject.PREEMPT_RANGE)):#,0.##} ms"))
+                 ]
+             };
+             yield return new RulesetBeatmapAttribute(SongSelectStrings.HPDrain, @"HP", originalDifficulty.DrainRate, effectiveDifficulty.DrainRate, 10)
+diff --git a/osu.Game.Tests/Visual/UserInterface/TestSceneModDifficultyAdjustSettings.cs b/osu.Game.Tests/Visual/UserInterface/TestSceneModDifficultyAdjustSettings.cs
+index 30470c9c17..d06653f1b5 100644
+--- a/osu.Game.Tests/Visual/UserInterface/TestSceneModDifficultyAdjustSettings.cs
++++ b/osu.Game.Tests/Visual/UserInterface/TestSceneModDifficultyAdjustSettings.cs
+@@ -129,8 +129,8 @@ namespace osu.Game.Tests.Visual.UserInterface
+ 
+             setSliderValue("Circle Size", 99);
+ 
+-            checkSliderAtValue("Circle Size", 11);
+-            checkBindableAtValue("Circle Size", 11);
++            checkSliderAtValue("Circle Size", 15);
++            checkBindableAtValue("Circle Size", 15);
+ 
+             setSliderValue("Approach Rate", -5);
+ 
+diff --git a/osu.Game.Tests/Mods/ModDifficultyAdjustTest.cs b/osu.Game.Tests/Mods/ModDifficultyAdjustTest.cs
+index eba751c742..8ec40f79e3 100644
+--- a/osu.Game.Tests/Mods/ModDifficultyAdjustTest.cs
++++ b/osu.Game.Tests/Mods/ModDifficultyAdjustTest.cs
+@@ -137,11 +137,38 @@ public void TestDeserializeIncorrectRange()
+ 
+             Assert.Multiple(() =>
+             {
+-                Assert.That(mod.CircleSize.Value, Is.GreaterThanOrEqualTo(0).And.LessThanOrEqualTo(11));
++                Assert.That(mod.CircleSize.Value, Is.EqualTo(-5));
+                 Assert.That(mod.ApproachRate.Value, Is.GreaterThanOrEqualTo(-10).And.LessThanOrEqualTo(11));
+             });
+         }
+ 
++        [Test]
++        public void TestExtendedOsuSettingsRoundTrip()
++        {
++            var ruleset = new OsuRuleset();
++            var adjust = new OsuModDifficultyAdjust();
++            adjust.ExtendedLimits.Value = true;
++            adjust.CircleSize.Value = 15;
++            adjust.ApproachRate.Value = 15;
++            adjust.OverallDifficulty.Value = -5;
++
++            var restored = (OsuModDifficultyAdjust)new APIMod(adjust).ToMod(ruleset);
++            Assert.That(restored.ExtendedLimits.Value, Is.True);
++            Assert.That(restored.CircleSize.Value, Is.EqualTo(15));
++            Assert.That(restored.ApproachRate.Value, Is.EqualTo(15));
++            Assert.That(restored.OverallDifficulty.Value, Is.EqualTo(-5));
++
++            var editable = (OsuModDifficultyAdjust)restored.WithEditableLimits();
++            Assert.Multiple(() =>
++            {
++                Assert.That(restored.ApproachRate.CurrentNumber.MaxValue, Is.EqualTo(13));
++                Assert.That(restored.ApproachRate.Value, Is.EqualTo(15));
++                Assert.That(editable.CircleSize.Value, Is.EqualTo(13));
++                Assert.That(editable.ApproachRate.Value, Is.EqualTo(13));
++                Assert.That(editable.OverallDifficulty.Value, Is.EqualTo(-5));
++            });
++        }
++
+         [Test]
+         public void TestDeserializeNegativeApproachRate()
+         {
+diff --git a/osu.Game.Rulesets.Mania/Mods/ManiaModDifficultyAdjust.cs b/osu.Game.Rulesets.Mania/Mods/ManiaModDifficultyAdjust.cs
+index ce70fdf73a..5f4f04e196 100644
+--- a/osu.Game.Rulesets.Mania/Mods/ManiaModDifficultyAdjust.cs
++++ b/osu.Game.Rulesets.Mania/Mods/ManiaModDifficultyAdjust.cs
+@@ -13,7 +13,8 @@ public class ManiaModDifficultyAdjust : ModDifficultyAdjust
+             MinValue = 0,
+             MaxValue = 10,
+             // Use larger extended limits for mania to include OD values that occur with EZ or HR enabled
+-            ExtendedMaxValue = 15,
++            ExtendedMaxValue = 13,
++            HistoricalMaxValue = 15,
+             ExtendedMinValue = -15,
+             ReadCurrentFromDifficulty = diff => diff.OverallDifficulty,
+         };
+diff --git a/osu.Game/Overlays/Mods/ModPresetPanel.cs b/osu.Game/Overlays/Mods/ModPresetPanel.cs
+index 4094e87507..0339e39dc1 100644
+--- a/osu.Game/Overlays/Mods/ModPresetPanel.cs
++++ b/osu.Game/Overlays/Mods/ModPresetPanel.cs
+@@ -97,12 +97,12 @@ protected override void Select()
+                                                                      !mod.IncompatibleMods.Any(t => Preset.Value.Mods.Any(t.IsInstanceOfType)));
+ 
+             // will also have the side effect of activating the preset (see `updateActiveState()`).
+-            selectedMods.Value = Preset.Value.Mods.Concat(selectedSystemMods).ToArray();
++            selectedMods.Value = editablePresetMods().Concat(selectedSystemMods).ToArray();
+         }
+ 
+         protected override void Deselect()
+         {
+-            selectedMods.Value = selectedMods.Value.Except(Preset.Value.Mods).ToArray();
++            selectedMods.Value = selectedMods.Value.Except(editablePresetMods()).ToArray();
+         }
+ 
+         private void selectedModsChanged()
+@@ -115,9 +115,11 @@ private void selectedModsChanged()
+ 
+         private void updateActiveState()
+         {
+-            Active.Value = new HashSet<Mod>(Preset.Value.Mods).SetEquals(selectedMods.Value.Where(mod => mod.Type != ModType.System));
++            Active.Value = new HashSet<Mod>(editablePresetMods()).SetEquals(selectedMods.Value.Where(mod => mod.Type != ModType.System));
+         }
+ 
++        private IEnumerable<Mod> editablePresetMods() => Preset.Value.Mods.Select(mod => mod is ModDifficultyAdjust adjust ? adjust.WithEditableLimits() : mod);
++
+         #region Filtering support
+ 
+         public override IEnumerable<LocalisableString> FilterTerms => getFilterTerms();
+diff --git a/osu.Game/Rulesets/Mods/DifficultyAdjustSettingsControl.cs b/osu.Game/Rulesets/Mods/DifficultyAdjustSettingsControl.cs
+index af39fdcc07..8d7f2a073e 100644
+--- a/osu.Game/Rulesets/Mods/DifficultyAdjustSettingsControl.cs
++++ b/osu.Game/Rulesets/Mods/DifficultyAdjustSettingsControl.cs
+@@ -75,7 +75,9 @@ private void updateCurrentFromSlider()
+             if (Current.Value != null)
+             {
+                 // a user override has been added or updated.
++                isInternalChange = true;
+                 sliderDisplayCurrent.Value = Current.Value.Value;
++                isInternalChange = false;
+                 return;
+             }
+ 
+diff --git a/osu.Game/Rulesets/Mods/DifficultyBindable.cs b/osu.Game/Rulesets/Mods/DifficultyBindable.cs
+index 099806d320..b9f7f99804 100644
+--- a/osu.Game/Rulesets/Mods/DifficultyBindable.cs
++++ b/osu.Game/Rulesets/Mods/DifficultyBindable.cs
+@@ -100,6 +100,8 @@ public float MaxValue
+             }
+         }
+ 
++        public float? HistoricalMaxValue { get; init; }
++
+         public DifficultyBindable()
+             : this(null)
+         {
+@@ -122,7 +124,7 @@ public DifficultyBindable(float? defaultValue = null)
+                     CurrentNumber.MinValue = Math.Clamp(MathF.Min(CurrentNumber.MinValue, value.Value), ExtendedMinValue ?? MinValue, MinValue);
+                     CurrentNumber.MaxValue = Math.Clamp(MathF.Max(CurrentNumber.MaxValue, value.Value), MaxValue, ExtendedMaxValue ?? MaxValue);
+ 
+-                    base.Value = Math.Clamp(value.Value, CurrentNumber.MinValue, CurrentNumber.MaxValue);
++                    base.Value = Math.Clamp(value.Value, CurrentNumber.MinValue, HistoricalMaxValue ?? CurrentNumber.MaxValue);
+                 }
+                 else
+                     base.Value = value;
 diff --git a/osu.Game/Screens/RankingV2/Argon/ArgonBeatmapInfoPanel.cs b/osu.Game/Screens/RankingV2/Argon/ArgonBeatmapInfoPanel.cs
 index 1d8ecb0cce..71c6eeb69e 100644
 --- a/osu.Game/Screens/RankingV2/Argon/ArgonBeatmapInfoPanel.cs

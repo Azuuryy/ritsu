@@ -182,11 +182,23 @@ namespace osu.Game.Tests.NonVisual
         }
 
         [Test]
+        public void TestApproachRateCompensationEnablesExtendedLimits()
+        {
+            var ruleset = new OsuRuleset();
+            Mod[]? mods = Array.Empty<Mod>();
+            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 0, 1.5, ref mods, out double? effectiveAr), Is.Null);
+            Assert.That(effectiveAr, Is.EqualTo(0).Within(0.02));
+            var adjust = mods!.OfType<ModDifficultyAdjust>().Single();
+            Assert.That(adjust.ExtendedLimits.Value, Is.True);
+            Assert.That(adjust.RitsuApproachRate!.Value.Setting.Value, Is.LessThan(0));
+        }
+
+        [Test]
         public void TestApproachRateCompensationRejectsLimitsAndConflicts()
         {
             var ruleset = new OsuRuleset();
             Mod[]? mods = Array.Empty<Mod>();
-            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 0, 1.5, ref mods, out _), Is.Not.Null);
+            Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 0, 3, ref mods, out _), Is.Not.Null);
             mods = new Mod[] { new OsuModHardRock() };
             Assert.That(RitsuTargetBpmDialog.TryCompensateAr(ruleset, 8, 1.3, ref mods, out _), Is.Not.Null);
         }

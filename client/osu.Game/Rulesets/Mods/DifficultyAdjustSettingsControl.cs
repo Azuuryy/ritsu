@@ -75,7 +75,9 @@ namespace osu.Game.Rulesets.Mods
             if (Current.Value != null)
             {
                 // a user override has been added or updated.
+                isInternalChange = true;
                 sliderDisplayCurrent.Value = Current.Value.Value;
+                isInternalChange = false;
                 return;
             }
 

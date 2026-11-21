@@ -97,12 +97,12 @@ namespace osu.Game.Overlays.Mods
                                                                      !mod.IncompatibleMods.Any(t => Preset.Value.Mods.Any(t.IsInstanceOfType)));
 
             // will also have the side effect of activating the preset (see `updateActiveState()`).
-            selectedMods.Value = Preset.Value.Mods.Concat(selectedSystemMods).ToArray();
+            selectedMods.Value = editablePresetMods().Concat(selectedSystemMods).ToArray();
         }
 
         protected override void Deselect()
         {
-            selectedMods.Value = selectedMods.Value.Except(Preset.Value.Mods).ToArray();
+            selectedMods.Value = selectedMods.Value.Except(editablePresetMods()).ToArray();
         }
 
         private void selectedModsChanged()
@@ -115,8 +115,10 @@ namespace osu.Game.Overlays.Mods
 
         private void updateActiveState()
         {
-            Active.Value = new HashSet<Mod>(Preset.Value.Mods).SetEquals(selectedMods.Value.Where(mod => mod.Type != ModType.System));
+            Active.Value = new HashSet<Mod>(editablePresetMods()).SetEquals(selectedMods.Value.Where(mod => mod.Type != ModType.System));
         }
+
+        private IEnumerable<Mod> editablePresetMods() => Preset.Value.Mods.Select(mod => mod is ModDifficultyAdjust adjust ? adjust.WithEditableLimits() : mod);
 
         #region Filtering support
 

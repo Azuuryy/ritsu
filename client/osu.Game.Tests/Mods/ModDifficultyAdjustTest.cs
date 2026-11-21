@@ -137,8 +137,35 @@ namespace osu.Game.Tests.Mods
 
             Assert.Multiple(() =>
             {
-                Assert.That(mod.CircleSize.Value, Is.GreaterThanOrEqualTo(0).And.LessThanOrEqualTo(11));
+                Assert.That(mod.CircleSize.Value, Is.EqualTo(-5));
                 Assert.That(mod.ApproachRate.Value, Is.GreaterThanOrEqualTo(-10).And.LessThanOrEqualTo(11));
+            });
+        }
+
+        [Test]
+        public void TestExtendedOsuSettingsRoundTrip()
+        {
+            var ruleset = new OsuRuleset();
+            var adjust = new OsuModDifficultyAdjust();
+            adjust.ExtendedLimits.Value = true;
+            adjust.CircleSize.Value = 15;
+            adjust.ApproachRate.Value = 15;
+            adjust.OverallDifficulty.Value = -5;
+
+            var restored = (OsuModDifficultyAdjust)new APIMod(adjust).ToMod(ruleset);
+            Assert.That(restored.ExtendedLimits.Value, Is.True);
+            Assert.That(restored.CircleSize.Value, Is.EqualTo(15));
+            Assert.That(restored.ApproachRate.Value, Is.EqualTo(15));
+            Assert.That(restored.OverallDifficulty.Value, Is.EqualTo(-5));
+
+            var editable = (OsuModDifficultyAdjust)restored.WithEditableLimits();
+            Assert.Multiple(() =>
+            {
+                Assert.That(restored.ApproachRate.CurrentNumber.MaxValue, Is.EqualTo(13));
+                Assert.That(restored.ApproachRate.Value, Is.EqualTo(15));
+                Assert.That(editable.CircleSize.Value, Is.EqualTo(13));
+                Assert.That(editable.ApproachRate.Value, Is.EqualTo(13));
+                Assert.That(editable.OverallDifficulty.Value, Is.EqualTo(-5));
             });
         }
 

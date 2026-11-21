@@ -330,7 +330,7 @@ namespace osu.Game.Rulesets.Catch
                 Description = CatchRulesetStrings.ApproachRateDescription,
                 AdditionalMetrics =
                 [
-                    new RulesetBeatmapAttribute.AdditionalMetric(CatchRulesetStrings.FadeInTime, LocalisableString.Interpolate($@"{IBeatmapDifficultyInfo.DifficultyRangeInt(effectiveDifficulty.ApproachRate, CatchHitObject.PREEMPT_RANGE):#,0.##} ms"))
+                    new RulesetBeatmapAttribute.AdditionalMetric(CatchRulesetStrings.FadeInTime, LocalisableString.Interpolate($@"{Math.Max(1, IBeatmapDifficultyInfo.DifficultyRangeInt(effectiveDifficulty.ApproachRate, CatchHitObject.PREEMPT_RANGE)):#,0.##} ms"))
                 ]
             };
             yield return new RulesetBeatmapAttribute(SongSelectStrings.HPDrain, @"HP", originalDifficulty.DrainRate, effectiveDifficulty.DrainRate, 10)
