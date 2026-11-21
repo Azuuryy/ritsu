@@ -1084,9 +1084,6 @@ namespace osu.Game.Screens.Select
         [Resolved(canBeNull: true)]
         private osu.Game.Offline.RitsuProfileManager? ritsuProfiles { get; set; }
 
-        [Resolved(canBeNull: true)]
-        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
-
         /// <remarks>
         /// FOOTGUN WARNING: this being sorted on the realm side before detaching is IMPORTANT.
         /// realm supports sorting as an internal operation, and realm's implementation of string sorting does NOT match dotnet's
@@ -1101,14 +1098,19 @@ namespace osu.Game.Screens.Select
         {
             var topRankMapping = new Dictionary<Guid, ScoreRank>();
 
-            var allLocalScores = r.GetAllLocalScoresForUser(criteria.LocalUserId)
-                                  .Filter($@"{nameof(ScoreInfo.Ruleset)}.{nameof(RulesetInfo.ShortName)} == $0", criteria.Ruleset?.ShortName)
-                                  .OrderByDescending(s => s.TotalScore)
-                                  .ThenBy(s => s.Date);
+            var scores = ritsuProfiles == null
+                ? r.GetAllLocalScoresForUser(criteria.LocalUserId)
+                : r.All<ScoreInfo>().Filter($@"{nameof(ScoreInfo.BeatmapInfo)}.{nameof(BeatmapInfo.Hash)} == {nameof(ScoreInfo.BeatmapHash)}"
+                                            + $@" AND {nameof(ScoreInfo.DeletePending)} == false");
+
+            var allLocalScores = scores
+                                 .Filter($@"{nameof(ScoreInfo.Ruleset)}.{nameof(RulesetInfo.ShortName)} == $0", criteria.Ruleset?.ShortName)
+                                 .OrderByDescending(s => s.TotalScore)
+                                 .ThenBy(s => s.Date);
 
             foreach (var score in allLocalScores)
             {
-                if (!osu.Game.LocalPriority.RitsuProfileBridge.BelongsToActiveProfile(localProfiles, ritsuProfiles, score))
+                if (ritsuProfiles != null && !ritsuProfiles.BelongsToActiveProfile(score.ID))
                     continue;
                 Debug.Assert(score.BeatmapInfo != null);
 

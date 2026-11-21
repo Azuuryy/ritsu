@@ -243,7 +243,7 @@ namespace osu.Game
                 var ruleset = Ruleset.Value;
                 var realmAccess = Dependencies.Get<RealmAccess>();
 
-                Task.Run(() => LocalPriority.LocalProfileStatistics.CalculateBestPerformanceAsync(localProfile, ruleset, realmAccess, BeatmapManager, localProfiles.Store, default))
+                Task.Run(() => LocalPriority.LocalProfileStatistics.CalculateBestPerformanceAsync(localProfile, ruleset, realmAccess, BeatmapManager, localProfiles, default))
                     .ContinueWith(task => Schedule(() =>
                     {
                         if (task.IsFaulted || task.IsCanceled)

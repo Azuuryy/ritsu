@@ -63,8 +63,8 @@ namespace osu.Game.LocalPriority
             string sources = string.Join(@", ", owners.Select(describe).Distinct());
 
             BodyText = $@"The database already has plays saved under this name ({sources}). "
-                       + @"Syncing moves them to this profile in the database: they count for it (PP, ranks, statistics) and show its name, "
-                       + @"flag and picture everywhere. You can unsync them later from the profile's right-click menu, which gives them back.";
+                       + @"Syncing associates them with this Ritsu profile for PP, ranks and statistics. The original scores and replays stay intact. "
+                       + @"You can remove the association from the profile menu.";
 
             Buttons = new PopupDialogButton[]
             {

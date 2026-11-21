@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using osu.Game.Offline;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Game.Online.API;
@@ -78,6 +79,64 @@ namespace osu.Game.LocalPriority
         }
 
         #region Profiles
+
+        internal bool MigrateRitsuProfiles(RitsuProfileManager profiles)
+        {
+            if (data.RitsuProfilesMigrated)
+                return false;
+
+            bool hadProfiles = data.Profiles.Count > 0;
+
+            foreach (var old in profiles.LoadedExistingProfiles ? profiles.GetProfiles() : Array.Empty<RitsuProfile>())
+            {
+                var existing = data.Profiles.FirstOrDefault(profile => profile.Id == old.Id
+                    || string.Equals(profile.Name, old.Name, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    if (data.ActiveProfileId == existing.Id)
+                        data.ActiveProfileId = old.Id;
+
+                    existing.Id = old.Id;
+                    continue;
+                }
+
+                var profile = new LocalProfile
+                {
+                    Id = old.Id,
+                    UserId = allocateUserId(),
+                    Name = old.Name,
+                    Country = old.CountryCode,
+                    IncludeRelaxAutopilot = old.IncludeRelaxAutopilot,
+                    Created = DateTimeOffset.Now,
+                };
+
+                if (old.AvatarFileName != null && profiles.AvatarStorage.Exists(old.AvatarFileName)
+                    && profiles.AvatarStorage.GetStream(old.AvatarFileName) is Stream image)
+                {
+                    using (image)
+                    using (var target = AvatarStorage.CreateFileSafely(old.AvatarFileName))
+                        image.CopyTo(target);
+                    profile.AvatarFile = old.AvatarFileName;
+                }
+
+                data.Profiles.Add(profile);
+            }
+
+            if (!hadProfiles && profiles.LoadedExistingProfiles)
+                data.ActiveProfileId = profiles.ActiveProfileId;
+
+            foreach (var profile in data.Profiles)
+                profiles.EnsureProfile(profile.Id, profile.Name);
+
+            return true;
+        }
+
+        internal void CompleteRitsuMigration()
+        {
+            data.RitsuProfilesMigrated = true;
+            save();
+            Flush();
+        }
 
         public IReadOnlyList<LocalProfile> GetProfiles()
         {
@@ -289,17 +348,10 @@ namespace osu.Game.LocalPriority
             {
                 name = validateName(name, null);
 
-                var random = new Random();
-                int userId;
-
-                do
-                    userId = LocalPriorityPolicy.LOCAL_PROFILE_ID_CEILING - random.Next(0, 1_000_000_000);
-                while (data.Profiles.Any(p => p.UserId == userId));
-
                 profile = new LocalProfile
                 {
                     Id = Guid.NewGuid(),
-                    UserId = userId,
+                    UserId = allocateUserId(),
                     Name = name,
                     Country = country,
                     Created = DateTimeOffset.Now,
@@ -317,6 +369,16 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Creates a profile with a free default name ("Player 1", "Player 2", ...).
         /// </summary>
+        private int allocateUserId()
+        {
+            int id;
+            do
+                id = LocalPriorityPolicy.LOCAL_PROFILE_ID_CEILING - Random.Shared.Next(0, 1_000_000_000);
+            while (data.Profiles.Any(profile => profile.UserId == id));
+
+            return id;
+        }
+
         public LocalProfile CreateDefaultProfile()
         {
             string name;
@@ -375,67 +437,8 @@ namespace osu.Game.LocalPriority
             Changed?.Invoke();
         }
 
-        /// <summary>
-        /// Remembers scores that were synced (moved) to the profile, with who they belonged to before, so they can be given back.
-        /// Also forgets the given old-style linked owners (their scores are now moved instead of linked).
-        /// </summary>
-        public void AddSyncedScores(Guid id, IEnumerable<SyncedScore> scores, IEnumerable<LinkedScoreOwner>? migratedOwners = null)
-        {
-            lock (sync)
-            {
-                var profile = data.Profiles.FirstOrDefault(p => p.Id == id);
-                if (profile == null)
-                    return;
-
-                var known = profile.SyncedScores.Select(s => s.ScoreId).ToHashSet();
-                // Lists are replaced, never changed in place: profile copies handed out by the store share them.
-                profile.SyncedScores = profile.SyncedScores.Concat(scores.Where(s => known.Add(s.ScoreId)).Select(s => s.Clone())).ToList();
-
-                if (migratedOwners != null)
-                    profile.LinkedOwners = profile.LinkedOwners.Where(o => !migratedOwners.Contains(o)).ToList();
-
-                save();
-            }
-
-            Changed?.Invoke();
-        }
-
-        /// <summary>
-        /// Returns (and forgets) the profile's synced scores, to give them back to their original players.
-        /// </summary>
-        public IReadOnlyList<SyncedScore> TakeSyncedScores(Guid id)
-        {
-            SyncedScore[] taken;
-
-            lock (sync)
-            {
-                var profile = data.Profiles.FirstOrDefault(p => p.Id == id);
-                if (profile == null || (profile.SyncedScores.Count == 0 && profile.LinkedOwners.Count == 0))
-                    return Array.Empty<SyncedScore>();
-
-                taken = profile.SyncedScores.ToArray();
-                profile.SyncedScores = new List<SyncedScore>();
-                profile.LinkedOwners = new List<LinkedScoreOwner>();
-                save();
-            }
-
-            Changed?.Invoke();
-            return taken;
-        }
-
-        /// <summary>
-        /// Copies an image into the avatar folder and uses it as the profile picture. Pass null to remove the picture.
-        /// </summary>
-        /// <summary>
-        /// Profile pictures are stored at most this many pixels wide / high. Avatars are drawn small everywhere,
-        /// and full-size photos made every leaderboard reload decode megabytes of pixels (stutters when changing beatmaps).
-        /// </summary>
         public const int AVATAR_SIZE = 256;
 
-        /// <summary>
-        /// Saves an image as a profile picture file (scaled down to <see cref="AVATAR_SIZE"/>, as PNG) and returns its file name.
-        /// A fresh file name every time, so texture caches never show a stale picture.
-        /// </summary>
         private string writeAvatar(Guid id, Stream source)
         {
             string file = $@"{id:N}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.png";
@@ -689,19 +692,15 @@ namespace osu.Game.LocalPriority
             DateTime.TryParseExact(day, LocalPlayStatistics.DAY_FORMAT, System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out var date) && date < cutoff;
 
-        public void MovePlay(Guid scoreId, int fromUserId, Guid toProfileId, string ruleset, double playSeconds, IReadOnlyDictionary<HitResult, int> hits, string? beatmapHash, DateTimeOffset date)
+        public void MovePlay(Guid sourceProfileId, Guid toProfileId, string ruleset, double playSeconds, IReadOnlyDictionary<HitResult, int> hits, string? beatmapHash, DateTimeOffset date)
         {
             lock (sync)
             {
-                var source = data.Profiles.FirstOrDefault(p => p.UserId == fromUserId);
+                var source = data.Profiles.FirstOrDefault(p => p.Id == sourceProfileId);
 
                 if (source != null)
                 {
-                    int countBefore = source.SyncedScores.Count;
-                    source.SyncedScores = source.SyncedScores.Where(s => s.ScoreId != scoreId).ToList();
-                    int removedSynced = countBefore - source.SyncedScores.Count;
-
-                    if (removedSynced == 0 && source.Stats.TryGetValue(ruleset, out var sourceStats))
+                    if (source.Stats.TryGetValue(ruleset, out var sourceStats))
                     {
                         sourceStats.PlayCount = Math.Max(0, sourceStats.PlayCount - 1);
                         sourceStats.AddPlay(beatmapHash, date, -1);
@@ -932,6 +931,7 @@ namespace osu.Game.LocalPriority
         {
             public int Version { get; set; } = 1;
             public Guid? ActiveProfileId { get; set; }
+            public bool RitsuProfilesMigrated { get; set; }
             public List<LocalProfile> Profiles { get; set; } = new List<LocalProfile>();
 
             /// <summary>
@@ -956,14 +956,6 @@ namespace osu.Game.LocalPriority
         /// The (negative) user ID saved into every score set on this profile. Never changes, so renames keep their scores.
         /// </summary>
         public int UserId { get; set; }
-
-        /// <summary>
-        /// Whether the score is this profile's, the same way its statistics pick them: its user ID (also carried by synced and
-        /// transferred plays), or an old-style linked owner.
-        /// </summary>
-        public bool OwnsScore(osu.Game.Scoring.ScoreInfo score) =>
-            score.RealmUser.OnlineID == UserId
-            || LinkedOwners.Any(o => o.UserId == score.RealmUser.OnlineID && o.Username == score.RealmUser.Username);
 
         public string Name { get; set; } = string.Empty;
 

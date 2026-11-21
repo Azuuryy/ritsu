@@ -15,6 +15,7 @@ using osu.Framework.Threading;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
 using osu.Game.Extensions;
+using osu.Game.Offline;
 using osu.Game.Online.API;
 using osu.Game.Online.Leaderboards;
 using osu.Game.Rulesets;
@@ -32,6 +33,9 @@ namespace osu.Game.LocalPriority
     public partial class LocalProfileManager : Component
     {
         public LocalProfileStore Store { get; }
+        internal RitsuProfileManager Profiles { get; }
+        private readonly bool linkedStorage;
+        private readonly bool migratingProfiles;
 
         /// <summary>
         /// The active local profile, or null when the online account is in use. Updated on the update thread.
@@ -150,9 +154,12 @@ namespace osu.Game.LocalPriority
             AvatarTextures = new LargeTextureStore(renderer, host.CreateTextureLoaderStore(new StorageBackedResourceStore(Store.AvatarStorage)));
         }
 
-        public LocalProfileManager(LocalProfileStore store)
+        public LocalProfileManager(LocalProfileStore store, RitsuProfileManager profiles, bool linkedStorage, bool migratingProfiles)
         {
             Store = store;
+            Profiles = profiles;
+            this.linkedStorage = linkedStorage;
+            this.migratingProfiles = migratingProfiles;
             activeProfile.Value = store.ActiveProfile;
             LocalProfilesUseOnlineAccount.Value = store.LocalProfilesUseOnlineAccount;
             readOptions();
@@ -200,7 +207,10 @@ namespace osu.Game.LocalPriority
                 gameRuleset.BindValueChanged(_ => scheduleAutoSwitchCheck());
             }
 
-            migrateLinkedOwners();
+            if (migratingProfiles)
+                migrateProfileScores();
+
+            Profiles.Changed += onProfilesChanged;
 
             // Pictures saved at full size by older builds are scaled down once, off the update thread.
             System.Threading.Tasks.Task.Run(Store.ShrinkOversizedAvatars);
@@ -211,8 +221,7 @@ namespace osu.Game.LocalPriority
                 gameRuleset.BindValueChanged(_ => Scheduler.AddOnce(enforceModRules));
             }
 
-            applyToApi();
-            applyModRulesIfChanged();
+            applyStoreState();
         }
 
         private bool readingOptions;
@@ -664,58 +673,41 @@ namespace osu.Game.LocalPriority
                 applyStoreState();
         }
 
-        public LocalProfile CreateProfile(string name, CountryCode country = CountryCode.Unknown) => Store.CreateProfile(name, country);
+        public LocalProfile CreateProfile(string name, CountryCode country = CountryCode.Unknown) =>
+            mirrorNewProfile(Store.CreateProfile(name, country));
 
-        public LocalProfile CreateDefaultProfile() => Store.CreateDefaultProfile();
+        public LocalProfile CreateDefaultProfile() => mirrorNewProfile(Store.CreateDefaultProfile());
+
+        private LocalProfile mirrorNewProfile(LocalProfile profile)
+        {
+            try
+            {
+                Profiles.EnsureProfile(profile.Id, profile.Name);
+                return profile;
+            }
+            catch
+            {
+                Store.DeleteProfile(profile.Id);
+                throw;
+            }
+        }
 
         public void Rename(Guid id, string name)
         {
+            Profiles.RenameProfile(id, name);
             Store.RenameProfile(id, name);
-            updateScoresOf(id);
         }
 
         public void SetCountry(Guid id, CountryCode country)
         {
+            Profiles.SetCountry(id, country);
             Store.SetCountry(id, country);
-            updateScoresOf(id);
+            refreshScoreDisplays();
         }
 
         public void SetAvatar(Guid id, FileInfo? image)
         {
             Store.SetAvatar(id, image);
-            refreshScoreDisplays();
-        }
-
-        /// <summary>
-        /// The profile's own scores carry its name and flag in the database (that's what leaderboards and the official client show),
-        /// so they follow a rename or new flag.
-        /// </summary>
-        private void updateScoresOf(Guid id)
-        {
-            var profile = Store.GetProfile(id);
-
-            if (profile == null)
-                return;
-
-            realm.Write(r =>
-            {
-                var scores = r.All<ScoreInfo>()
-                              .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.OnlineID)} == $0", profile.UserId);
-
-                foreach (var score in scores)
-                {
-                    if (score.RealmUser.Username == profile.Name && score.RealmUser.CountryCode == profile.Country)
-                        continue;
-
-                    score.RealmUser = new Models.RealmUser
-                    {
-                        OnlineID = profile.UserId,
-                        Username = profile.Name,
-                        CountryCode = profile.Country,
-                    };
-                }
-            });
-
             refreshScoreDisplays();
         }
 
@@ -731,21 +723,22 @@ namespace osu.Game.LocalPriority
         public void SetRankingOptions(Guid id, bool? includeRelaxAutopilot = null, bool? countAllAsRanked = null) =>
             Store.SetRankingOptions(id, includeRelaxAutopilot, countAllAsRanked);
 
-        /// <summary>
-        /// Delete a profile. If it is the active one, the profile to its left becomes active (or the one to its right;
-        /// the online account only if no local profile is left).
-        /// </summary>
-        /// <param name="id">The profile to delete.</param>
-        /// <param name="deleteScores">Also delete every score set on this profile from the (shared) database.</param>
         public void Delete(Guid id, bool deleteScores = false)
         {
             var profiles = Store.GetProfiles();
-            int index = profiles.ToList().FindIndex(p => p.Id == id);
+            int index = profiles.ToList().FindIndex(profile => profile.Id == id);
 
             if (index < 0)
                 return;
 
-            var profile = profiles[index];
+            if (deleteScores)
+            {
+                var deletable = getProfileScores(id, localPlaysOnly: true);
+                if (deletable.Count > 0)
+                    scoreManager.Delete(deletable);
+            }
+
+            Profiles.RemoveMirroredProfile(id);
 
             if (activeProfile.Value?.Id == id)
             {
@@ -753,227 +746,126 @@ namespace osu.Game.LocalPriority
                 Store.SetActiveProfile(next?.Id);
             }
 
-            // Synced plays (set before the profile existed) go back to their original players first, so they survive the deletion.
-            UnsyncScores(id);
-
-            if (deleteScores)
-            {
-                // Only this profile's own scores: they carry its unique negative player ID.
-                realm.Run(r =>
-                {
-                    var scores = r.All<ScoreInfo>()
-                                  .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.OnlineID)} == $0 AND {nameof(ScoreInfo.DeletePending)} == false", profile.UserId)
-                                  .ToList();
-
-                    if (scores.Count > 0)
-                        scoreManager.Delete(scores);
-                });
-            }
-
             Store.DeleteProfile(id);
         }
 
-        /// <summary>
-        /// Scores already in the database under this profile's name (any letter case) that aren't the profile's own yet:
-        /// for example plays made on the online account or as a guest in osu!lazer, or plays of a deleted local profile.
-        /// Scores of other local profiles, or ones already synced to another profile, are left out.
-        /// </summary>
         public (IReadOnlyList<LinkedScoreOwner> Owners, int ScoreCount) FindSameNameScores(Guid profileId)
         {
             var profiles = Store.GetProfiles();
             var profile = profiles.FirstOrDefault(p => p.Id == profileId);
-
-            if (profile == null || string.IsNullOrWhiteSpace(profile.Name))
+            if (profile == null)
                 return (Array.Empty<LinkedScoreOwner>(), 0);
 
-            var otherProfileIds = profiles.Where(p => p.Id != profileId).Select(p => p.UserId).ToHashSet();
-            var takenOwners = profiles.SelectMany(p => p.LinkedOwners).ToHashSet();
-
-            var found = realm.Run(r => r.All<ScoreInfo>()
-                                        .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.Username)} ==[c] $0 AND {nameof(ScoreInfo.DeletePending)} == false", profile.Name)
-                                        .AsEnumerable()
-                                        .Select(s => new LinkedScoreOwner { UserId = s.RealmUser.OnlineID, Username = s.RealmUser.Username })
-                                        .ToList());
-
-            var candidates = found.Where(o => o.UserId != profile.UserId && !otherProfileIds.Contains(o.UserId) && !takenOwners.Contains(o)).ToList();
-
-            return (candidates.Distinct().ToArray(), candidates.Count);
+            var profileUserIds = profiles.Select(p => p.UserId).ToHashSet();
+            var candidates = realm.Run(r => r.All<ScoreInfo>()
+                .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.Username)} ==[c] $0 AND {nameof(ScoreInfo.DeletePending)} == false", profile.Name)
+                .AsEnumerable()
+                .Where(score => !profileUserIds.Contains(score.UserID) && !Profiles.GetScoreProfileId(score.ID).HasValue)
+                .Select(score => new LinkedScoreOwner { UserId = score.UserID, Username = score.RealmUser.Username })
+                .ToArray());
+            return (candidates.Distinct().ToArray(), candidates.Length);
         }
 
-        /// <summary>
-        /// Sync these players' scores to the profile: they are moved to it in the database (its user ID, name and flag),
-        /// so they show its picture and name everywhere and follow renames. Their original player is remembered for "unsync".
-        /// </summary>
-        public void SyncScores(Guid id, IEnumerable<LinkedScoreOwner> owners)
+        public void SyncScores(Guid id, IEnumerable<LinkedScoreOwner> owners) => associateOwners(id, owners, synced: true);
+
+        private void associateOwners(Guid id, IEnumerable<LinkedScoreOwner> owners, bool synced)
         {
-            var profile = Store.GetProfile(id);
+            var scores = realm.Run(r => owners.SelectMany(owner => r.All<ScoreInfo>()
+                .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.OnlineID)} == $0 AND {nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.Username)} == $1 AND {nameof(ScoreInfo.DeletePending)} == false",
+                    owner.UserId, owner.Username).AsEnumerable()).Detach());
+            Profiles.AssociateStoredScores(id, scores, synced);
+        }
 
-            if (profile == null)
-                return;
-
-            var ownerList = owners.ToList();
-            var synced = new List<SyncedScore>();
-
-            realm.Write(r =>
+        private void migrateProfileScores()
+        {
+            foreach (var profile in Store.GetProfiles())
             {
-                foreach (var owner in ownerList)
-                {
-                    if (owner.UserId == profile.UserId)
-                        continue;
+                var previouslySynced = profile.SyncedScores.Select(score => score.ScoreId).ToHashSet();
+                var scores = realm.Run(r => r.All<ScoreInfo>()
+                    .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.OnlineID)} == $0 AND {nameof(ScoreInfo.DeletePending)} == false", profile.UserId)
+                    .AsEnumerable().Detach());
 
-                    var scores = r.All<ScoreInfo>()
-                                  .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.OnlineID)} == $0 AND {nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.Username)} == $1",
-                                      owner.UserId, owner.Username)
-                                  .ToList();
-
-                    foreach (var score in scores)
-                    {
-                        synced.Add(new SyncedScore
-                        {
-                            ScoreId = score.ID,
-                            OriginalUserId = score.RealmUser.OnlineID,
-                            OriginalUsername = score.RealmUser.Username,
-                            OriginalCountry = score.RealmUser.CountryCode,
-                        });
-
-                        score.RealmUser = new Models.RealmUser
-                        {
-                            OnlineID = profile.UserId,
-                            Username = profile.Name,
-                            CountryCode = profile.Country,
-                        };
-                    }
-                }
-            });
-
-            Store.AddSyncedScores(id, synced, ownerList);
-            refreshScoreDisplays();
-        }
-
-        /// <summary>
-        /// What "delete profile and all its scores" affects: scores that would be deleted (set on the profile or transferred to it),
-        /// and synced plays that go back to their original player instead.
-        /// </summary>
-        public (int Deleted, int GivenBack) CountScoresForDeletion(Guid id)
-        {
-            var profile = Store.GetProfile(id);
-
-            if (profile == null)
-                return (0, 0);
-
-            var syncedIds = profile.SyncedScores.Select(s => s.ScoreId).ToHashSet();
-
-            var ownIds = realm.Run(r => r.All<ScoreInfo>()
-                                         .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.OnlineID)} == $0 AND {nameof(ScoreInfo.DeletePending)} == false", profile.UserId)
-                                         .AsEnumerable()
-                                         .Select(s => s.ID)
-                                         .ToList());
-
-            int givenBack = ownIds.Count(syncedIds.Contains);
-            return (ownIds.Count - givenBack, givenBack);
-        }
-
-        /// <summary>
-        /// Give the profile's synced scores back to the players they belonged to before syncing.
-        /// </summary>
-        public void UnsyncScores(Guid id)
-        {
-            var synced = Store.TakeSyncedScores(id);
-
-            if (synced.Count == 0)
-                return;
-
-            realm.Write(r =>
-            {
-                foreach (var s in synced)
-                {
-                    var score = r.Find<ScoreInfo>(s.ScoreId);
-
-                    if (score == null)
-                        continue;
-
-                    score.RealmUser = new Models.RealmUser
-                    {
-                        OnlineID = s.OriginalUserId,
-                        Username = s.OriginalUsername,
-                        CountryCode = s.OriginalCountry,
-                    };
-                }
-            });
-
-            refreshScoreDisplays();
-        }
-
-        /// <summary>
-        /// Profiles synced by older Ritsu builds only linked the plays; move those plays to the profile now (once).
-        /// </summary>
-        private void migrateLinkedOwners()
-        {
-            foreach (var profile in Store.GetProfiles().Where(p => p.LinkedOwners.Count > 0))
-            {
-                try
-                {
-                    SyncScores(profile.Id, profile.LinkedOwners);
-                }
-                catch (Exception e)
-                {
-                    osu.Framework.Logging.Logger.Error(e, $@"Ritsu: could not move synced plays to profile ""{profile.Name}"".");
-                }
+                Profiles.AssociateStoredScores(profile.Id, scores.Where(score => !previouslySynced.Contains(score.ID)).ToArray(), synced: false);
+                Profiles.AssociateStoredScores(profile.Id, scores.Where(score => previouslySynced.Contains(score.ID)).ToArray(), synced: true);
+                if (profile.LinkedOwners.Count > 0)
+                    associateOwners(profile.Id, profile.LinkedOwners, synced: true);
             }
+
+            Store.CompleteRitsuMigration();
         }
 
-        /// <summary>
-        /// Moves a score to another local profile: the score's player in the database becomes that profile
-        /// (its user ID, name and flag), so it counts there everywhere, including local leaderboards.
-        /// </summary>
+        public (int Deleted, int Preserved) CountScoresForDeletion(Guid id)
+        {
+            var ids = Profiles.GetProfilePlayIds(id);
+            return realm.Run(r =>
+            {
+                int deleted = 0;
+                int preserved = 0;
+                foreach (var item in ids)
+                {
+                    if (r.Find<ScoreInfo>(item.Key) is not { DeletePending: false })
+                        continue;
+
+                    if (!linkedStorage && item.Value)
+                        deleted++;
+                    else
+                        preserved++;
+                }
+
+                return (deleted, preserved);
+            });
+        }
+
+        public bool CanDeleteScore(Guid profileId, Guid scoreId) =>
+            !linkedStorage && Profiles.IsLocalPlay(profileId, scoreId);
+
+        public void RemoveScore(Guid profileId, ScoreInfo score)
+        {
+            if (Profiles.GetScoreProfileId(score.ID) != profileId)
+                return;
+
+            if (CanDeleteScore(profileId, score.ID))
+                scoreManager.Delete(score);
+
+            Profiles.RemoveScoreAssociations(profileId, score.ID);
+        }
+
+        public void UnsyncScores(Guid id) => Profiles.RemoveScoreAssociations(id);
+
         public void TransferScore(ScoreInfo score, Guid targetProfileId)
         {
-            var target = Store.GetProfile(targetProfileId);
-
-            if (target == null)
+            if (Store.GetProfile(targetProfileId) == null)
                 return;
 
-            int? sourceUserId = null;
-            string? rulesetName = null;
-            double seconds = 0;
-            Dictionary<osu.Game.Rulesets.Scoring.HitResult, int>? hits = null;
-            string? beatmapHash = null;
-            DateTimeOffset scoreDate = DateTimeOffset.Now;
-
-            realm.Write(r =>
+            Guid? source = Profiles.GetScoreProfileId(score.ID);
+            if (!source.HasValue)
             {
-                var databased = r.Find<ScoreInfo>(score.ID);
+                Profiles.AssignStoredScore(score.ID, targetProfileId);
+                return;
+            }
 
-                if (databased == null || databased.RealmUser.OnlineID == target.UserId)
-                    return;
+            bool trackPlay = Profiles.IsLocalPlay(source.Value, score.ID);
+            if (!Profiles.TransferScore(score.ID, source.Value, targetProfileId) || !trackPlay)
+                return;
 
-                sourceUserId = databased.RealmUser.OnlineID;
-                rulesetName = databased.Ruleset.ShortName;
-                hits = new Dictionary<osu.Game.Rulesets.Scoring.HitResult, int>(databased.Statistics);
-                beatmapHash = databased.BeatmapInfo?.MD5Hash; // plays are counted per beatmap MD5 hash (scores keep a different hash)
-                scoreDate = databased.Date;
-
-                double rate = ModUtils.CalculateRateWithMods(databased.Mods);
-                if (databased.BeatmapInfo != null && rate > 0)
-                    seconds = databased.BeatmapInfo.Length / 1000 / rate;
-
-                databased.RealmUser = new Models.RealmUser
-                {
-                    OnlineID = target.UserId,
-                    Username = target.Name,
-                    CountryCode = target.Country,
-                };
-            });
-
-            // The play moves with the score: +1 play count (its hits and play time) for the profile it goes to,
-            // and the same taken off the local profile it came from.
-            if (sourceUserId != null && rulesetName != null && hits != null)
-                Store.MovePlay(score.ID, sourceUserId.Value, target.Id, rulesetName, seconds, hits, beatmapHash, scoreDate);
-
-            // The profile page rebuilds on a revision change; the song select leaderboard is fetched again so the new name shows right away.
-            Schedule(() => revision.Value++);
-            refreshScoreDisplays();
+            double rate = ModUtils.CalculateRateWithMods(score.Mods);
+            double seconds = score.BeatmapInfo != null && rate > 0 ? score.BeatmapInfo.Length / 1000 / rate : 0;
+            Store.MovePlay(source.Value, targetProfileId, score.Ruleset.ShortName, seconds,
+                new Dictionary<osu.Game.Rulesets.Scoring.HitResult, int>(score.Statistics), score.BeatmapInfo?.MD5Hash, score.Date);
         }
+
+        private List<ScoreInfo> getProfileScores(Guid profileId, bool localPlaysOnly = false)
+        {
+            var ids = Profiles.GetProfilePlayIds(profileId);
+            return realm.Run(r => ids.Where(item => !localPlaysOnly || !linkedStorage && item.Value)
+                .Select(item => r.Find<ScoreInfo>(item.Key))
+                .OfType<ScoreInfo>().Where(score => !score.DeletePending).Detach());
+        }
+
+        private HashSet<Guid> getDeletableScoreIds() => linkedStorage
+            ? new HashSet<Guid>()
+            : Store.GetProfiles().SelectMany(profile => Profiles.GetProfilePlayIds(profile.Id))
+                   .Where(item => item.Value).Select(item => item.Key).ToHashSet();
 
         #region Scores that can't be calculated
 
@@ -1002,11 +894,11 @@ namespace osu.Game.LocalPriority
 
         private List<ScoreInfo> uncalculableScores(Realm r)
         {
-            var profileUserIds = Store.GetProfiles().Select(p => p.UserId).ToHashSet();
+            var deletableIds = getDeletableScoreIds();
 
             return Store.GetFailedCalculations()
                         .Select(id => r.Find<ScoreInfo>(id))
-                        .Where(s => s != null && !s.DeletePending && profileUserIds.Contains(s.RealmUser.OnlineID))
+                        .Where(s => s != null && !s.DeletePending && deletableIds.Contains(s.ID))
                         .ToList()!;
         }
 
@@ -1063,13 +955,13 @@ namespace osu.Game.LocalPriority
 
         private List<ScoreInfo> scoresBefore2000(Realm r)
         {
-            var profileUserIds = Store.GetProfiles().Select(p => p.UserId).ToHashSet();
+            var deletableIds = getDeletableScoreIds();
             var cutoff = new DateTimeOffset(OLDEST_VALID_PLAY_DATE, TimeSpan.Zero);
 
             return r.All<ScoreInfo>()
                     .Filter($@"{nameof(ScoreInfo.Date)} < $0 AND {nameof(ScoreInfo.DeletePending)} == false", cutoff)
                     .AsEnumerable()
-                    .Where(s => profileUserIds.Contains(s.RealmUser.OnlineID))
+                    .Where(s => deletableIds.Contains(s.ID))
                     .ToList();
         }
 
@@ -1161,7 +1053,8 @@ namespace osu.Game.LocalPriority
                     return;
                 }
 
-                var imported = (await scoreManager.Import(notification, files.Select(f => new ImportTask(f)).ToArray()).ConfigureAwait(false))
+                var imported = (await scoreManager.Import(notification, files.Select(f => new ImportTask(f)).ToArray(),
+                    new ImportParameters { PreserveExisting = true }).ConfigureAwait(false))
                                .Select(live => live.ID)
                                .ToArray();
 
@@ -1176,49 +1069,13 @@ namespace osu.Game.LocalPriority
             if (profile == null || found == 0)
                 return;
 
-            var profileUserIds = Store.GetProfiles().Select(p => p.UserId).ToHashSet();
-            var synced = new List<SyncedScore>();
-            int alreadyOnProfiles = 0;
+            var scores = realm.Run(r => importedIds.Distinct().Select(id => r.Find<ScoreInfo>(id))
+                .OfType<ScoreInfo>().Where(score => !score.DeletePending).Detach());
+            var available = scores.Where(score => !Profiles.GetScoreProfileId(score.ID).HasValue).ToArray();
+            Profiles.AssociateStoredScores(profileId, available, synced: true);
 
-            realm.Write(r =>
-            {
-                foreach (var id in importedIds.Distinct())
-                {
-                    var score = r.Find<ScoreInfo>(id);
-
-                    if (score == null)
-                        continue;
-
-                    // Already imported before and on a local profile (this one or another): leave it there.
-                    if (profileUserIds.Contains(score.RealmUser.OnlineID))
-                    {
-                        alreadyOnProfiles++;
-                        continue;
-                    }
-
-                    synced.Add(new SyncedScore
-                    {
-                        ScoreId = score.ID,
-                        OriginalUserId = score.RealmUser.OnlineID,
-                        OriginalUsername = score.RealmUser.Username,
-                        OriginalCountry = score.RealmUser.CountryCode,
-                    });
-
-                    score.RealmUser = new Models.RealmUser
-                    {
-                        OnlineID = profile.UserId,
-                        Username = profile.Name,
-                        CountryCode = profile.Country,
-                    };
-                }
-            });
-
-            if (synced.Count > 0)
-                Store.AddSyncedScores(profileId, synced);
-
-            refreshScoreDisplays();
-
-            var parts = new List<string> { $@"{synced.Count:N0} of {found:N0} replays imported as ""{profile.Name}""." };
+            int alreadyOnProfiles = scores.Count - available.Length;
+            var parts = new List<string> { $@"{available.Length:N0} of {found:N0} replays imported as ""{profile.Name}""." };
 
             if (alreadyOnProfiles > 0)
                 parts.Add($@"{alreadyOnProfiles:N0} were already on a local profile.");
@@ -1285,7 +1142,7 @@ namespace osu.Game.LocalPriority
                         scores = new List<ScoreInfo>();
                     else
                     {
-                        var statistics = await LocalProfileStatistics.CalculateAsync(profile, ruleset, realm, beatmapManager, Store, token).ConfigureAwait(false);
+                        var statistics = await LocalProfileStatistics.CalculateAsync(profile, ruleset, realm, beatmapManager, this, token).ConfigureAwait(false);
                         var top = statistics.BestScores.Where(s => s.CountsForPerformance).Take(TOP_REPLAYS_EXPORT_COUNT).ToArray();
 
                         LocalScoreEntry.Load(top, realm);
@@ -1294,12 +1151,7 @@ namespace osu.Game.LocalPriority
                 }
                 else
                 {
-                    scores = realm.Run(r => r.All<ScoreInfo>()
-                                             .Filter($@"{nameof(ScoreInfo.User)}.{nameof(Models.RealmUser.OnlineID)} == $0 AND {nameof(ScoreInfo.DeletePending)} == false", profile.UserId)
-                                             .AsEnumerable()
-                                             .OrderBy(s => s.Date)
-                                             .Select(s => s.Detach())
-                                             .ToList());
+                    scores = getProfileScores(profile.Id).OrderBy(score => score.Date).ToList();
                 }
 
                 if (scores.Count == 0)
@@ -1385,9 +1237,19 @@ namespace osu.Game.LocalPriority
 
         private void onStoreChanged() => Schedule(applyStoreState);
 
+        private void onProfilesChanged() => Schedule(() =>
+        {
+            revision.Value++;
+            refreshScoreDisplays();
+        });
+
         private void applyStoreState()
         {
-            activeProfile.Value = Store.ActiveProfile;
+            var profile = Store.ActiveProfile;
+            if (profile != null && Profiles.ActiveProfileId != profile.Id)
+                Profiles.SelectProfile(profile.Id);
+
+            activeProfile.Value = profile;
             LocalProfilesUseOnlineAccount.Value = Store.LocalProfilesUseOnlineAccount;
             readOptions();
             updateAutoSwitchActive();
@@ -1421,6 +1283,7 @@ namespace osu.Game.LocalPriority
         protected override void Dispose(bool isDisposing)
         {
             Store.Changed -= onStoreChanged;
+            Profiles.Changed -= onProfilesChanged;
             Store.CalculationsFailed -= onCalculationsFailed;
             Store.Flush();
 

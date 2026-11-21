@@ -496,12 +496,12 @@ namespace osu.Game.LocalPriority
 
             Task.Run(async () =>
             {
-                var statistics = await LocalProfileStatistics.CalculateAsync(profile, mode, realm, beatmaps, manager.Store, token).ConfigureAwait(false);
+                var statistics = await LocalProfileStatistics.CalculateAsync(profile, mode, realm, beatmaps, manager, token).ConfigureAwait(false);
                 var ppByProfile = new Dictionary<Guid, double> { [profile.Id] = statistics.PP };
 
                 // Other profiles only need their PP total (chips, local ranking).
                 foreach (var other in allProfiles.Where(p => p.Id != profile.Id))
-                    ppByProfile[other.Id] = await LocalProfileStatistics.CalculatePerformanceAsync(other, mode, realm, beatmaps, manager.Store, token).ConfigureAwait(false);
+                    ppByProfile[other.Id] = await LocalProfileStatistics.CalculatePerformanceAsync(other, mode, realm, beatmaps, manager, token).ConfigureAwait(false);
 
                 return (statistics, ppByProfile);
             }, token).ContinueWith(task => Schedule(() =>
@@ -586,7 +586,7 @@ namespace osu.Game.LocalPriority
             // Default order: Scores first, then Historical; each profile can drag its own order, like supporters can.
             var profileSections = new ProfileSection[]
             {
-                new ScoresPanel(stats, score => presentScore(score, ScorePresentType.Results), scoreMenu, expandedLists),
+                new ScoresPanel(stats, score => presentScore(score, ScorePresentType.Results), score => scoreMenu(profile.Id, score), expandedLists),
                 new HistoricalPanel(stats, presentBeatmap, expandedLists),
             };
 
@@ -618,7 +618,7 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Right-click menu of a score row.
         /// </summary>
-        private MenuItem[] scoreMenu(ScoreInfo score)
+        private MenuItem[] scoreMenu(Guid profileId, ScoreInfo score)
         {
             var items = new List<MenuItem>
             {
@@ -639,7 +639,13 @@ namespace osu.Game.LocalPriority
             items.Add(LocalProfileScoreTransfer.CreateMenuItem(manager, score));
             items.Add(LocalPerformanceExclusions.CreateScoreMenuItem(manager, score));
 
-            items.Add(new OsuMenuItem(@"Delete score", MenuItemType.Destructive, () => dialogs?.Push(new DeleteScoreDialog(score, invalidateStatistics))));
+            bool deleteScore = manager.CanDeleteScore(profileId, score.ID);
+            items.Add(new OsuMenuItem(deleteScore ? @"Delete score" : @"Remove score from profile", MenuItemType.Destructive,
+                () => dialogs?.Push(new DeleteScoreDialog(score, deleteScore, () =>
+                {
+                    manager.RemoveScore(profileId, score);
+                    invalidateStatistics();
+                }))));
 
             return items.ToArray();
         }
@@ -725,24 +731,28 @@ namespace osu.Game.LocalPriority
         {
             private readonly ScoreInfo score;
             private readonly Action deleted;
+            private readonly bool deleteScore;
 
-            public DeleteScoreDialog(ScoreInfo score, Action deleted)
+            public DeleteScoreDialog(ScoreInfo score, bool deleteScore, Action deleted)
             {
                 this.score = score;
                 this.deleted = deleted;
+                this.deleteScore = deleteScore;
             }
 
             [BackgroundDependencyLoader]
-            private void load(ScoreManager scoreManager)
+            private void load()
             {
                 string beatmap = score.BeatmapInfo != null ? $@"{score.BeatmapInfo.Metadata.GetDisplayTitle()} [{score.BeatmapInfo.DifficultyName}]" : @"(beatmap not found)";
 
                 BodyText = $@"{beatmap}{Environment.NewLine}{score.DisplayAccuracy}, {score.Rank.GetDescription()}, {score.TotalScore:N0}";
-                DangerousAction = () =>
+                if (!deleteScore)
                 {
-                    scoreManager.Delete(score);
-                    deleted();
-                };
+                    HeaderText = @"Remove score from this profile?";
+                    BodyText += Environment.NewLine + @"The original score and replay stay in the database.";
+                }
+
+                DangerousAction = deleted;
             }
         }
 
@@ -829,8 +839,11 @@ namespace osu.Game.LocalPriority
             [Resolved]
             private IOverlayManager? overlayManager { get; set; }
 
+            [Resolved]
+            private LocalProfileManager manager { get; set; } = null!;
+
             [BackgroundDependencyLoader]
-            private void load(OverlayColourProvider colours, LocalProfileManager manager)
+            private void load(OverlayColourProvider colours)
             {
                 // One row of profiles; with many profiles it scrolls sideways (wheel or drag), fading out towards the edges.
                 var chips = new FillFlowContainer
@@ -1127,10 +1140,11 @@ namespace osu.Game.LocalPriority
                 infoText.AddText(@"     Last played ");
                 infoText.AddText(lastPlayed != null ? lastPlayed.Value.Humanize() : @"never", t => t.Font = t.Font.With(weight: FontWeight.Bold));
 
-                if (profile.SyncedScores.Count > 0)
+                int synced = manager.Profiles.CountSyncedScores(profile.Id);
+                if (synced > 0)
                 {
                     infoText.AddText(@"     Synced ");
-                    infoText.AddText($@"{profile.SyncedScores.Count:N0} plays", t => t.Font = t.Font.With(weight: FontWeight.Bold));
+                    infoText.AddText($@"{synced:N0} plays", t => t.Font = t.Font.With(weight: FontWeight.Bold));
                 }
 
                 infoText.AddText(@"     Local profile, ");

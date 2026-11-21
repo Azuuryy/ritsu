@@ -31,9 +31,10 @@ namespace osu.Game.LocalPriority
                     () => LocalProfileSyncDialog.Offer(manager, dialogs, id, tellWhenNoneFound: true)),
             };
 
-            if (profile.SyncedScores.Count > 0 || profile.LinkedOwners.Count > 0)
+            int synced = manager.Profiles.CountSyncedScores(id);
+            if (synced > 0)
             {
-                menu.Add(new OsuMenuItem($@"Unsync {profile.SyncedScores.Count:N0} synced play(s) (give them back to their original player)", MenuItemType.Standard,
+                menu.Add(new OsuMenuItem($@"Unsync {synced:N0} synced play(s) from this profile", MenuItemType.Standard,
                     () => manager.UnsyncScores(id)));
             }
 

@@ -14,7 +14,8 @@ namespace osu.Game.LocalPriority
     {
         public static MenuItem CreateMenuItem(LocalProfileManager manager, ScoreInfo score, Action? transferred = null)
         {
-            var targets = manager.GetProfiles().Where(p => p.UserId != score.UserID).ToArray();
+            Guid? sourceId = manager.Profiles.GetScoreProfileId(score.ID);
+            var targets = manager.GetProfiles().Where(p => p.Id != sourceId).ToArray();
 
             MenuItem[] items = targets.Length == 0
                 ? new MenuItem[] { new OsuMenuItem(@"No other local profiles", MenuItemType.Standard) { Action = { Disabled = true } } }

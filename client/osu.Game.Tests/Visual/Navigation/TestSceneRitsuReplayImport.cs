@@ -13,6 +13,7 @@ using osu.Framework.Testing;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
 using osu.Game.Offline;
+using osu.Game.LocalPriority;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Overlays.BeatmapListing;
 using osu.Game.Online.API;
@@ -196,6 +197,52 @@ namespace osu.Game.Tests.Visual.Navigation
                 Assert.That(operation.GetResultSafely().AlreadyAssociated, Is.True);
                 File.Delete(path);
             });
+        }
+
+        [Test]
+        public void TestTransferUsesRitsuOwnershipAndPreservesOriginalOnDeletion()
+        {
+            LocalProfileManager manager = null!;
+            LocalProfile source = null!;
+            LocalProfile target = null!;
+            Guid scoreId = Guid.Empty;
+            string ruleset = string.Empty;
+
+            AddStep("create profiles and a score from the shared library", () =>
+            {
+                manager = Game.Dependencies.Get<LocalProfileManager>();
+                source = manager.CreateProfile("Source");
+                target = manager.CreateProfile("Destination");
+                var imported = Game.BeatmapManager.Import(new ImportTask(TestResources.GetQuickTestBeatmapForImport())).GetResultSafely();
+                var beatmap = Game.BeatmapManager.GetAllUsableBeatmapSets().Single(set => set.ID == imported.ID).Beatmaps[0].Detach();
+                var score = TestResources.CreateTestScoreInfo(beatmap);
+                ruleset = score.Ruleset.ShortName;
+                score.RealmUser.OnlineID = 123;
+                score.RealmUser.Username = "Original";
+                Game.Realm.Write(realm =>
+                {
+                    score.BeatmapInfo = realm.Find<BeatmapInfo>(beatmap.ID);
+                    score.Ruleset = realm.Find<RulesetInfo>(score.Ruleset.ShortName)!;
+                    realm.Add(score);
+                    scoreId = score.ID;
+                });
+                Assert.That(manager.Profiles.AssignStoredScore(scoreId, source.Id), Is.True);
+            });
+
+            AddStep("transfer and switch to the destination", () =>
+            {
+                manager.TransferScore(Game.ScoreManager.Query(score => score.ID == scoreId)!, target.Id);
+                manager.Switch(target.Id);
+            });
+            AddAssert("history and the local leaderboard both find the destination owner", () =>
+                manager.Profiles.BelongsToActiveProfile(scoreId)
+                && manager.Profiles.GetScores(source.Id, ruleset).Count == 0
+                && manager.Profiles.GetScores(target.Id, ruleset).Select(score => score.ID).SequenceEqual(new[] { scoreId }));
+
+            AddStep("delete the destination with its scores", () => manager.Delete(target.Id, deleteScores: true));
+            AddAssert("the shared score retains its original owner", () =>
+                Game.ScoreManager.Query(score => score.ID == scoreId) is { DeletePending: false, RealmUser: { OnlineID: 123, Username: "Original" } }
+                && manager.Profiles.GetScoreProfileId(scoreId) == null);
         }
 
         [Test]

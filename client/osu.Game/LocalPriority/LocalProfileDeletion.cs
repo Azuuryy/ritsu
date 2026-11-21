@@ -16,6 +16,8 @@ namespace osu.Game.LocalPriority
         /// </summary>
         public static void Request(LocalProfileManager manager, IDialogOverlay? dialogs, Guid id, string name, bool withScores)
         {
+            var counts = manager.CountScoresForDeletion(id);
+            withScores = withScores && counts.Deleted > 0;
             bool skipConfirmation = withScores ? manager.DeleteWithScoresWithoutAsking.Value : manager.DeleteKeepingScoresWithoutAsking.Value;
 
             if (skipConfirmation || dialogs == null)
@@ -24,23 +26,16 @@ namespace osu.Game.LocalPriority
                 return;
             }
 
-            var counts = withScores ? manager.CountScoresForDeletion(id) : (0, 0);
-            dialogs.Push(new ConfirmDialog(name, withScores, counts.Item1, counts.Item2, () => manager.Delete(id, withScores)));
+            dialogs.Push(new ConfirmDialog(name, withScores, counts.Deleted, counts.Preserved, () => manager.Delete(id, withScores)));
         }
 
         private static string plays(int count) => count == 1 ? @"1 score" : $@"{count:N0} scores";
 
-        /// <summary>
-        /// What happens to the scores when a profile is deleted with them.
-        /// </summary>
-        private static string withScoresText(int deleted, int givenBack)
+        private static string withScoresText(int deleted, int preserved)
         {
-            string text = deleted == 0
-                ? @"The profile has no scores of its own to delete."
-                : $@"{plays(deleted)} set on this profile or transferred to it will be removed from the database. This can't be undone.";
-
-            if (givenBack > 0)
-                text += $@" {plays(givenBack)} synced from before the profile existed go back to the player they belonged to.";
+            string text = $@"{plays(deleted)} recorded in Ritsu will be permanently removed.";
+            if (preserved > 0)
+                text += $@" {plays(preserved)} will stay in the database.";
 
             return text;
         }
@@ -58,30 +53,32 @@ namespace osu.Game.LocalPriority
 
             // One question only: both delete buttons are hold-to-confirm, so "with scores" doesn't ask a second time.
             var counts = manager.CountScoresForDeletion(id);
-            dialogs.Push(new ChoiceDialog(name, counts.Deleted, counts.GivenBack, () => manager.Delete(id), () => manager.Delete(id, true)));
+            if (counts.Deleted == 0)
+                dialogs.Push(new ConfirmDialog(name, false, 0, counts.Preserved, () => manager.Delete(id)));
+            else
+                dialogs.Push(new ChoiceDialog(name, counts.Deleted, counts.Preserved, () => manager.Delete(id), () => manager.Delete(id, true)));
         }
 
         public partial class ConfirmDialog : DangerousActionDialog
         {
-            public ConfirmDialog(string name, bool withScores, int deletedScores, int givenBackScores, Action delete)
+            public ConfirmDialog(string name, bool withScores, int deletedScores, int preservedScores, Action delete)
             {
-                HeaderText = withScores ? $@"Delete ""{name}"" and all its scores?" : $@"Delete ""{name}""?";
+                HeaderText = withScores ? $@"Delete ""{name}"" and its Ritsu scores?" : $@"Delete ""{name}""?";
                 BodyText = withScores
-                    ? withScoresText(deletedScores, givenBackScores)
-                    : @"The profile is removed; its scores stay in the database (shown under its name on local leaderboards).";
+                    ? withScoresText(deletedScores, preservedScores)
+                    : @"The profile and its Ritsu score associations are removed. All original scores and replays stay in the database.";
                 DangerousAction = delete;
             }
         }
 
         private partial class ChoiceDialog : PopupDialog
         {
-            public ChoiceDialog(string name, int deletedScores, int givenBackScores, Action deleteKeepingScores, Action deleteWithScores)
+            public ChoiceDialog(string name, int deletedScores, int preservedScores, Action deleteKeepingScores, Action deleteWithScores)
             {
                 Icon = FontAwesome.Solid.TrashAlt;
                 HeaderText = $@"Delete ""{name}""?";
-                BodyText = @"Keep its scores in the database (shown under its name on local leaderboards), or delete them too? "
-                           + (deletedScores > 0 ? $@"Deleting them removes {plays(deletedScores)} for good." : @"It has no scores of its own.")
-                           + (givenBackScores > 0 ? $@" {plays(givenBackScores)} synced from before the profile existed go back to their original player either way." : string.Empty);
+                BodyText = @"Keep its scores in the database, or delete the eligible scores recorded in Ritsu? "
+                           + withScoresText(deletedScores, preservedScores);
 
                 Buttons = new PopupDialogButton[]
                 {
@@ -92,7 +89,7 @@ namespace osu.Game.LocalPriority
                     },
                     new PopupDialogDangerousButton
                     {
-                        Text = @"Delete profile and all its scores",
+                        Text = @"Delete profile and its Ritsu scores",
                         Action = deleteWithScores,
                     },
                     new PopupDialogCancelButton

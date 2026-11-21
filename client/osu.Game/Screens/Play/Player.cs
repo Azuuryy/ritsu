@@ -1478,16 +1478,16 @@ namespace osu.Game.Screens.Play
         /// <returns>The <see cref="Scoring.Score"/>.</returns>
         protected virtual Score CreateScore(IBeatmap beatmap)
         {
-            var profile = ritsuProfiles?.GetActiveProfile();
-            localProfileId = profile?.Id;
+            var localProfiles = game.Dependencies.Get<osu.Game.LocalPriority.LocalProfileManager>();
+            var localProfile = localProfiles?.ActiveProfile.Value;
+            var profile = localProfiles == null ? ritsuProfiles?.GetActiveProfile() : null;
+            localProfileId = localProfile?.Id ?? profile?.Id;
             return new Score
             {
                 ScoreInfo = new ScoreInfo
                 {
-                    // osu!local: an active local profile is the player (its scores are counted by user ID); otherwise Ritsu's profile.
-                    User = profile == null || osu.Game.LocalPriority.LocalPriorityPolicy.IsOfflineProfileUser(api.LocalUser.Value)
-                        ? api.LocalUser.Value
-                        : osu.Game.Offline.RitsuProfileManager.CreateUser(profile),
+                    User = localProfile?.ToUser()
+                           ?? (profile == null ? api.LocalUser.Value : osu.Game.Offline.RitsuProfileManager.CreateUser(profile)),
                     ClientVersion = game.Version,
                 },
             };
@@ -1555,7 +1555,8 @@ namespace osu.Game.Screens.Play
             // A reused database score may predate Ritsu; never associate it automatically.
             if (imported != null && score.ScoreInfo.ID == newScoreId && localProfileId.HasValue && ritsuProfiles != null)
             {
-                ritsuProfiles.AssociateNewScore(score.ScoreInfo.ID, localProfileId.Value, score.ScoreInfo.Ruleset.ShortName, calculatorVersion, score.ScoreInfo.ModsJson);
+                ritsuProfiles.AssociateNewScore(score.ScoreInfo.ID, localProfileId.Value, score.ScoreInfo.Ruleset.ShortName, calculatorVersion, score.ScoreInfo.ModsJson,
+                    localPlay: osu.Game.LocalPriority.LocalPriorityPolicy.IsOfflineProfileUser(score.ScoreInfo.User));
                 LocalScoreWasAssociated = true;
             }
         }

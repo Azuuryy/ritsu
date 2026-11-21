@@ -340,27 +340,28 @@ namespace osu.Game
 
             // osu!local profiles live in "osu-local/" next to the database. They are loaded before the API is created,
             // so the game starts in the profile that was active when it was last closed.
+            var ritsuProfiles = new Offline.RitsuProfileManager(Storage, realm);
+            dependencies.Cache(ritsuProfiles);
+
             var localProfileStore = new LocalProfileStore(Storage);
+            bool migratingProfiles = localProfileStore.MigrateRitsuProfiles(ritsuProfiles);
+            bool linkedStorage = Storage is OsuStorage profileStorage
+                                 && !string.IsNullOrEmpty(profileStorage.CustomStoragePath)
+                                 && profileStorage.Error != OsuStorageError.NotAccessible;
             LocalPriorityPolicy.LocalProfilesUseOnlineAccount = false;
             LocalPriorityPolicy.SetInitialLocalUser(localProfileStore.ActiveProfile?.ToUser());
-            dependencies.Cache(localProfileManager = new LocalProfileManager(localProfileStore));
+            dependencies.Cache(localProfileManager = new LocalProfileManager(localProfileStore, ritsuProfiles, linkedStorage, migratingProfiles));
             localProfileManager.BindGameMods(SelectedMods);
 
             dependencies.CacheAs(API ??= new Offline.OfflineAPIProvider(LocalConfig));
 
-            var ritsuProfiles = new Offline.RitsuProfileManager(Storage, realm);
-            dependencies.Cache(ritsuProfiles);
             if (Offline.RitsuOffline.Enabled)
             {
                 var libraryStorage = Storage is OsuStorage osuStorage ? Host.GetStorage(osuStorage.DefaultStoragePath) : Storage;
                 dependencies.Cache(new Library.RitsuLibrary(libraryStorage));
             }
-            if (API is Offline.OfflineAPIProvider offlineProfilesApi)
-            {
+            if (API is Offline.OfflineAPIProvider)
                 largeStore.AddTextureSource(Host.CreateTextureLoaderStore(new StorageBackedResourceStore(ritsuProfiles.AvatarStorage)));
-                // osu!local profiles decide who is playing; Ritsu's profile data follows the active osu!local profile.
-                localProfileManager.ActiveProfile.BindValueChanged(p => Schedule(() => RitsuProfileBridge.Follow(ritsuProfiles, p.NewValue)), true);
-            }
 
             var defaultBeatmap = new DummyWorkingBeatmap(Audio, Textures);
 

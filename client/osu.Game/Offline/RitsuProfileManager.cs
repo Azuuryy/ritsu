@@ -28,6 +28,8 @@ namespace osu.Game.Offline
         private readonly RealmAccess realm;
         private readonly ProfileStore data;
 
+        internal bool LoadedExistingProfiles { get; }
+
         public event Action? Changed;
         public event Action<string>? ActiveProfileChanged;
 
@@ -37,7 +39,9 @@ namespace osu.Game.Offline
             avatarStorage = this.storage.GetStorageForDirectory("avatars");
             this.realm = realm;
 
-            if (this.storage.Exists(filename))
+            LoadedExistingProfiles = this.storage.Exists(filename);
+
+            if (LoadedExistingProfiles)
             {
                 using (var stream = this.storage.GetStream(filename, FileAccess.Read, FileMode.Open))
                 using (var reader = new StreamReader(stream))
@@ -177,6 +181,28 @@ namespace osu.Game.Offline
             Changed?.Invoke();
         }
 
+        internal void EnsureProfile(Guid id, string name)
+        {
+            lock (sync)
+            {
+                if (data.Profiles.Any(profile => profile.Id == id))
+                    return;
+
+                data.Profiles.Add(new RitsuProfile { Id = id, Name = validateName(name) });
+                try
+                {
+                    save();
+                }
+                catch
+                {
+                    data.Profiles.RemoveAll(profile => profile.Id == id);
+                    throw;
+                }
+            }
+
+            Changed?.Invoke();
+        }
+
         public void SelectProfile(Guid id)
         {
             string name;
@@ -210,16 +236,23 @@ namespace osu.Game.Offline
 
         public void DeleteActiveProfile() => DeleteProfile(ActiveProfileId);
 
-        public void DeleteProfile(Guid id)
+        public void DeleteProfile(Guid id) => deleteProfile(id, allowLast: false);
+
+        internal void RemoveMirroredProfile(Guid id) => deleteProfile(id, allowLast: true);
+
+        private void deleteProfile(Guid id, bool allowLast)
         {
             string? newActiveName = null;
             lock (sync)
             {
-                if (data.Profiles.Count <= 1)
+                if (!allowLast && data.Profiles.Count <= 1)
                     throw new InvalidOperationException("At least one local profile must remain.");
                 if (data.Profiles.All(p => p.Id != id))
                     throw new InvalidOperationException("This local profile no longer exists.");
                 data.Profiles.RemoveAll(p => p.Id == id);
+                if (data.Profiles.Count == 0)
+                    data.Profiles.Add(new RitsuProfile { Id = Guid.NewGuid(), Name = "Guest" });
+
                 foreach (Guid score in data.Scores.Where(s => s.Value.ProfileId == id).Select(s => s.Key).ToArray())
                     data.Scores.Remove(score);
                 if (data.ActiveProfileId == id)
@@ -244,7 +277,7 @@ namespace osu.Game.Offline
             Changed?.Invoke();
         }
 
-        public void AssociateNewScore(Guid scoreId, Guid profileId, string ruleset, int calculatorVersion, string modsJson)
+        public void AssociateNewScore(Guid scoreId, Guid profileId, string ruleset, int calculatorVersion, string modsJson, bool localPlay = false)
         {
             lock (sync)
             {
@@ -256,10 +289,98 @@ namespace osu.Game.Offline
                     Ruleset = ruleset,
                     CalculatorVersion = calculatorVersion,
                     ModsJson = modsJson,
+                    LocalPlay = localPlay,
                 });
                 save();
             }
             Changed?.Invoke();
+        }
+
+        internal void AssociateStoredScores(Guid profileId, IReadOnlyList<ScoreInfo> scores, bool synced)
+        {
+            var added = new List<Guid>();
+            lock (sync)
+            {
+                if (data.Profiles.All(profile => profile.Id != profileId))
+                    return;
+
+                foreach (var score in scores)
+                {
+                    if (data.Scores.TryAdd(score.ID, new RitsuScoreMetadata
+                        {
+                            ProfileId = profileId,
+                            Ruleset = score.Ruleset.ShortName,
+                            ModsJson = score.ModsJson,
+                            Synced = synced,
+                        }))
+                        added.Add(score.ID);
+                }
+
+                if (added.Count == 0)
+                    return;
+
+                try
+                {
+                    save();
+                }
+                catch
+                {
+                    foreach (Guid id in added)
+                        data.Scores.Remove(id);
+
+                    throw;
+                }
+            }
+
+            Changed?.Invoke();
+        }
+
+        internal bool IsLocalPlay(Guid profileId, Guid scoreId)
+        {
+            lock (sync)
+                return data.Scores.TryGetValue(scoreId, out var metadata) && metadata.ProfileId == profileId && metadata.LocalPlay;
+        }
+
+        internal int CountSyncedScores(Guid profileId)
+        {
+            lock (sync)
+                return data.Scores.Count(item => item.Value.ProfileId == profileId && item.Value.Synced);
+        }
+
+        internal Dictionary<Guid, bool> GetProfilePlayIds(Guid profileId, string? ruleset = null)
+        {
+            lock (sync)
+                return data.Scores.Where(item => item.Value.ProfileId == profileId && (ruleset == null || item.Value.Ruleset == ruleset))
+                           .ToDictionary(item => item.Key, item => item.Value.LocalPlay);
+        }
+
+        internal bool RemoveScoreAssociations(Guid profileId, Guid? scoreId = null)
+        {
+            lock (sync)
+            {
+                var removed = data.Scores.Where(item => item.Value.ProfileId == profileId
+                    && (scoreId.HasValue ? item.Key == scoreId : item.Value.Synced)).ToArray();
+                if (removed.Length == 0)
+                    return false;
+
+                foreach (var item in removed)
+                    data.Scores.Remove(item.Key);
+
+                try
+                {
+                    save();
+                }
+                catch
+                {
+                    foreach (var item in removed)
+                        data.Scores.Add(item.Key, item.Value);
+
+                    throw;
+                }
+            }
+
+            Changed?.Invoke();
+            return true;
         }
 
         internal bool CanAssignStoredScore(Guid scoreId) => readStoredScore(scoreId) != null;
@@ -341,7 +462,9 @@ namespace osu.Game.Offline
                     || !data.Scores.TryGetValue(scoreId, out var metadata) || metadata.ProfileId != sourceProfileId)
                     return false;
 
+                bool wasSynced = metadata.Synced;
                 metadata.ProfileId = targetProfileId;
+                metadata.Synced = false;
                 try
                 {
                     save();
@@ -349,6 +472,7 @@ namespace osu.Game.Offline
                 catch
                 {
                     metadata.ProfileId = sourceProfileId;
+                    metadata.Synced = wasSynced;
                     throw;
                 }
             }
@@ -583,9 +707,7 @@ namespace osu.Game.Offline
 
         public List<ScoreInfo> GetScores(Guid profileId, string ruleset, string? beatmapHash = null)
         {
-            HashSet<Guid> ids;
-            lock (sync)
-                ids = data.Scores.Where(s => s.Value.ProfileId == profileId && s.Value.Ruleset == ruleset).Select(s => s.Key).ToHashSet();
+            var ids = GetProfilePlayIds(profileId, ruleset).Keys;
 
             // Realm's LINQ provider cannot compare a linked object's ShortName. Resolve
             // scores by their primary keys, then inspect the linked ruleset in memory.
@@ -790,6 +912,8 @@ namespace osu.Game.Offline
         public int CalculatorVersion { get; set; }
         public string ModsJson { get; set; } = string.Empty;
         public bool IncludeInPP { get; set; } = true;
+        public bool LocalPlay { get; set; }
+        public bool Synced { get; set; }
     }
 
     public sealed record RitsuPpPoint(DateTimeOffset Date, double PP);

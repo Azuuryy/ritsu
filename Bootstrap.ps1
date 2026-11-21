@@ -22,7 +22,8 @@ function Get-RitsuPatches {
 # in a temporary index built from the working tree; the working tree and the real index are untouched.
 function Test-RitsuPatchesApplied {
     param([string]$Repository, [string[]]$Patches, [string]$Directory)
-    [string[]]$ritsuDirectoryArguments = if ($Directory) { @("--directory=$Directory") } else { @() }
+    [string[]]$ritsuDirectoryArguments = @()
+    if ($Directory) { $ritsuDirectoryArguments = @("--directory=$Directory") }
     $ritsuSavedErrorPolicy = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
@@ -80,7 +81,14 @@ foreach ($ritsuDependency in @($ritsuManifest.client, $ritsuManifest.framework, 
     $ritsuHead = (& git -C $ritsuCheckout rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or $ritsuHead -ne $ritsuDependency.commit) { throw "Unexpected revision in $ritsuCheckout" }
     if ($ritsuPatches.Count -gt 0 -and -not (Test-RitsuPatchesApplied -Repository $ritsuCheckout -Patches $ritsuPatches)) {
-        foreach ($ritsuPatch in $ritsuPatches) {
+        $ritsuAppliedCount = $ritsuPatches.Count - 1
+        while ($ritsuAppliedCount -gt 0) {
+            $ritsuPrefix = $ritsuPatches[0..($ritsuAppliedCount - 1)]
+            if (Test-RitsuPatchesApplied -Repository $ritsuCheckout -Patches $ritsuPrefix) { break }
+            $ritsuAppliedCount--
+        }
+        for ($ritsuPatchIndex = $ritsuAppliedCount; $ritsuPatchIndex -lt $ritsuPatches.Count; $ritsuPatchIndex++) {
+            $ritsuPatch = $ritsuPatches[$ritsuPatchIndex]
             Invoke-RitsuGit -GitArguments @('-C',$ritsuCheckout,'apply','--check','--',$ritsuPatch)
             Invoke-RitsuGit -GitArguments @('-C',$ritsuCheckout,'apply','--',$ritsuPatch)
         }

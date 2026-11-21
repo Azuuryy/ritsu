@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using osu.Framework.Logging;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
-using osu.Game.Models;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Rulesets;
@@ -16,7 +15,6 @@ using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 using osu.Game.Scoring.Legacy;
 using osu.Game.Utils;
-using Realms;
 
 namespace osu.Game.LocalPriority
 {
@@ -243,22 +241,22 @@ namespace osu.Game.LocalPriority
         /// Full statistics for the profile page.
         /// </summary>
         public static Task<LocalProfileStatistics> CalculateAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm, BeatmapManager beatmaps,
-                                                                  LocalProfileStore store, CancellationToken cancellationToken)
-            => calculateAsync(profile, ruleset, realm, beatmaps, store, true, cancellationToken);
+                                                                  LocalProfileManager manager, CancellationToken cancellationToken)
+            => calculateAsync(profile, ruleset, realm, beatmaps, manager, true, cancellationToken);
 
         /// <summary>
         /// Only the PP total (for other profiles' chips and the local ranking): nothing else is built.
         /// </summary>
         public static async Task<double> CalculatePerformanceAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm, BeatmapManager beatmaps,
-                                                                   LocalProfileStore store, CancellationToken cancellationToken)
-            => (await calculateAsync(profile, ruleset, realm, beatmaps, store, false, cancellationToken).ConfigureAwait(false)).PP;
+                                                                   LocalProfileManager manager, CancellationToken cancellationToken)
+            => (await calculateAsync(profile, ruleset, realm, beatmaps, manager, false, cancellationToken).ConfigureAwait(false)).PP;
 
         /// <summary>
         /// Only the PP total and the best PP per beatmap (<see cref="BestPerformance"/>), for the command palette's PP projections.
         /// </summary>
         public static Task<LocalProfileStatistics> CalculateBestPerformanceAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm, BeatmapManager beatmaps,
-                                                                                 LocalProfileStore store, CancellationToken cancellationToken)
-            => calculateAsync(profile, ruleset, realm, beatmaps, store, false, cancellationToken);
+                                                                                 LocalProfileManager manager, CancellationToken cancellationToken)
+            => calculateAsync(profile, ruleset, realm, beatmaps, manager, false, cancellationToken);
 
         /// <summary>
         /// Accuracy from the summed hit counts, weighted like the ruleset weighs judgements in a play:
@@ -326,35 +324,20 @@ namespace osu.Game.LocalPriority
         }
 
         private static async Task<LocalProfileStatistics> calculateAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm, BeatmapManager beatmaps,
-                                                                         LocalProfileStore store, bool full, CancellationToken cancellationToken)
+                                                                         LocalProfileManager manager, bool full, CancellationToken cancellationToken)
         {
-            // The profile's own scores (synced and transferred plays carry its ID too), plus old-style linked owners.
-            string userField = $@"{nameof(ScoreInfo.User)}.{nameof(RealmUser.OnlineID)}";
-            string nameField = $@"{nameof(ScoreInfo.User)}.{nameof(RealmUser.Username)}";
-
-            var arguments = new List<QueryArgument> { ruleset.ShortName, profile.UserId };
-            var owners = new List<string> { $@"{userField} == $1" };
-
-            foreach (var owner in profile.LinkedOwners)
-            {
-                owners.Add($@"({userField} == ${arguments.Count} AND {nameField} == ${arguments.Count + 1})");
-                arguments.Add(owner.UserId);
-                arguments.Add(owner.Username);
-            }
-
-            var syncedIds = profile.SyncedScores.Select(s => s.ScoreId).ToHashSet();
+            var store = manager.Store;
+            var ids = manager.Profiles.GetProfilePlayIds(profile.Id, ruleset.ShortName);
             var options = store.Options;
             var exclusions = store.PerformanceExclusions;
 
-            // Read the few values needed from every score inside the database, instead of copying each score with its whole beatmap.
             var scores = realm.Run(r =>
             {
-                var results = r.All<ScoreInfo>()
-                               .Filter($@"{nameof(ScoreInfo.Ruleset)}.{nameof(RulesetInfo.ShortName)} == $0"
-                                       + $@" AND {nameof(ScoreInfo.DeletePending)} == false"
-                                       + $@" AND ({string.Join(@" OR ", owners)})", arguments.ToArray());
+                var results = ids.Keys.Select(id => r.Find<ScoreInfo>(id))
+                                 .OfType<ScoreInfo>()
+                                 .Where(score => !score.DeletePending && score.Ruleset.ShortName == ruleset.ShortName);
 
-                var list = new List<ScoreSummary>(results.Count());
+                var list = new List<ScoreSummary>(ids.Count);
 
                 foreach (var score in results)
                 {
@@ -378,7 +361,7 @@ namespace osu.Game.LocalPriority
                     {
                         summary.ClassicScore = score.GetDisplayScore(ScoringMode.Classic);
 
-                        if (score.UserID != profile.UserId || syncedIds.Contains(score.ID))
+                        if (!ids[score.ID])
                         {
                             summary.SyncedHits = new Dictionary<HitResult, int>(score.Statistics);
 
