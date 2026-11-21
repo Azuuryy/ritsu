@@ -857,7 +857,7 @@ namespace osu.Game.Screens.Select
             {
                 if (performanceSession == null) return null;
                 var progress = performanceSession.Progress;
-                return progress.total > progress.completed ? $"Calcul PP : {progress.completed}/{progress.total}" : null;
+                return progress.total > progress.completed ? $"Calculating PP: {progress.completed}/{progress.total}" : null;
             }
         }
 

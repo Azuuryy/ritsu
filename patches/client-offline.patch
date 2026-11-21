@@ -3584,7 +3584,7 @@ index 0000000000..c3c2cc334b
 +    }
 +}
 diff --git a/osu.Game.Tests/Database/RitsuResultRanksTest.cs b/osu.Game.Tests/Database/RitsuResultRanksTest.cs
-index 3bcdff3912..b191cb7570 100644
+index 3bcdff3912..c281794add 100644
 --- a/osu.Game.Tests/Database/RitsuResultRanksTest.cs
 +++ b/osu.Game.Tests/Database/RitsuResultRanksTest.cs
 @@ -3,10 +3,15 @@
@@ -3620,7 +3620,7 @@ index 3bcdff3912..b191cb7570 100644
          [Test]
          public void TestProfileImagesAndFlagsPersistIndependently()
          {
-@@ -54,6 +69,151 @@ namespace osu.Game.Tests.Offline
+@@ -54,6 +69,151 @@ public void TestProfileImagesAndFlagsPersistIndependently()
              Assert.That(reloaded.GetProfiles().Single(p => p.Id == first).FlagFileName, Is.Null);
          }
  
@@ -3772,7 +3772,7 @@ index 3bcdff3912..b191cb7570 100644
          [Test]
          public void TestProfileBestAndMapRankings()
          {
-@@ -114,5 +274,260 @@ namespace osu.Game.Tests.Offline
+@@ -114,5 +274,269 @@ ScoreInfo score(long total, double? pp, bool otherBeatmap = false) => new ScoreI
                  Assert.That(profiles.GetBestScores(firstProfile, "osu").Select(s => s.ID), Is.EqualTo(new[] { otherBestId, currentId }));
              }
          }
@@ -3809,29 +3809,38 @@ index 3bcdff3912..b191cb7570 100644
 +            Assert.That(set.Status, Is.EqualTo(BeatmapOnlineStatus.Ranked));
 +        });
 +
-+        [Test]
-+        public void TestReincludedUnrankedMapIsLocallyApproved()
-+        {
-+            var map = new BeatmapInfo { Status = BeatmapOnlineStatus.Unranked };
-+            var profile = new RitsuProfile();
-+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(map, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
-+            profile.ReincludedBeatmapIds.Add(map.ID);
-+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(map, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
-+            profile.ExcludedBeatmapIds.Add(map.ID);
-+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(map, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
-+            Assert.That(map.Status, Is.EqualTo(BeatmapOnlineStatus.Unranked));
-+        }
-+
++        [TestCase(BeatmapOnlineStatus.Unranked)]
 +        [TestCase(BeatmapOnlineStatus.None)]
 +        [TestCase(BeatmapOnlineStatus.Blacklisted)]
-+        public void TestUnknownAndBlacklistedAreLocallyUnrankedButPPEligible(BeatmapOnlineStatus status)
++        public void TestLocalApprovalFollowsExclusions(BeatmapOnlineStatus status)
 +        {
-+            var map = new BeatmapInfo { Status = status };
-+            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(map, null), Is.EqualTo(BeatmapOnlineStatus.Unranked));
-+            Assert.That(status.GrantsPerformancePoints(), Is.True);
-+            Assert.That(map.Status, Is.EqualTo(status));
++            var set = CreateBeatmapSet(CreateRuleset());
++            var first = set.Beatmaps[0];
++            var second = set.Beatmaps[1];
++            set.Status = first.Status = second.Status = status;
++            var profile = new RitsuProfile();
++
++            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, null), Is.EqualTo(BeatmapOnlineStatus.Approved));
++            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
++            Assert.That(RitsuLocalBeatmapStatus.ForSet(set, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
++
++            profile.ExcludedBeatmapSetIds.Add(set.ID);
++            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
++            Assert.That(RitsuLocalBeatmapStatus.ForSet(set, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
++
++            profile.IncludedBeatmapIds.Add(first.ID);
++            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
++            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(second, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
++            Assert.That(RitsuLocalBeatmapStatus.ForSet(set, profile), Is.EqualTo(BeatmapOnlineStatus.Approved));
++
++            profile.ExcludedBeatmapIds.Add(first.ID);
++            Assert.That(RitsuLocalBeatmapStatus.ForBeatmap(first, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
++            Assert.That(RitsuLocalBeatmapStatus.ForSet(set, profile), Is.EqualTo(BeatmapOnlineStatus.Unranked));
++            Assert.That(first.Status, Is.EqualTo(status));
++            Assert.That(set.Status, Is.EqualTo(status));
 +        }
 +
++        [TestCase(BeatmapOnlineStatus.Unranked)]
 +        [TestCase(BeatmapOnlineStatus.None)]
 +        [TestCase(BeatmapOnlineStatus.Blacklisted)]
 +        public Task TestLocalProfileCountsPPForEveryMapStatus(BeatmapOnlineStatus status) => Task.Run(() =>
@@ -13076,9 +13085,18 @@ index 4379cf944e..d9d0d46d66 100644
                  new Container
                  {
 diff --git a/osu.Game/Screens/Select/BeatmapCarousel.cs b/osu.Game/Screens/Select/BeatmapCarousel.cs
-index 513ce31439..f517d84b88 100644
+index 513ce31439..793e86f31b 100644
 --- a/osu.Game/Screens/Select/BeatmapCarousel.cs
 +++ b/osu.Game/Screens/Select/BeatmapCarousel.cs
+@@ -857,7 +857,7 @@ namespace osu.Game.Screens.Select
+             {
+                 if (performanceSession == null) return null;
+                 var progress = performanceSession.Progress;
+-                return progress.total > progress.completed ? $"Calcul PP : {progress.completed}/{progress.total}" : null;
++                return progress.total > progress.completed ? $"Calculating PP: {progress.completed}/{progress.total}" : null;
+             }
+         }
+ 
 @@ -868,7 +868,12 @@ namespace osu.Game.Screens.Select
              performanceSession = null;
              performanceRefresh?.Cancel();
@@ -16190,10 +16208,10 @@ index ded09c7ba7..d225defb35 100644
  }
 diff --git a/osu.Game/Offline/RitsuLocalBeatmapStatus.cs b/osu.Game/Offline/RitsuLocalBeatmapStatus.cs
 new file mode 100644
-index 0000000000..1dd9c34f2e
+index 0000000000..04524f3fe7
 --- /dev/null
 +++ b/osu.Game/Offline/RitsuLocalBeatmapStatus.cs
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,34 @@
 +// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 +using System.Linq;
 +using osu.Game.Beatmaps;
@@ -16207,9 +16225,7 @@ index 0000000000..1dd9c34f2e
 +            bool excluded = profile != null && (profile.ExcludedBeatmapIds.Contains(beatmap.ID)
 +                || (beatmap.BeatmapSet != null && profile.ExcludedBeatmapSetIds.Contains(beatmap.BeatmapSet.ID)
 +                    && !profile.IncludedBeatmapIds.Contains(beatmap.ID)));
-+            bool reincluded = profile != null && (profile.ReincludedBeatmapIds.Contains(beatmap.ID)
-+                || (beatmap.BeatmapSet != null && profile.ReincludedBeatmapSetIds.Contains(beatmap.BeatmapSet.ID)));
-+            return displayStatus(beatmap.Status, excluded, reincluded);
++            return displayStatus(beatmap.Status, excluded);
 +        }
 +
 +        public static BeatmapOnlineStatus ForSet(BeatmapSetInfo set, RitsuProfile? profile)
@@ -16218,16 +16234,14 @@ index 0000000000..1dd9c34f2e
 +                ? profile.ExcludedBeatmapSetIds.Contains(set.ID)
 +                : set.Beatmaps.All(beatmap => profile.ExcludedBeatmapIds.Contains(beatmap.ID)
 +                    || (profile.ExcludedBeatmapSetIds.Contains(set.ID) && !profile.IncludedBeatmapIds.Contains(beatmap.ID))));
-+            bool reincluded = profile != null && (profile.ReincludedBeatmapSetIds.Contains(set.ID)
-+                || (set.Beatmaps.Count > 0 && set.Beatmaps.All(beatmap => profile.ReincludedBeatmapIds.Contains(beatmap.ID))));
-+            return displayStatus(set.Status, excluded, reincluded);
++            return displayStatus(set.Status, excluded);
 +        }
 +
-+        private static BeatmapOnlineStatus displayStatus(BeatmapOnlineStatus original, bool excluded, bool reincluded)
++        private static BeatmapOnlineStatus displayStatus(BeatmapOnlineStatus original, bool excluded)
 +        {
 +            if (excluded) return BeatmapOnlineStatus.Unranked;
 +            if (original is BeatmapOnlineStatus.Unranked or BeatmapOnlineStatus.None or BeatmapOnlineStatus.Blacklisted)
-+                return reincluded ? BeatmapOnlineStatus.Approved : BeatmapOnlineStatus.Unranked;
++                return BeatmapOnlineStatus.Approved;
 +            return original;
 +        }
 +    }
@@ -19501,3 +19515,62 @@ index cf375cb0d3..b3d4dc627d 100644
                  applyFilenameSchemaSuffix(ref Filename);
  #endif
  
+diff --git a/osu.Game/Screens/Select/PerfectPerformanceSession.cs b/osu.Game/Screens/Select/PerfectPerformanceSession.cs
+index 6e8ceec705..bb9a97c6e3 100644
+--- a/osu.Game/Screens/Select/PerfectPerformanceSession.cs
++++ b/osu.Game/Screens/Select/PerfectPerformanceSession.cs
+@@ -29,7 +29,6 @@ namespace osu.Game.Screens.Select
+         private readonly Action<PerfectPerformanceSession> changed;
+         private readonly Stopwatch elapsed = Stopwatch.StartNew();
+         private bool running;
+-        private bool progressStarted;
+         private int completed;
+         private int cacheHits;
+         private int failures;
+@@ -92,14 +91,10 @@ namespace osu.Game.Screens.Select
+                 var pending = new PerfectPerformanceResult(PerfectPerformanceState.Pending);
+                 results[beatmap.ID] = pending;
+                 queue.Enqueue(beatmap);
+-                if (!progressStarted)
+-                {
+-                    progressStarted = true;
+-                    changed(this);
+-                }
+                 if (!running)
+                 {
+                     running = true;
++                    changed(this);
+                     _ = Task.Run(run);
+                 }
+                 return pending;
+@@ -136,7 +131,8 @@ namespace osu.Game.Screens.Select
+                     }
+                     double? pp;
+                     try { pp = calculate(beatmap, cancellation.Token); }
+-                    catch (OperationCanceledException) { throw; }
++                    catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
++                    catch (OperationCanceledException) { pp = null; }
+                     catch (Exception e)
+                     {
+                         if (failures < 5) Logger.Error(e, $"Ritsu PP calculation failed for beatmap {beatmap.ID}");
+@@ -149,7 +145,7 @@ namespace osu.Game.Screens.Select
+                         completed++;
+                         if (!pp.HasValue) failures++;
+                     }
+-                    if (++lastReported >= 25)
++                    if (++lastReported >= 5)
+                     {
+                         lastReported = 0;
+                         var current = Progress;
+diff --git a/osu.Game/Screens/RankingV2/Argon/ArgonBeatmapInfoPanel.cs b/osu.Game/Screens/RankingV2/Argon/ArgonBeatmapInfoPanel.cs
+index 1d8ecb0cce..71c6eeb69e 100644
+--- a/osu.Game/Screens/RankingV2/Argon/ArgonBeatmapInfoPanel.cs
++++ b/osu.Game/Screens/RankingV2/Argon/ArgonBeatmapInfoPanel.cs
+@@ -205,6 +205,7 @@ private void updateScore()
+             Debug.Assert(score.Value.Beatmap != null);
+ 
+             statusPill.Status = score.Value.Beatmap.Status;
++            statusPill.LocalBeatmap = score.Value.Beatmap as BeatmapInfo;
+             titleText.CreateContent = () => new OsuSpriteText
+             {
+                 Text = new RomanisableString(score.Value.Beatmap.Metadata.TitleUnicode, score.Value.Beatmap.Metadata.Title),
