@@ -1,5 +1,0 @@
-OUT_DIR: C:\Users\natha\ritsu\server\target\release\build\utoipa-swagger-ui-9ac4aeb1999a9ce4\out
-SWAGGER_UI_DOWNLOAD_URL: https://github.com/swagger-api/swagger-ui/archive/refs/tags/v5.32.6.zip
-using vendored Swagger UI
-zip_top_level_folder: "swagger-ui-5.32.6"
-SWAGGER_UI_OVERWRITE_FOLDER env value invalid: NotPresent
