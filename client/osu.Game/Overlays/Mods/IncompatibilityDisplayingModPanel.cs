@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Collections.Generic;
@@ -78,6 +78,15 @@ namespace osu.Game.Overlays.Mods
             selectedMods.Count > 0
             && selectedMods.All(selected => selected.GetType() != Mod.GetType())
             && !ModUtils.CheckCompatibleSet(selectedMods.Append(Mod));
+
+        protected override void Deselect()
+        {
+            // Ritsu: a Sudden Death / Perfect Death profile's own mod can't be turned off.
+            if (!IgnoreLocalProfileRules && localProfiles?.IsModLocked(Mod) == true)
+                return;
+
+            base.Deselect();
+        }
 
         protected override Colour4 BackgroundColour => incompatible.Value ? ColourProvider.Background6 : base.BackgroundColour;
         protected override Colour4 ForegroundColour => incompatible.Value ? ColourProvider.Background5 : base.ForegroundColour;

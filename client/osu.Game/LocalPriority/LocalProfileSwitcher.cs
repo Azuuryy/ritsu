@@ -188,10 +188,10 @@ namespace osu.Game.LocalPriority
                                     RelativeSizeAxes = Axes.X,
                                     AutoSizeAxes = Axes.Y,
                                     Colour = colourProvider.Content2,
-                                    Text = @"Local profiles keep their own PP, plays and play time, and never connect to osu! servers "
+                                    Text = @"Local profiles never connect to osu! servers "
                                            + @"unless online lookups are turned on in Settings → Ritsu. "
-                                           + @"Scores are never submitted from Ritsu to osu!web. "
-                                           + @"Modifying this client past whatever provided and returning online functionality might get you banned.",
+                                           + @"Scores are never submitted from Ritsu to osu!web regardless of this setting. "
+                                           + @"Modifying this client past whatever provided and returning full online functionality will get you banned.",
                                 },
                             },
                         },
@@ -266,7 +266,6 @@ namespace osu.Game.LocalPriority
                     DragEnded = () => manager.Reorder(LocalProfileDragReorder.CurrentOrder(rows)),
                     // Same right-click menu as on the profile page.
                     ContextMenuItems = LocalProfileMenu.Create(manager, dialogs, overlayManager, profile,
-                        () => manager.Switch(id),
                         () =>
                         {
                             Hide();

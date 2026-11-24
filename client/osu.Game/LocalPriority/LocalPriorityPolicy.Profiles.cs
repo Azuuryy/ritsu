@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Logging;
 using osu.Game.Beatmaps;
@@ -91,6 +92,11 @@ namespace osu.Game.LocalPriority
         /// </summary>
         public static bool CountRelaxAutopilot { get; internal set; }
 
+        /// <summary>
+        /// The active local profile ignores mods' "unranked" status (Relax / Autopilot still follow <see cref="CountRelaxAutopilot"/>).
+        /// </summary>
+        public static bool IgnoreUnrankedMods { get; internal set; }
+
         public static bool IsRelaxOrAutopilot(IMod mod) => mod.Acronym is @"RX" or @"AP";
 
         /// <summary>
@@ -124,21 +130,43 @@ namespace osu.Game.LocalPriority
         }
 
         /// <summary>
-        /// Whether a beatmap status gives PP, taking <see cref="CountAllAsRanked"/> into account.
+        /// Settings → Ritsu "Count LOCAL maps towards PP": beatmaps changed in the editor can give PP (when counted as ranked).
         /// </summary>
-        public static bool GrantsPerformance(BeatmapOnlineStatus status) => status.GrantsPerformancePoints() || CountAllAsRanked;
+        public static bool LocalMapsGivePerformance { get; internal set; } = true;
+
+        /// <summary>
+        /// Whether a beatmap status gives PP, taking <see cref="CountAllAsRanked"/> and <see cref="LocalMapsGivePerformance"/> into account.
+        /// </summary>
+        public static bool GrantsPerformance(BeatmapOnlineStatus status) =>
+            status.GrantsPerformancePoints() || (CountAllAsRanked && (status != BeatmapOnlineStatus.LocallyModified || LocalMapsGivePerformance));
 
         /// <summary>
         /// Whether a mod counts as ranked, taking the active profile's options into account.
         /// </summary>
-        public static bool IsModRanked(Mod mod) => mod.Ranked || CountAllAsRanked || (CountRelaxAutopilot && IsRelaxOrAutopilot(mod));
+        public static bool IsModRanked(Mod mod) => isModRanked(mod, CountAllAsRanked, CountRelaxAutopilot, IgnoreUnrankedMods);
 
         /// <summary>
         /// Same rule as the results screen: classic mod on legacy (imported) scores doesn't make a score unranked.
         /// </summary>
-        public static bool HasUnrankedMods(ScoreInfo score, bool countAllAsRanked, bool countRelaxAutopilot) =>
-            score.Mods.Where(m => !(score.IsLegacyScore && m is ModClassic))
-                 .Any(m => !(m.Ranked || countAllAsRanked || (countRelaxAutopilot && IsRelaxOrAutopilot(m))));
+        public static bool HasUnrankedMods(ScoreInfo score, bool countAllAsRanked, bool countRelaxAutopilot, bool ignoreUnrankedMods = false) =>
+            // Counting everything as ranked: no need to build the score's mods at all.
+            !countAllAsRanked && HasUnrankedMods(score.Mods, score.IsLegacyScore, false, countRelaxAutopilot, ignoreUnrankedMods);
+
+        /// <inheritdoc cref="HasUnrankedMods(ScoreInfo, bool, bool, bool)"/>
+        public static bool HasUnrankedMods(IEnumerable<Mod> mods, bool isLegacyScore, bool countAllAsRanked, bool countRelaxAutopilot, bool ignoreUnrankedMods = false) =>
+            !countAllAsRanked && mods.Where(m => !(isLegacyScore && m is ModClassic))
+                                     .Any(m => !isModRanked(m, false, countRelaxAutopilot, ignoreUnrankedMods));
+
+        private static bool isModRanked(IMod mod, bool countAllAsRanked, bool countRelaxAutopilot, bool ignoreUnrankedMods)
+        {
+            if (countAllAsRanked)
+                return true;
+
+            if (IsRelaxOrAutopilot(mod))
+                return countRelaxAutopilot;
+
+            return ignoreUnrankedMods || mod.Ranked;
+        }
 
         #endregion
 

@@ -184,6 +184,25 @@ namespace osu.Game.LocalPriority
         }
 
         /// <summary>
+        /// Saves Settings → Profile Colors. Unlike <see cref="SetOptions"/> this doesn't raise <see cref="Changed"/>:
+        /// nothing but the page colours depends on it, and a change would otherwise recalculate every profile's statistics.
+        /// </summary>
+        public void SetProfileColours(bool enabled, string colour)
+        {
+            lock (sync)
+            {
+                if (data.Options.ProfileColouring == enabled && data.Options.ProfileColour == colour)
+                    return;
+
+                var options = data.Options.Clone();
+                options.ProfileColouring = enabled;
+                options.ProfileColour = colour;
+                data.Options = options;
+                save();
+            }
+        }
+
+        /// <summary>
         /// Puts the profiles in this order (ids not listed keep their relative order at the end).
         /// </summary>
         public void ReorderProfiles(IReadOnlyList<Guid> order)
@@ -281,7 +300,10 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Creates a new local profile. Throws <see cref="ArgumentException"/> with a user-facing message on invalid input.
         /// </summary>
-        public LocalProfile CreateProfile(string name, CountryCode country = CountryCode.Unknown)
+        public LocalProfile CreateProfile(string name, CountryCode country = CountryCode.Unknown, LocalDeathMode deathMode = LocalDeathMode.None) =>
+            createProfile(name, country, deathMode, 0);
+
+        private LocalProfile createProfile(string name, CountryCode country, LocalDeathMode deathMode, int deathNumber)
         {
             LocalProfile profile;
 
@@ -303,9 +325,22 @@ namespace osu.Game.LocalPriority
                     Name = name,
                     Country = country,
                     Created = DateTimeOffset.Now,
+                    DeathMode = deathMode,
                 };
 
                 data.Profiles.Add(profile);
+
+                switch (deathMode)
+                {
+                    case LocalDeathMode.SuddenDeath:
+                        data.SuddenDeathProfilesCreated = Math.Max(data.SuddenDeathProfilesCreated + 1, deathNumber);
+                        break;
+
+                    case LocalDeathMode.PerfectDeath:
+                        data.PerfectDeathProfilesCreated = Math.Max(data.PerfectDeathProfilesCreated + 1, deathNumber);
+                        break;
+                }
+
                 save();
                 profile = profile.Clone();
             }
@@ -316,20 +351,80 @@ namespace osu.Game.LocalPriority
 
         /// <summary>
         /// Creates a profile with a free default name ("Player 1", "Player 2", ...).
+        /// Sudden Death / Perfect Death ones are numbered by how many of them were ever created ("SD Profile 7", "PF Profile 3"; see <see cref="ResetDeathProfileCounts"/>).
         /// </summary>
-        public LocalProfile CreateDefaultProfile()
+        public LocalProfile CreateDefaultProfile(LocalDeathMode deathMode = LocalDeathMode.None)
         {
             string name;
+            int n;
+
+            string prefix = deathMode switch
+            {
+                LocalDeathMode.SuddenDeath => @"SD Profile",
+                LocalDeathMode.PerfectDeath => @"PF Profile",
+                _ => @"Player",
+            };
 
             lock (sync)
             {
-                int n = data.Profiles.Count + 1;
-                while (data.Profiles.Any(p => string.Equals(p.Name, $@"Player {n}", StringComparison.OrdinalIgnoreCase)))
+                n = deathMode switch
+                {
+                    LocalDeathMode.SuddenDeath => data.SuddenDeathProfilesCreated + 1,
+                    LocalDeathMode.PerfectDeath => data.PerfectDeathProfilesCreated + 1,
+                    _ => data.Profiles.Count + 1,
+                };
+
+                while (data.Profiles.Any(p => string.Equals(p.Name, $@"{prefix} {n}", StringComparison.OrdinalIgnoreCase)))
                     n++;
-                name = $@"Player {n}";
+                name = $@"{prefix} {n}";
             }
 
-            return CreateProfile(name);
+            return createProfile(name, CountryCode.Unknown, deathMode, n);
+        }
+
+        /// <summary>
+        /// How many Sudden Death / Perfect Death profiles were created (they number the next ones).
+        /// </summary>
+        public (int SuddenDeath, int PerfectDeath) GetDeathProfileCounts()
+        {
+            lock (sync)
+                return (data.SuddenDeathProfilesCreated, data.PerfectDeathProfilesCreated);
+        }
+
+        /// <summary>
+        /// Settings → Ritsu: start numbering Sudden Death / Perfect Death profiles from 1 again.
+        /// </summary>
+        public void ResetDeathProfileCounts()
+        {
+            lock (sync)
+            {
+                if (data.SuddenDeathProfilesCreated == 0 && data.PerfectDeathProfilesCreated == 0)
+                    return;
+
+                data.SuddenDeathProfilesCreated = 0;
+                data.PerfectDeathProfilesCreated = 0;
+                save();
+            }
+        }
+
+        /// <summary>
+        /// A Sudden Death / Perfect Death profile failed a play: it is deleted once its last look at its scores is over.
+        /// Saved right away, so the profile still goes if the game is closed before that (see <see cref="LocalProfileManager"/>).
+        /// </summary>
+        public void MarkDied(Guid id)
+        {
+            lock (sync)
+            {
+                var profile = data.Profiles.FirstOrDefault(p => p.Id == id);
+
+                if (profile == null || profile.Died)
+                    return;
+
+                profile.Died = true;
+                save();
+            }
+
+            Changed?.Invoke();
         }
 
         public void RenameProfile(Guid id, string name)
@@ -359,7 +454,7 @@ namespace osu.Game.LocalPriority
             Changed?.Invoke();
         }
 
-        public void SetRankingOptions(Guid id, bool? includeRelaxAutopilot = null, bool? countAllAsRanked = null)
+        public void SetRankingOptions(Guid id, bool? includeRelaxAutopilot = null, bool? countAllAsRanked = null, bool? ignoreUnrankedMods = null)
         {
             lock (sync)
             {
@@ -369,6 +464,7 @@ namespace osu.Game.LocalPriority
 
                 profile.IncludeRelaxAutopilot = includeRelaxAutopilot ?? profile.IncludeRelaxAutopilot;
                 profile.CountAllAsRanked = countAllAsRanked ?? profile.CountAllAsRanked;
+                profile.IgnoreUnrankedMods = ignoreUnrankedMods ?? profile.IgnoreUnrankedMods;
                 save();
             }
 
@@ -566,6 +662,8 @@ namespace osu.Game.LocalPriority
                 if (data.ActiveProfileId == id)
                     data.ActiveProfileId = null;
                 save();
+
+                UnfinishedPlays.Remove(profile.UserId);
             }
 
             if (avatar != null)
@@ -601,16 +699,35 @@ namespace osu.Game.LocalPriority
 
         #region Play statistics
 
+        private LocalUnfinishedPlays? unfinishedPlays;
+
+        /// <summary>
+        /// Failed and quit plays from the last day, for the profiles' Recent Plays (osu-local/unfinished-plays.json, read when first needed).
+        /// </summary>
+        public LocalUnfinishedPlays UnfinishedPlays
+        {
+            get
+            {
+                lock (sync)
+                    return unfinishedPlays ??= new LocalUnfinishedPlays(storage);
+            }
+        }
+
         /// <summary>
         /// Records one attempt (finished, failed, quit or restarted) for a local profile.
+        /// A failed or quit one (<paramref name="unfinished"/>) is also listed in the profile's Recent Plays for a day.
         /// </summary>
-        public void RecordPlay(int userId, string ruleset, double playSeconds, IReadOnlyDictionary<HitResult, int> hits, string? beatmapHash = null)
+        public void RecordPlay(int userId, string ruleset, double playSeconds, IReadOnlyDictionary<HitResult, int> hits, string? beatmapHash = null,
+                               LocalUnfinishedPlay? unfinished = null)
         {
             lock (sync)
             {
                 var profile = data.Profiles.FirstOrDefault(p => p.UserId == userId);
                 if (profile == null)
                     return;
+
+                if (unfinished != null)
+                    UnfinishedPlays.Add(unfinished);
 
                 if (!profile.Stats.TryGetValue(ruleset, out var stats))
                     profile.Stats[ruleset] = stats = new LocalPlayStatistics();
@@ -874,7 +991,9 @@ namespace osu.Game.LocalPriority
                     performanceCache[id] = pp;
                 }
 
-                write(performance_file, performanceCache);
+                // Written with profiles.json, shortly after and outside the lock (lookups don't wait for the disk).
+                performanceSavePending = true;
+                scheduleFlush();
             }
 
             if (newlyFailed > 0)
@@ -902,6 +1021,13 @@ namespace osu.Game.LocalPriority
             => LocalDurableFile.Read(storage, filename, JsonConvert.DeserializeObject<T>);
 
         private bool savePending;
+        private bool profilesSavePending;
+        private bool performanceSavePending;
+
+        /// <summary>
+        /// Keeps writes of the same files in order (the PP cache is written outside <see cref="sync"/>).
+        /// </summary>
+        private readonly object writeLock = new object();
 
         /// <summary>
         /// Saves profiles.json shortly after a change, on a background thread: several changes in a row (switching profiles,
@@ -909,6 +1035,15 @@ namespace osu.Game.LocalPriority
         /// Call with the lock held (every change does).
         /// </summary>
         private void save()
+        {
+            profilesSavePending = true;
+            scheduleFlush();
+        }
+
+        /// <summary>
+        /// Call with the lock held.
+        /// </summary>
+        private void scheduleFlush()
         {
             if (savePending)
                 return;
@@ -923,13 +1058,32 @@ namespace osu.Game.LocalPriority
         /// </summary>
         public void Flush()
         {
-            lock (sync)
+            lock (writeLock)
             {
-                if (!savePending)
-                    return;
+                Dictionary<Guid, double?>? performanceSnapshot = null;
 
-                savePending = false;
-                write(profiles_file, data);
+                lock (sync)
+                {
+                    if (!savePending)
+                        return;
+
+                    savePending = false;
+
+                    if (profilesSavePending)
+                    {
+                        profilesSavePending = false;
+                        write(profiles_file, data);
+                    }
+
+                    if (performanceSavePending)
+                    {
+                        performanceSavePending = false;
+                        performanceSnapshot = new Dictionary<Guid, double?>(performanceCache);
+                    }
+                }
+
+                if (performanceSnapshot != null)
+                    write(performance_file, performanceSnapshot);
             }
         }
 
@@ -937,7 +1091,13 @@ namespace osu.Game.LocalPriority
         {
             try
             {
-                LocalDurableFile.WriteText(storage, filename, JsonConvert.SerializeObject(value, Formatting.Indented));
+                // Straight into the file, without building the whole text in memory first; flushed to disk before it replaces the old one.
+                LocalDurableFile.Write(storage, filename, stream =>
+                {
+                    using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false), 4096, true))
+                    using (var json = new JsonTextWriter(writer))
+                        JsonSerializer.CreateDefault(new JsonSerializerSettings { Formatting = Formatting.Indented }).Serialize(json, value);
+                });
             }
             catch (Exception e)
             {
@@ -950,6 +1110,13 @@ namespace osu.Game.LocalPriority
             public int Version { get; set; } = 1;
             public Guid? ActiveProfileId { get; set; }
             public List<LocalProfile> Profiles { get; set; } = new List<LocalProfile>();
+
+            /// <summary>
+            /// How many Sudden Death / Perfect Death profiles were ever created (deleted ones included), numbering the next ones.
+            /// </summary>
+            public int SuddenDeathProfilesCreated { get; set; }
+
+            public int PerfectDeathProfilesCreated { get; set; }
 
             /// <summary>
             /// Settings → Ritsu: local profiles may use the signed-in online account for beatmap / tag / leaderboard lookups.
@@ -1004,6 +1171,11 @@ namespace osu.Game.LocalPriority
         public bool CountAllAsRanked { get; set; }
 
         /// <summary>
+        /// Plays on ranked / approved beatmaps give PP whatever mods they used (Relax / Autopilot still follow <see cref="IncludeRelaxAutopilot"/>).
+        /// </summary>
+        public bool IgnoreUnrankedMods { get; set; }
+
+        /// <summary>
         /// Per-ruleset play statistics (keyed by ruleset short name).
         /// </summary>
         public Dictionary<string, LocalPlayStatistics> Stats { get; set; } = new Dictionary<string, LocalPlayStatistics>();
@@ -1035,6 +1207,16 @@ namespace osu.Game.LocalPriority
         /// </summary>
         public List<string> SectionOrder { get; set; } = new List<string>();
 
+        /// <summary>
+        /// Sudden Death / Perfect Death profiles always play with that mod (it can't be turned off) and are deleted, with their scores, after a failed play.
+        /// </summary>
+        public LocalDeathMode DeathMode { get; set; }
+
+        /// <summary>
+        /// Failed a play as a Sudden Death / Perfect Death profile; deleted when its scores were shown, or on the next start.
+        /// </summary>
+        public bool Died { get; set; }
+
         public APIUser ToUser() => new APIUser
         {
             Id = UserId,
@@ -1052,6 +1234,7 @@ namespace osu.Game.LocalPriority
             Created = Created,
             IncludeRelaxAutopilot = IncludeRelaxAutopilot,
             CountAllAsRanked = CountAllAsRanked,
+            IgnoreUnrankedMods = IgnoreUnrankedMods,
             // Play statistics (with their per-beatmap and per-day counters) are read through GetPlayStatistics only;
             // copies handed out by the store leave them out, which keeps looking up profiles cheap.
             Stats = new Dictionary<string, LocalPlayStatistics>(),
@@ -1061,9 +1244,29 @@ namespace osu.Game.LocalPriority
             ModRules = ModRules?.Clone(),
             AutoSwitch = AutoSwitch?.Clone(),
             SectionOrder = new List<string>(SectionOrder ?? new List<string>()),
+            DeathMode = DeathMode,
+            Died = Died,
         };
 
         public override string ToString() => Name;
+    }
+
+    /// <summary>
+    /// Special profile kinds made from the profile page's "+" right-click menu.
+    /// </summary>
+    public enum LocalDeathMode
+    {
+        None,
+
+        /// <summary>
+        /// Always plays with Sudden Death; a failed play deletes the profile.
+        /// </summary>
+        SuddenDeath,
+
+        /// <summary>
+        /// Always plays with Perfect; a failed play deletes the profile.
+        /// </summary>
+        PerfectDeath,
     }
 
     /// <summary>
@@ -1092,6 +1295,21 @@ namespace osu.Game.LocalPriority
         public bool ProfilesWithModRules { get; set; }
 
         /// <summary>
+        /// Settings → Profile Colors: tint every profile page (except Sudden Death / Perfect Death ones) with <see cref="ProfileColour"/>.
+        /// </summary>
+        public bool ProfileColouring { get; set; }
+
+        /// <summary>
+        /// The profile page tint, as "#RRGGBB". Its hue picks the colours like a supporter's profile colour; its saturation how strong they are.
+        /// </summary>
+        public string ProfileColour { get; set; } = DEFAULT_PROFILE_COLOUR;
+
+        /// <summary>
+        /// osu!'s usual pink (the page's colours when colouring is off).
+        /// </summary>
+        public const string DEFAULT_PROFILE_COLOUR = @"#FF0088";
+
+        /// <summary>
         /// Show a notification when a profile is switched to (or back) automatically.
         /// </summary>
         public bool AutoSwitchNotifications { get; set; } = true;
@@ -1105,6 +1323,11 @@ namespace osu.Game.LocalPriority
         /// Calculate and show "Total Accuracy" on the profile page.
         /// </summary>
         public bool ShowTotalAccuracy { get; set; } = true;
+
+        /// <summary>
+        /// Plays on beatmaps marked LOCAL (changed in the editor) can give PP. When off, profiles leave them out entirely.
+        /// </summary>
+        public bool LocalMapsGivePerformance { get; set; } = true;
 
         /// <summary>
         /// Every local profile counts every beatmap and mod as ranked.
@@ -1123,6 +1346,9 @@ namespace osu.Game.LocalPriority
                                                           && other.DeleteWithScoresWithoutAsking == DeleteWithScoresWithoutAsking
                                                           && other.SuggestSyncingSameNamePlays == SuggestSyncingSameNamePlays
                                                           && other.ProfilesWithModRules == ProfilesWithModRules
+                                                          && other.ProfileColouring == ProfileColouring
+                                                          && other.ProfileColour == ProfileColour
+                                                          && other.LocalMapsGivePerformance == LocalMapsGivePerformance
                                                           && other.AutoSwitchNotifications == AutoSwitchNotifications
                                                           && other.SwitchOnBeatmapStart == SwitchOnBeatmapStart
                                                           && other.ShowTotalAccuracy == ShowTotalAccuracy

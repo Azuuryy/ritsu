@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using JetBrains.Annotations;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Containers;
 using osu.Framework.Logging;
 using osu.Framework.Screens;
 using osu.Game.Beatmaps;
@@ -23,6 +24,7 @@ using osu.Game.Online.Rooms;
 using osu.Game.Online.Spectator;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Notifications;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 using osu.Game.Screens.Ranking;
@@ -45,6 +47,10 @@ namespace osu.Game.Screens.Play
         private LocalProfileManager localProfiles { get; set; }
 
         private bool localPlayRecorded;
+
+        // Ritsu: the local profile's PP / estimated rank from before this play, for the toolbar statistics update.
+        [CanBeNull]
+        private LocalStatisticsUpdateTracker localStatisticsUpdate;
 
         [Resolved]
         private IAPIProvider api { get; set; }
@@ -227,6 +233,21 @@ namespace osu.Game.Screens.Play
             });
 
             spectatorClient.BeginPlaying(token, GameplayState, Score);
+
+            if (!LocalPriorityDiagnostics.IsDisabled(@"recording"))
+                localStatisticsUpdate = localProfiles?.BeginStatisticsUpdate(Ruleset.Value);
+        }
+
+        protected override async Task ImportScore(Score score)
+        {
+            await base.ImportScore(score).ConfigureAwait(false);
+
+            // Ritsu: show how the saved score changed the local profile's PP and estimated rank (once per play).
+            var tracker = localStatisticsUpdate;
+            localStatisticsUpdate = null;
+
+            if (tracker != null)
+                localProfiles?.CompleteStatisticsUpdate(tracker, score.ScoreInfo);
         }
 
         public override bool Pause()
@@ -239,6 +260,28 @@ namespace osu.Game.Screens.Play
                 Score.ScoreInfo.Pauses.Add((int)Math.Round(GameplayClockContainer.CurrentTime));
 
             return paused;
+        }
+
+        protected override void PerformFail()
+        {
+            // Ritsu: failing as a Sudden Death / Perfect Death profile ends the profile. The fail screen still shows, but without
+            // retrying or restarting on fail; then its scores are shown one last time and it is deleted (see LocalProfileOverlay).
+            if (localProfiles?.BeginProfileDeath(Score.ScoreInfo.UserID) == true)
+            {
+                Configuration.AllowRestart = false;
+
+                foreach (var failMod in GameplayState.Mods.OfType<ModFailCondition>())
+                    failMod.Restart.Value = false;
+
+                // The profile's scores open together with the fail screen's buttons.
+                FailOverlay.State.BindValueChanged(state =>
+                {
+                    if (state.NewValue == Visibility.Visible)
+                        localProfiles?.FailScreenShown();
+                });
+            }
+
+            base.PerformFail();
         }
 
         protected override void ConcludeFailedScore(Score score)
@@ -315,8 +358,12 @@ namespace osu.Game.Screens.Play
                 if (seconds < 10 && judgedObjects < 30 && score.ScoreInfo.MaxCombo < 30)
                     return;
 
-                localProfiles.RecordPlay(userId, score.ScoreInfo.Ruleset.ShortName, seconds, hits,
-                    score.ScoreInfo.BeatmapInfo?.MD5Hash ?? GameplayState?.Beatmap.BeatmapInfo.MD5Hash);
+                string beatmapHash = score.ScoreInfo.BeatmapInfo?.MD5Hash ?? GameplayState?.Beatmap.BeatmapInfo.MD5Hash;
+
+                // Failed and quit plays are listed in the profile's Recent Plays for a day (rank F, no PP), like on the website.
+                var unfinished = GameplayState?.HasPassed == false ? LocalUnfinishedPlay.From(score.ScoreInfo, beatmapHash ?? string.Empty) : null;
+
+                localProfiles.RecordPlay(userId, score.ScoreInfo.Ruleset.ShortName, seconds, hits, beatmapHash, unfinished);
             }
             catch (Exception ex)
             {

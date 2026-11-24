@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
@@ -223,9 +223,11 @@ namespace osu.Game.Overlays.Toolbar
             // Text is set first so the glow layer, which mirrors the text shape, rebuilds against it.
             usernameAura.SetUser(user);
 
+            // Same two-line look as the other toolbar buttons (bold title, small subtext).
+            TooltipMain = local ? "Local Profile" : "No Local Profile";
             TooltipSub = local
-                ? "Local profile. Click: profile page. Right-click: switch profile."
-                : "No local profile. Click or right-click: choose a local profile.";
+                ? "play locally, free of charge!"
+                : "click or right-click to choose a local profile";
         }
 
         /// <summary>

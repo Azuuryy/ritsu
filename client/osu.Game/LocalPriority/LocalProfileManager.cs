@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Development;
@@ -13,10 +14,12 @@ using osu.Framework.IO.Stores;
 using osu.Framework.Platform;
 using osu.Framework.Threading;
 using osu.Game.Beatmaps;
+using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.Extensions;
 using osu.Game.Online.API;
 using osu.Game.Online.Leaderboards;
+using osu.Game.Overlays;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
@@ -47,6 +50,52 @@ namespace osu.Game.LocalPriority
         private readonly BindableInt revision = new BindableInt();
 
         /// <summary>
+        /// Incremented (on the update thread) when something that can change a local profile's PP changed: scores, PP options,
+        /// exclusions, ranking options, synced plays. Cosmetic changes (names, order, pictures, recorded attempts) leave it alone,
+        /// so PP that is already known can be shown again without recalculating it.
+        /// </summary>
+        public IBindable<int> PerformanceRevision => performanceRevision;
+
+        private readonly BindableInt performanceRevision = new BindableInt();
+
+        /// <summary>
+        /// For PP settings kept outside the store (other patches): PP is calculated again everywhere.
+        /// </summary>
+        public void InvalidatePerformance() => Schedule(() =>
+        {
+            performanceRevision.Value++;
+            revision.Value++;
+        });
+
+        private IDisposable? scoreSubscription;
+
+        private (LocalProfileOptions Options, LocalPerformanceExclusions Exclusions, (Guid, int, bool, bool, bool, object, object)[] Profiles)? lastPerformanceInputs;
+
+        /// <summary>
+        /// Bumps <see cref="PerformanceRevision"/> when a store change touched anything PP depends on.
+        /// </summary>
+        private void checkPerformanceInputs()
+        {
+            var options = Store.Options;
+            var exclusions = Store.PerformanceExclusions;
+            // Linked owners and synced plays are replaced (never changed in place) by the store, so comparing the lists themselves is enough.
+            var profiles = Store.GetProfiles()
+                                .Select(p => (p.Id, p.UserId, p.CountAllAsRanked, p.IncludeRelaxAutopilot, p.IgnoreUnrankedMods, (object)p.LinkedOwners, (object)p.SyncedScores))
+                                .ToArray();
+
+            if (lastPerformanceInputs is var (lastOptions, lastExclusions, lastProfiles)
+                && lastOptions.Equals(options)
+                && lastExclusions.Scores.SequenceEqual(exclusions.Scores)
+                && lastExclusions.Beatmaps.SequenceEqual(exclusions.Beatmaps)
+                && lastExclusions.BeatmapSets.SequenceEqual(exclusions.BeatmapSets)
+                && lastProfiles.SequenceEqual(profiles))
+                return;
+
+            lastPerformanceInputs = (options, exclusions, profiles);
+            performanceRevision.Value++;
+        }
+
+        /// <summary>
         /// Settings → Ritsu: local profiles may use the signed-in online account for read-only lookups
         /// (beatmaps, beatmap tags, leaderboards). Off by default. Scores are never submitted either way.
         /// </summary>
@@ -73,6 +122,18 @@ namespace osu.Game.LocalPriority
         public Bindable<bool> ProfilesWithModRules { get; } = new Bindable<bool>();
 
         /// <summary>
+        /// Settings → Profile Colors: tint profile pages with <see cref="ProfileColour"/> (not Sudden Death / Perfect Death ones, they keep red / amber).
+        /// </summary>
+        public Bindable<bool> ProfileColouring { get; } = new Bindable<bool>();
+
+        /// <summary>
+        /// Settings → Profile Colors: the colour profile pages are tinted with while <see cref="ProfileColouring"/> is on.
+        /// </summary>
+        public Bindable<Colour4> ProfileColour { get; } = new Bindable<Colour4>(Colour4.FromHex(LocalProfileOptions.DEFAULT_PROFILE_COLOUR));
+
+        private ScheduledDelegate? pendingProfileColourWrite;
+
+        /// <summary>
         /// Settings → Ritsu: check auto-switch rules once more when a beatmap is started (without waiting for the 2 seconds).
         /// </summary>
         public Bindable<bool> SwitchOnBeatmapStart { get; } = new Bindable<bool>(true);
@@ -81,6 +142,11 @@ namespace osu.Game.LocalPriority
         /// Settings → Ritsu: calculate and show "Total Accuracy" (over every recorded hit) on the profile page.
         /// </summary>
         public Bindable<bool> ShowTotalAccuracy { get; } = new Bindable<bool>(true);
+
+        /// <summary>
+        /// Settings → Ritsu: plays on beatmaps marked LOCAL (changed in the editor) can give PP. When off, profiles leave them out entirely.
+        /// </summary>
+        public Bindable<bool> LocalMapsGivePerformance { get; } = new Bindable<bool>(true);
 
         /// <summary>
         /// Settings → Ritsu: every local profile counts every beatmap and mod as ranked (like each profile's own option).
@@ -167,6 +233,13 @@ namespace osu.Game.LocalPriority
         {
             base.LoadComplete();
 
+            // Any change to scores (saved, deleted, transferred, imported) can change PP.
+            scoreSubscription = realm.RegisterForNotifications(r => r.All<ScoreInfo>(), (_, changes) =>
+            {
+                if (changes != null)
+                    performanceRevision.Value++;
+            });
+
             Store.Changed += onStoreChanged;
             Store.CalculationsFailed += onCalculationsFailed;
             LocalProfilesUseOnlineAccount.BindValueChanged(v => Store.SetLocalProfilesUseOnlineAccount(v.NewValue));
@@ -175,10 +248,24 @@ namespace osu.Game.LocalPriority
             DeleteWithScoresWithoutAsking.BindValueChanged(_ => writeOptions());
             SuggestSyncingSameNamePlays.BindValueChanged(_ => writeOptions());
             ProfilesWithModRules.BindValueChanged(_ => writeOptions());
+            ProfileColouring.BindValueChanged(_ => writeProfileColours(true));
+            // The picker changes it every frame while dragged: save once it settles.
+            ProfileColour.BindValueChanged(_ => writeProfileColours(false));
             AutoSwitchNotifications.BindValueChanged(_ => writeOptions());
             SwitchOnBeatmapStart.BindValueChanged(_ => writeOptions());
             ShowTotalAccuracy.BindValueChanged(_ => writeOptions());
-            CountEverythingAsRanked.BindValueChanged(_ => writeOptions());
+            LocalMapsGivePerformance.BindValueChanged(_ => writeOptions());
+            CountEverythingAsRanked.BindValueChanged(e =>
+            {
+                if (readingOptions)
+                    return;
+
+                var before = Store.ActiveProfile;
+                writeOptions();
+
+                if (before != null)
+                    ShowRankingChange(before, e.OldValue, gameRuleset.Value);
+            });
             ShowNonCountingScores.BindValueChanged(_ => writeOptions());
 
             if (api is ILocalProfileApi apiAccess)
@@ -201,6 +288,7 @@ namespace osu.Game.LocalPriority
             }
 
             migrateLinkedOwners();
+            deleteDeadProfiles();
 
             // Pictures saved at full size by older builds are scaled down once, off the update thread.
             System.Threading.Tasks.Task.Run(Store.ShrinkOversizedAvatars);
@@ -226,8 +314,15 @@ namespace osu.Game.LocalPriority
             DeleteWithScoresWithoutAsking.Value = options.DeleteWithScoresWithoutAsking;
             SuggestSyncingSameNamePlays.Value = options.SuggestSyncingSameNamePlays;
             ProfilesWithModRules.Value = options.ProfilesWithModRules;
+            ProfileColouring.Value = options.ProfileColouring;
+
+            // A colour still waiting to be saved is newer than the stored one.
+            if (pendingProfileColourWrite == null)
+                ProfileColour.Value = parseProfileColour(options.ProfileColour);
+
             AutoSwitchNotifications.Value = options.AutoSwitchNotifications;
             SwitchOnBeatmapStart.Value = options.SwitchOnBeatmapStart;
+            LocalMapsGivePerformance.Value = options.LocalMapsGivePerformance;
             ShowTotalAccuracy.Value = options.ShowTotalAccuracy;
             CountEverythingAsRanked.Value = options.CountEverythingAsRanked;
             ShowNonCountingScores.Value = options.ShowNonCountingScores;
@@ -247,12 +342,61 @@ namespace osu.Game.LocalPriority
                 DeleteWithScoresWithoutAsking = DeleteWithScoresWithoutAsking.Value,
                 SuggestSyncingSameNamePlays = SuggestSyncingSameNamePlays.Value,
                 ProfilesWithModRules = ProfilesWithModRules.Value,
+                ProfileColouring = ProfileColouring.Value,
+                ProfileColour = ProfileColour.Value.ToHex(),
                 AutoSwitchNotifications = AutoSwitchNotifications.Value,
                 SwitchOnBeatmapStart = SwitchOnBeatmapStart.Value,
+                LocalMapsGivePerformance = LocalMapsGivePerformance.Value,
                 ShowTotalAccuracy = ShowTotalAccuracy.Value,
                 CountEverythingAsRanked = CountEverythingAsRanked.Value,
                 ShowNonCountingScores = ShowNonCountingScores.Value,
             });
+        }
+
+        private void writeProfileColours(bool now)
+        {
+            if (readingOptions)
+                return;
+
+            pendingProfileColourWrite?.Cancel();
+            pendingProfileColourWrite = null;
+
+            if (now)
+            {
+                Store.SetProfileColours(ProfileColouring.Value, ProfileColour.Value.ToHex());
+                return;
+            }
+
+            pendingProfileColourWrite = Scheduler.AddDelayed(() =>
+            {
+                pendingProfileColourWrite = null;
+                Store.SetProfileColours(ProfileColouring.Value, ProfileColour.Value.ToHex());
+            }, 500);
+        }
+
+        private static Colour4 parseProfileColour(string? hex)
+            => Colour4.TryParseHex(hex ?? string.Empty, out var colour) ? colour.Opacity(1f) : Colour4.FromHex(LocalProfileOptions.DEFAULT_PROFILE_COLOUR);
+
+        /// <summary>
+        /// The page colours for a profile: red for Sudden Death, amber for Perfect Death, otherwise Settings → Profile Colors (or the usual pink).
+        /// </summary>
+        public (int hue, float saturation) GetProfilePageColours(LocalProfile profile)
+        {
+            switch (profile.DeathMode)
+            {
+                case LocalDeathMode.SuddenDeath:
+                    return (OverlayColourScheme.Red.GetHue(), 1);
+
+                case LocalDeathMode.PerfectDeath:
+                    // Amber: osu!'s "orange" (45) comes out olive on the dark page colours, the website's yellowish profiles sit lower.
+                    return (30, 1);
+            }
+
+            if (!ProfileColouring.Value)
+                return (OverlayColourScheme.Pink.GetHue(), 1);
+
+            var hsv = ProfileColour.Value.ToHSV();
+            return ((int)MathF.Round(hsv.X * 360) % 360, hsv.Y);
         }
 
         /// <summary>
@@ -458,6 +602,10 @@ namespace osu.Game.LocalPriority
             if (mod_rules_off)
                 return;
 
+            // Sudden Death / Perfect Death profiles: make sure the play starts with their mod.
+            if (activeProfile.Value?.DeathMode is LocalDeathMode.SuddenDeath or LocalDeathMode.PerfectDeath)
+                enforceModRules();
+
             var rules = activeProfile.Value?.ModRules;
 
             if (gameMods == null || gameMods.Disabled || rules == null || rules.BlockSelected || !rules.OnlyAllowSelectedSettings)
@@ -482,6 +630,12 @@ namespace osu.Game.LocalPriority
             if (mod_rules_off)
                 return true;
 
+            // Sudden Death / Perfect Death profiles: their mod is always on, so mods that conflict with it can't be picked.
+            var deathMod = deathModForCurrentRuleset();
+
+            if (deathMod != null && !exemptFromRules(mod) && mod.GetType() != deathMod.GetType() && !ModUtils.CheckCompatibleSet(new[] { deathMod, mod }))
+                return false;
+
             var rules = activeProfile.Value?.ModRules;
 
             if (rules == null || !rules.HasAnyRule || exemptFromRules(mod))
@@ -496,6 +650,67 @@ namespace osu.Game.LocalPriority
                 return listed;
 
             return true;
+        }
+
+        /// <summary>
+        /// The mod a Sudden Death / Perfect Death profile always plays with, made for the current ruleset (null for other profiles).
+        /// </summary>
+        private Mod? deathModForCurrentRuleset()
+        {
+            string? acronym = activeProfile.Value?.DeathMode switch
+            {
+                LocalDeathMode.SuddenDeath => @"SD",
+                LocalDeathMode.PerfectDeath => @"PF",
+                _ => null,
+            };
+
+            var ruleset = gameRuleset.Value;
+
+            if (acronym == null || ruleset == null)
+                return null;
+
+            // Asked for every mod panel on every selection change: made once per ruleset and mode, shared (never selected itself, see enforceModRules).
+            string key = $@"{ruleset.ShortName}:{acronym}";
+
+            if (deathModKey != key)
+            {
+                deathModKey = key;
+                cachedDeathMod = ruleset.CreateInstance().CreateModFromAcronym(acronym);
+
+                if (cachedDeathMod is ModFailCondition failCondition)
+                    failCondition.Restart.Value = false;
+            }
+
+            return cachedDeathMod;
+        }
+
+        private string? deathModKey;
+        private Mod? cachedDeathMod;
+
+        /// <summary>
+        /// Whether this selected mod can't be turned off: the active Sudden Death / Perfect Death profile's own mod.
+        /// </summary>
+        public bool IsModLocked(Mod mod)
+        {
+            if (mod_rules_off || activeProfile.Value == null || activeProfile.Value.DeathMode == LocalDeathMode.None)
+                return false;
+
+            return mod is (ModSuddenDeath or ModPerfect) && deathModForCurrentRuleset()?.GetType() == mod.GetType();
+        }
+
+        private static readonly string restart_on_fail_label =
+            typeof(ModFailCondition).GetProperty(nameof(ModFailCondition.Restart))?.GetCustomAttribute<SettingSourceAttribute>()?.Label.ToString() ?? @"Restart on fail";
+
+        /// <summary>
+        /// Mod customisation leaves this setting out: Sudden Death / Perfect Death profiles never restart on fail
+        /// (their other settings, like Sudden Death's "Also fail when missing a slider tail", stay).
+        /// </summary>
+        public bool IsModSettingHidden(Mod mod, Drawable control)
+        {
+            if (mod_rules_off || mod is not ModFailCondition || activeProfile.Value == null || activeProfile.Value.DeathMode == LocalDeathMode.None)
+                return false;
+
+            return control is Overlays.Settings.SettingsCheckbox checkbox && checkbox.LabelText.ToString() == restart_on_fail_label;
         }
 
         private ModPreview? modPreview;
@@ -563,12 +778,55 @@ namespace osu.Game.LocalPriority
         {
             var rules = activeProfile.Value?.ModRules;
 
-            if (modPreview != null || gameMods == null || gameMods.Disabled || rules == null || !rules.HasAnyRule)
+            if (rules != null && !rules.HasAnyRule)
+                rules = null;
+
+            if (modPreview != null || gameMods == null || gameMods.Disabled || mod_rules_off)
                 return;
 
-            var ruleMods = ruleModsForCurrentRuleset(rules);
+            var deathMod = deathModForCurrentRuleset();
+
+            if (rules == null && deathMod == null)
+                return;
+
             var current = gameMods.Value;
             var result = current.ToList();
+
+            if (rules != null)
+                applyRules(rules, result);
+
+            // Sudden Death / Perfect Death profiles: their mod is always selected, never restarts on fail, and mods conflicting with it go.
+            if (deathMod != null && !result.Any(m => m is ModAutoplay))
+            {
+                int index = result.FindIndex(m => m.GetType() == deathMod.GetType());
+
+                if (index < 0)
+                {
+                    result.RemoveAll(m => !exemptFromRules(m) && !ModUtils.CheckCompatibleSet(new[] { deathMod, m }));
+                    result.Add(deathMod.DeepClone());
+                }
+
+                // Neither it nor other fail mods kept alongside it (e.g. Accuracy Challenge with Sudden Death) restart on fail.
+                for (int i = 0; i < result.Count; i++)
+                {
+                    if (result[i] is ModFailCondition other && other.Restart.Value)
+                    {
+                        var corrected = result[i].DeepClone();
+                        ((ModFailCondition)corrected).Restart.Value = false;
+                        result[i] = corrected;
+                    }
+                }
+            }
+
+            bool changed = result.Count != current.Count || result.Where((m, i) => !ReferenceEquals(m, current[i])).Any();
+
+            if (changed)
+                gameMods.Value = result;
+        }
+
+        private void applyRules(LocalModRules rules, List<Mod> result)
+        {
+            var ruleMods = ruleModsForCurrentRuleset(rules);
 
             if (rules.BlockSelected)
                 result.RemoveAll(m => !exemptFromRules(m) && ruleMods.Any(r => r.GetType() == m.GetType()));
@@ -585,11 +843,6 @@ namespace osu.Game.LocalPriority
                         result[i] = fixedMod.DeepClone();
                 }
             }
-
-            bool changed = result.Count != current.Count || result.Where((m, i) => !ReferenceEquals(m, current[i])).Any();
-
-            if (changed)
-                gameMods.Value = result;
         }
 
         /// <summary>
@@ -599,6 +852,54 @@ namespace osu.Game.LocalPriority
         /// Diagnostics: profile mod rules turned off (OSU_LOCAL_DISABLE=modrules).
         /// </summary>
         private static readonly bool mod_rules_off = LocalPriorityDiagnostics.IsDisabled(@"modrules");
+
+        /// <summary>
+        /// The mods selected before switching to a Sudden Death / Perfect Death profile (with their ruleset),
+        /// selected again once a profile without a forced mod is active (switching away, or the profile was deleted).
+        /// </summary>
+        private (string Ruleset, APIMod[] Mods)? modsBeforeDeathProfile;
+
+        /// <summary>
+        /// Remembers or restores the mods around Sudden Death / Perfect Death profiles. Returns false if the mods can't be changed right now.
+        /// </summary>
+        private bool restoreModsAfterDeathProfile(LocalProfile? profile)
+        {
+            if (gameMods == null)
+                return true;
+
+            bool forcedMod = profile?.DeathMode is LocalDeathMode.SuddenDeath or LocalDeathMode.PerfectDeath;
+
+            if (forcedMod)
+            {
+                // Remember once: switching between Sudden Death and Perfect Death profiles keeps the mods from before the first one.
+                if (modsBeforeDeathProfile == null && gameRuleset.Value != null)
+                    modsBeforeDeathProfile = (gameRuleset.Value.ShortName, gameMods.Value.Where(m => !exemptFromRules(m)).Select(m => new APIMod(m)).ToArray());
+
+                return true;
+            }
+
+            if (modsBeforeDeathProfile is not (string rulesetName, APIMod[] remembered))
+                return true;
+
+            if (gameMods.Disabled)
+                return false;
+
+            modsBeforeDeathProfile = null;
+
+            var ruleset = gameRuleset.Value?.CreateInstance();
+
+            // Mods from another ruleset (the ruleset was changed meanwhile) can't come back.
+            if (ruleset == null || ruleset.RulesetInfo.ShortName != rulesetName)
+                return true;
+
+            var restored = remembered.Select(m => m.ToMod(ruleset)).Where(m => m is not UnknownMod).ToList();
+
+            if (!ModUtils.CheckCompatibleSet(restored))
+                return true;
+
+            gameMods.Value = restored;
+            return true;
+        }
 
         private void applyModRulesIfChanged()
         {
@@ -618,8 +919,31 @@ namespace osu.Game.LocalPriority
 
             appliedRulesKey = key;
 
-            if (gameMods == null || rules == null || !rules.HasAnyRule)
+            if (!restoreModsAfterDeathProfile(profile))
+            {
+                // Can't change mods right now (e.g. in gameplay): try again when they can be changed.
+                appliedRulesKey = null;
+                Scheduler.AddDelayed(applyModRulesIfChanged, 500);
                 return;
+            }
+
+            if (gameMods == null || rules == null || !rules.HasAnyRule)
+            {
+                // Sudden Death / Perfect Death profiles select their mod on switching (retried while mods can't be changed).
+                if (gameMods != null && profile?.DeathMode is LocalDeathMode.SuddenDeath or LocalDeathMode.PerfectDeath)
+                {
+                    if (gameMods.Disabled)
+                    {
+                        appliedRulesKey = null;
+                        Scheduler.AddDelayed(applyModRulesIfChanged, 500);
+                        return;
+                    }
+
+                    enforceModRules();
+                }
+
+                return;
+            }
 
             if (rules.ApplyOnSwitch && !rules.BlockSelected)
             {
@@ -666,7 +990,151 @@ namespace osu.Game.LocalPriority
 
         public LocalProfile CreateProfile(string name, CountryCode country = CountryCode.Unknown) => Store.CreateProfile(name, country);
 
-        public LocalProfile CreateDefaultProfile() => Store.CreateDefaultProfile();
+        public LocalProfile CreateDefaultProfile(LocalDeathMode deathMode = LocalDeathMode.None) => Store.CreateDefaultProfile(deathMode);
+
+        public (int SuddenDeath, int PerfectDeath) GetDeathProfileCounts() => Store.GetDeathProfileCounts();
+
+        public void ResetDeathProfileCounts() => Store.ResetDeathProfileCounts();
+
+        #region Sudden Death / Perfect Death profiles
+
+        /// <summary>
+        /// The dead profile's scores open together with the fail screen's buttons (<see cref="FailScreenShown"/>);
+        /// if gameplay is left before that (quit during the fail animation, which takes 2.5 seconds), they open after this long anyway.
+        /// </summary>
+        private const double death_fallback_time = 2500;
+
+        /// <summary>
+        /// How long the dead profile's scores stay open at most.
+        /// </summary>
+        private const double death_last_look_time = 60_000;
+
+        /// <summary>
+        /// A dead Sudden Death / Perfect Death profile's scores should open now (the profile page does this, on the update thread).
+        /// Closing the page calls <see cref="FinishProfileDeath"/>.
+        /// </summary>
+        public event Action<Guid>? ShowLastScores;
+
+        /// <summary>
+        /// The last look at a dead profile's scores is over: the profile page closes, then the profile is deleted.
+        /// </summary>
+        public event Action<Guid>? ProfileDeathFinished;
+
+        private Guid? dyingProfileId;
+        private bool lastScoresShown;
+        private ScheduledDelegate? deathTimeout;
+        private ScheduledDelegate? deathFallback;
+
+        /// <summary>
+        /// When (game clock time) the dying profile's last look at its scores ends, for the profile page's countdown. Null until it started.
+        /// </summary>
+        public double? LastLookEndTime { get; private set; }
+
+        /// <summary>
+        /// Called by gameplay when a play fails: if it was the active Sudden Death / Perfect Death profile's play, the profile dies.
+        /// Returns whether it did (gameplay then blocks retrying).
+        /// </summary>
+        public bool BeginProfileDeath(int userId)
+        {
+            var profile = activeProfile.Value;
+
+            if (profile == null || profile.DeathMode == LocalDeathMode.None || profile.UserId != userId || mod_rules_off || dyingProfileId != null)
+                return false;
+
+            Guid id = profile.Id;
+
+            // Saved right away: if the game is closed before the deletion, the profile goes on the next start.
+            Store.MarkDied(id);
+            dyingProfileId = id;
+            lastScoresShown = false;
+            LastLookEndTime = null;
+
+            deathFallback = Scheduler.AddDelayed(showLastScores, death_fallback_time);
+            return true;
+        }
+
+        /// <summary>
+        /// Called by gameplay when the fail screen's buttons appear: a dying profile's scores open at the same time.
+        /// </summary>
+        public void FailScreenShown()
+        {
+            if (dyingProfileId != null)
+                showLastScores();
+        }
+
+        private void showLastScores()
+        {
+            if (dyingProfileId is not Guid id || lastScoresShown)
+                return;
+
+            lastScoresShown = true;
+            deathFallback?.Cancel();
+
+            // The minute starts now, as the page opens (it counts it down).
+            LastLookEndTime = Time.Current + death_last_look_time;
+            deathTimeout = Scheduler.AddDelayed(() => FinishProfileDeath(id), death_last_look_time);
+
+            if (ShowLastScores == null)
+                FinishProfileDeath(id);
+            else
+                ShowLastScores.Invoke(id);
+        }
+
+        /// <summary>
+        /// Ends a dead profile's last look at its scores: closes the profile page, goes back to song select (leaving gameplay)
+        /// and deletes the profile with all its scores and play statistics.
+        /// </summary>
+        public void FinishProfileDeath(Guid id)
+        {
+            if (dyingProfileId != id)
+                return;
+
+            dyingProfileId = null;
+            LastLookEndTime = null;
+            deathTimeout?.Cancel();
+            deathTimeout = null;
+            deathFallback?.Cancel();
+            deathFallback = null;
+
+            ProfileDeathFinished?.Invoke(id);
+
+            if (game == null)
+            {
+                deleteDeadProfile(id);
+                return;
+            }
+
+            // Deleted once back at song select, so nothing from the play (e.g. a replay saved from the fail screen) is added after it.
+            game.PerformFromScreen(_ => deleteDeadProfile(id), new[] { typeof(Screens.Select.SoloSongSelect) });
+        }
+
+        private void deleteDeadProfile(Guid id)
+        {
+            var profile = Store.GetProfile(id);
+
+            if (profile == null || !profile.Died)
+                return;
+
+            try
+            {
+                Delete(id, deleteScores: true);
+            }
+            catch (Exception ex)
+            {
+                osu.Framework.Logging.Logger.Error(ex, $@"Ritsu: could not delete the failed profile ""{profile.Name}"".");
+            }
+        }
+
+        /// <summary>
+        /// Profiles that died but whose deletion didn't happen (the game was closed during the last look at their scores) go now.
+        /// </summary>
+        private void deleteDeadProfiles()
+        {
+            foreach (var dead in Store.GetProfiles().Where(p => p.Died).ToArray())
+                deleteDeadProfile(dead.Id);
+        }
+
+        #endregion
 
         public void Rename(Guid id, string name)
         {
@@ -728,8 +1196,17 @@ namespace osu.Game.LocalPriority
                 leaderboardManager.FetchWithCriteria(criteria, forceRefresh: true);
         });
 
-        public void SetRankingOptions(Guid id, bool? includeRelaxAutopilot = null, bool? countAllAsRanked = null) =>
-            Store.SetRankingOptions(id, includeRelaxAutopilot, countAllAsRanked);
+        public void SetRankingOptions(Guid id, bool? includeRelaxAutopilot = null, bool? countAllAsRanked = null, bool? ignoreUnrankedMods = null)
+        {
+            // Changing what counts for PP on the active profile shows the PP / rank difference on the toolbar, like excluding a play.
+            var before = Store.ActiveProfile;
+            bool countEverything = Store.Options.CountEverythingAsRanked;
+
+            Store.SetRankingOptions(id, includeRelaxAutopilot, countAllAsRanked, ignoreUnrankedMods);
+
+            if (before?.Id == id)
+                ShowRankingChange(before, countEverything, gameRuleset.Value);
+        }
 
         /// <summary>
         /// Delete a profile. If it is the active one, the profile to its left becomes active (or the one to its right;
@@ -1447,8 +1924,9 @@ namespace osu.Game.LocalPriority
 
         #endregion
 
-        public void RecordPlay(int userId, string ruleset, double playSeconds, IReadOnlyDictionary<osu.Game.Rulesets.Scoring.HitResult, int> hits, string? beatmapHash = null) =>
-            Store.RecordPlay(userId, ruleset, playSeconds, hits, beatmapHash);
+        public void RecordPlay(int userId, string ruleset, double playSeconds, IReadOnlyDictionary<osu.Game.Rulesets.Scoring.HitResult, int> hits, string? beatmapHash = null,
+                               LocalUnfinishedPlay? unfinished = null) =>
+            Store.RecordPlay(userId, ruleset, playSeconds, hits, beatmapHash, unfinished);
 
         /// <summary>
         /// A beatmap was entered: played, or watched as a replay (any gameplay screen). Called by the game on the update thread.
@@ -1465,6 +1943,7 @@ namespace osu.Game.LocalPriority
             LocalProfilesUseOnlineAccount.Value = Store.LocalProfilesUseOnlineAccount;
             readOptions();
             updateAutoSwitchActive();
+            checkPerformanceInputs();
             revision.Value++;
             applyToApi();
             applyModRulesIfChanged();
@@ -1476,7 +1955,9 @@ namespace osu.Game.LocalPriority
 
             // Settings → Ritsu "Count everything as ranked" applies to every local profile (not the online account).
             LocalPriorityPolicy.CountAllAsRanked = profile != null && (profile.CountAllAsRanked || Store.Options.CountEverythingAsRanked);
+            LocalPriorityPolicy.LocalMapsGivePerformance = Store.Options.LocalMapsGivePerformance;
             LocalPriorityPolicy.CountRelaxAutopilot = profile?.IncludeRelaxAutopilot == true;
+            LocalPriorityPolicy.IgnoreUnrankedMods = profile?.IgnoreUnrankedMods == true;
 
             if (api is ILocalProfileApi apiAccess)
             {
@@ -1496,6 +1977,16 @@ namespace osu.Game.LocalPriority
         {
             Store.Changed -= onStoreChanged;
             Store.CalculationsFailed -= onCalculationsFailed;
+            scoreSubscription?.Dispose();
+
+            // A colour picked less than half a second before quitting.
+            if (pendingProfileColourWrite != null)
+            {
+                pendingProfileColourWrite.Cancel();
+                pendingProfileColourWrite = null;
+                Store.SetProfileColours(ProfileColouring.Value, ProfileColour.Value.ToHex());
+            }
+
             Store.Flush();
 
             if (api is ILocalProfileApi apiAccess)

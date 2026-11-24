@@ -52,6 +52,11 @@ namespace osu.Game.LocalPriority
         public LocalPlayStatistics Plays { get; init; } = new LocalPlayStatistics();
 
         public int SavedScoreCount { get; init; }
+
+        /// <summary>
+        /// Saved scores plus the failed / quit plays of the last day (the number next to "Recent Plays").
+        /// </summary>
+        public int RecentPlayCount { get; init; }
         public long RankedScore { get; init; }
         public long TotalScore { get; init; }
 
@@ -113,9 +118,9 @@ namespace osu.Game.LocalPriority
         /// Plays per beatmap: the plays counted by Ritsu, or the number of saved scores on it if that's higher
         /// (plays from before Ritsu counted them, synced or transferred scores).
         /// </summary>
-        private static (IReadOnlyList<LocalBeatmapEntry>, int) calculateMostPlayed(LocalPlayStatistics plays, IReadOnlyList<ScoreSummary> scores)
+        private static (IReadOnlyList<LocalBeatmapEntry>, int) calculateMostPlayed(LocalPlayStatistics plays, IReadOnlyList<ScoreSummary> scores, HashSet<string> hiddenBeatmaps)
         {
-            var perBeatmap = new Dictionary<string, long>(plays.BeatmapPlays.Where(p => p.Value > 0).ToDictionary(p => p.Key, p => p.Value));
+            var perBeatmap = new Dictionary<string, long>(plays.BeatmapPlays.Where(p => p.Value > 0 && !hiddenBeatmaps.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value));
 
             // Plays are counted per beatmap MD5 hash. Beatmaps that only have scores (synced / imported / from before Ritsu counted plays)
             // count one play per score.
@@ -248,10 +253,27 @@ namespace osu.Game.LocalPriority
 
         /// <summary>
         /// Only the PP total (for other profiles' chips and the local ranking): nothing else is built.
+        /// <c>countEverythingAsRanked</c> overrides Settings → "Count everything as ranked" (to compare PP before and after it changes).
         /// </summary>
         public static async Task<double> CalculatePerformanceAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm, BeatmapManager beatmaps,
-                                                                   LocalProfileStore store, CancellationToken cancellationToken)
-            => (await calculateAsync(profile, ruleset, realm, beatmaps, store, false, cancellationToken).ConfigureAwait(false)).PP;
+                                                                   LocalProfileStore store, CancellationToken cancellationToken, bool? countEverythingAsRanked = null)
+            => (await calculateAsync(profile, ruleset, realm, beatmaps, store, false, cancellationToken, countEverythingAsRanked).ConfigureAwait(false)).PP;
+
+        /// <summary>
+        /// The PP total with and without one score, from a single pass (the toolbar's PP change after a play, without calculating anything
+        /// while the play runs).
+        /// </summary>
+        public static async Task<(double Without, double With)> CalculatePerformanceChangeAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm,
+                                                                                              BeatmapManager beatmaps, LocalProfileStore store, Guid scoreId)
+        {
+            var result = await calculateAsync(profile, ruleset, realm, beatmaps, store, false, CancellationToken.None, leaveOut: scoreId).ConfigureAwait(false);
+            return (result.ppWithoutLeftOut ?? result.PP, result.PP);
+        }
+
+        /// <summary>
+        /// The PP total without the score passed as <c>leaveOut</c>.
+        /// </summary>
+        private double? ppWithoutLeftOut { get; init; }
 
         /// <summary>
         /// Only the PP total and the best PP per beatmap (<see cref="BestPerformance"/>), for the command palette's PP projections.
@@ -326,7 +348,8 @@ namespace osu.Game.LocalPriority
         }
 
         private static async Task<LocalProfileStatistics> calculateAsync(LocalProfile profile, RulesetInfo ruleset, RealmAccess realm, BeatmapManager beatmaps,
-                                                                         LocalProfileStore store, bool full, CancellationToken cancellationToken)
+                                                                         LocalProfileStore store, bool full, CancellationToken cancellationToken,
+                                                                         bool? countEverythingAsRanked = null, Guid? leaveOut = null)
         {
             // The profile's own scores (synced and transferred plays carry its ID too), plus old-style linked owners.
             string userField = $@"{nameof(ScoreInfo.User)}.{nameof(RealmUser.OnlineID)}";
@@ -344,7 +367,9 @@ namespace osu.Game.LocalPriority
 
             var syncedIds = profile.SyncedScores.Select(s => s.ScoreId).ToHashSet();
             var options = store.Options;
-            var exclusions = store.PerformanceExclusions;
+            var exclusions = store.PerformanceExclusions.CreateMatcher();
+            var modFacts = new ModFactsCache(ruleset);
+            bool countAll = profile.CountAllAsRanked || (countEverythingAsRanked ?? options.CountEverythingAsRanked);
 
             // Read the few values needed from every score inside the database, instead of copying each score with its whole beatmap.
             var scores = realm.Run(r =>
@@ -358,7 +383,12 @@ namespace osu.Game.LocalPriority
 
                 foreach (var score in results)
                 {
-                    string? noPerformanceReason = exclusions.GetReason(score) ?? getNoPerformanceReason(score, profile, options.CountEverythingAsRanked);
+                    // Settings → Ritsu "Count LOCAL maps towards PP" off: plays on beatmaps changed in the editor aren't part of the profile.
+                    if (!options.LocalMapsGivePerformance && score.BeatmapInfo?.Status == BeatmapOnlineStatus.LocallyModified)
+                        continue;
+
+                    var facts = modFacts.Get(score, countAll, profile);
+                    string? noPerformanceReason = exclusions.GetReason(score) ?? getNoPerformanceReason(score, profile, countAll, facts);
 
                     var summary = new ScoreSummary
                     {
@@ -382,7 +412,7 @@ namespace osu.Game.LocalPriority
                         {
                             summary.SyncedHits = new Dictionary<HitResult, int>(score.Statistics);
 
-                            double rate = ModUtils.CalculateRateWithMods(score.Mods);
+                            double rate = facts.Rate;
                             if (score.BeatmapInfo != null && rate > 0)
                                 summary.SyncedSeconds = score.BeatmapInfo.Length / 1000 / rate;
                         }
@@ -437,7 +467,22 @@ namespace osu.Game.LocalPriority
             var bestPerformance = best.Select(b => (b.Score.BeatmapHash, b.PP)).ToArray();
 
             if (!full)
-                return new LocalProfileStatistics { PP = totalPP, BestPerformance = bestPerformance };
+            {
+                double? withoutLeftOut = null;
+
+                if (leaveOut != null)
+                {
+                    withoutLeftOut = WeightedTotal(byBeatmap.Select(g => g.Where(s => s.ID != leaveOut && countsForPerformance(s))
+                                                                          .Select(s => performance[s.ID]!.Value)
+                                                                          .DefaultIfEmpty(double.NaN)
+                                                                          .Max())
+                                                            .Where(pp => !double.IsNaN(pp))
+                                                            .OrderByDescending(pp => pp)
+                                                            .ToArray());
+                }
+
+                return new LocalProfileStatistics { PP = totalPP, BestPerformance = bestPerformance, ppWithoutLeftOut = withoutLeftOut };
+            }
 
             // Best score per beatmap (by total score) for grades / ranked score.
             var topScorePerBeatmap = byBeatmap.Select(g => g.OrderByDescending(s => s.TotalScore).First()).ToArray();
@@ -468,9 +513,22 @@ namespace osu.Game.LocalPriority
                 weight *= 0.95;
             }
 
-            var recent = scores.OrderByDescending(s => s.Date)
+            // Beatmaps marked LOCAL, when Settings → Ritsu leaves them out of profiles (by MD5 hash, like recorded plays).
+            var hiddenBeatmaps = options.LocalMapsGivePerformance
+                ? new HashSet<string>()
+                : realm.Run(r => r.All<BeatmapInfo>().Filter($@"{nameof(BeatmapInfo.StatusInt)} == $0", (int)BeatmapOnlineStatus.LocallyModified)
+                                  .AsEnumerable().Select(b => b.MD5Hash).ToHashSet());
+
+            // Failed and quit plays of the last day are listed with the saved scores, like the website's recent plays.
+            var unfinished = store.UnfinishedPlays.Get(profile.UserId, ruleset.ShortName)
+                                  .Where(p => !hiddenBeatmaps.Contains(p.BeatmapMD5))
+                                  .ToArray();
+
+            var recent = scores.Select(s => (s.Date, Entry: new LocalScoreEntry(s.ID, performance.GetValueOrDefault(s.ID), null, s.NoPerformanceReason)))
+                               .Concat(unfinished.Select(p => (p.Date, Entry: new LocalScoreEntry(p.Id, null, null) { Unfinished = p })))
+                               .OrderByDescending(s => s.Date)
                                .Take(RECENT_SCORE_LIMIT)
-                               .Select(s => new LocalScoreEntry(s.ID, performance.GetValueOrDefault(s.ID), null, s.NoPerformanceReason))
+                               .Select(s => s.Entry)
                                .ToArray();
 
             // Settings → Ritsu "Do not hide unranked scores": per beatmap, the best score that gives no PP is listed too
@@ -498,6 +556,10 @@ namespace osu.Game.LocalPriority
             var history = new List<(DateTimeOffset, double)>();
             var bestSoFar = new Dictionary<string, double>();
 
+            // The same values, kept sorted highest first (so each step only moves one value instead of sorting all of them).
+            var bestSoFarOrdered = new List<double>();
+            var descending = Comparer<double>.Create((a, b) => b.CompareTo(a));
+
             foreach (var score in scores.Where(s => countsForPerformance(s) && !string.IsNullOrEmpty(s.BeatmapHash)).OrderBy(s => s.Date))
             {
                 double pp = performance[score.ID]!.Value;
@@ -505,13 +567,19 @@ namespace osu.Game.LocalPriority
                 if (bestSoFar.TryGetValue(score.BeatmapHash, out double existing) && existing >= pp)
                     continue;
 
+                if (bestSoFar.ContainsKey(score.BeatmapHash))
+                    bestSoFarOrdered.RemoveAt(bestSoFarOrdered.BinarySearch(existing, descending));
+
+                int index = bestSoFarOrdered.BinarySearch(pp, descending);
+                bestSoFarOrdered.Insert(index < 0 ? ~index : index, pp);
+
                 bestSoFar[score.BeatmapHash] = pp;
-                history.Add((score.Date, WeightedTotal(bestSoFar.Values.OrderByDescending(v => v).ToArray())));
+                history.Add((score.Date, WeightedTotal(bestSoFarOrdered)));
             }
 
             var plays = withSyncedScores(store.GetPlayStatistics(profile.Id, ruleset.ShortName), scores.Where(s => s.SyncedHits != null));
 
-            var (mostPlayed, mostPlayedCount) = calculateMostPlayed(plays, scores);
+            var (mostPlayed, mostPlayedCount) = calculateMostPlayed(plays, scores, hiddenBeatmaps);
             var (monthly, weekly) = calculatePlayHistory(plays, scores);
 
             // Load the rows shown right away (the rest is loaded when "show more" needs it), still off the update thread.
@@ -532,6 +600,7 @@ namespace osu.Game.LocalPriority
                 TotalAccuracy = options.ShowTotalAccuracy ? calculateTotalAccuracy(plays, ruleset) : null,
                 Plays = plays,
                 SavedScoreCount = scores.Count,
+                RecentPlayCount = scores.Count + unfinished.Length,
                 RankedScore = topScorePerBeatmap.Where(s => s.GrantsPerformance).Sum(s => s.TotalScore),
                 TotalScore = scores.Sum(s => s.TotalScore),
                 RankedScoreClassic = topScorePerBeatmap.Where(s => s.GrantsPerformance).Sum(s => s.ClassicScore),
@@ -577,23 +646,67 @@ namespace osu.Game.LocalPriority
         /// (Relax / Autopilot never do), unless the profile's options say otherwise.
         /// </summary>
         /// <returns>Why the score gives no PP on this profile, or null when it does.</returns>
-        private static string? getNoPerformanceReason(ScoreInfo score, LocalProfile profile, bool countEverythingAsRanked)
+        private static string? getNoPerformanceReason(ScoreInfo score, LocalProfile profile, bool countAll, ModFacts facts)
         {
             if (score.BeatmapInfo == null)
                 return @"The beatmap of this score is missing.";
 
-            bool countAll = profile.CountAllAsRanked || countEverythingAsRanked;
-
             if (!countAll && !score.BeatmapInfo.Status.GrantsPerformancePoints())
                 return @"PP is not awarded for unranked beatmaps on this profile.";
 
-            if (!profile.IncludeRelaxAutopilot && score.Mods.Any(LocalPriorityPolicy.IsRelaxOrAutopilot))
+            if (!profile.IncludeRelaxAutopilot && facts.RelaxOrAutopilot)
                 return @"PP is not awarded for Relax / Autopilot on this profile.";
 
-            if (LocalPriorityPolicy.HasUnrankedMods(score, countAll, profile.IncludeRelaxAutopilot))
+            if (facts.Unranked)
                 return @"PP is not awarded for unranked mods on this profile.";
 
             return null;
+        }
+
+        /// <summary>
+        /// What the statistics need from a score's mods.
+        /// </summary>
+        private readonly record struct ModFacts(bool RelaxOrAutopilot, bool Unranked, double Rate);
+
+        /// <summary>
+        /// Works out <see cref="ModFacts"/> once per different set of mods in one statistics run: scores share a handful of mod
+        /// combinations, and building a score's mods (<see cref="ScoreInfo.Mods"/>) makes a new ruleset instance for every mod.
+        /// </summary>
+        private sealed class ModFactsCache
+        {
+            private static readonly ModFacts no_mods = new ModFacts(false, false, 1);
+
+            private readonly RulesetInfo rulesetInfo;
+            private readonly Dictionary<(string Mods, bool Legacy), ModFacts> facts = new Dictionary<(string, bool), ModFacts>();
+            private Ruleset? ruleset;
+
+            public ModFactsCache(RulesetInfo rulesetInfo)
+            {
+                this.rulesetInfo = rulesetInfo;
+            }
+
+            /// <remarks>The profile and <paramref name="countAll"/> are the same for every score of one run.</remarks>
+            public ModFacts Get(ScoreInfo score, bool countAll, LocalProfile profile)
+            {
+                string json = score.ModsJson;
+
+                if (string.IsNullOrEmpty(json))
+                    return no_mods;
+
+                var key = (json, score.IsLegacyScore);
+
+                if (facts.TryGetValue(key, out var known))
+                    return known;
+
+                ruleset ??= rulesetInfo.CreateInstance();
+
+                var mods = score.APIMods.Select(m => m.ToMod(ruleset)).ToArray();
+
+                return facts[key] = new ModFacts(
+                    mods.Any(LocalPriorityPolicy.IsRelaxOrAutopilot),
+                    LocalPriorityPolicy.HasUnrankedMods(mods, score.IsLegacyScore, countAll, profile.IncludeRelaxAutopilot, profile.IgnoreUnrankedMods),
+                    ModUtils.CalculateRateWithMods(mods));
+            }
         }
 
         /// <summary>
@@ -673,6 +786,11 @@ namespace osu.Game.LocalPriority
         public bool CountsForPerformance => NoPerformanceReason == null;
 
         /// <summary>
+        /// A failed or quit play (not a saved score): shown in Recent Plays only, not clickable.
+        /// </summary>
+        public LocalUnfinishedPlay? Unfinished { get; init; }
+
+        /// <summary>
         /// The full score, once loaded (null if it isn't loaded yet or no longer exists).
         /// </summary>
         public ScoreInfo? Score { get; private set; }
@@ -701,7 +819,7 @@ namespace osu.Game.LocalPriority
             {
                 foreach (var entry in missing)
                 {
-                    entry.Score = r.Find<ScoreInfo>(entry.ID)?.Detach();
+                    entry.Score = entry.Unfinished != null ? entry.Unfinished.ToScore(r) : r.Find<ScoreInfo>(entry.ID)?.Detach();
                     entry.loaded = true;
                 }
             });
@@ -735,9 +853,17 @@ namespace osu.Game.LocalPriority
 
             realm.Run(r =>
             {
+                // One query for every row (the hash isn't indexed, so each lookup would read the whole beatmap table).
+                var hashes = missing.Select(e => e.MD5Hash).Distinct().ToArray();
+                string filter = string.Join(@" OR ", hashes.Select((_, i) => $@"{nameof(BeatmapInfo.MD5Hash)} == ${i}"));
+                var found = new Dictionary<string, BeatmapInfo>();
+
+                foreach (var beatmap in r.All<BeatmapInfo>().Filter(filter, hashes.Select(h => (QueryArgument)h).ToArray()))
+                    found.TryAdd(beatmap.MD5Hash, beatmap);
+
                 foreach (var entry in missing)
                 {
-                    entry.Beatmap = r.All<BeatmapInfo>().FirstOrDefault(b => b.MD5Hash == entry.MD5Hash)?.Detach();
+                    entry.Beatmap = found.GetValueOrDefault(entry.MD5Hash)?.Detach();
                     entry.loaded = true;
                 }
             });

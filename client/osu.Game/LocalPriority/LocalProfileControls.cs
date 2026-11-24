@@ -120,7 +120,7 @@ namespace osu.Game.LocalPriority
         public LocalProfileModRulesButton()
         {
             Masking = true;
-            TooltipText = @"New local profile with mod rules (opens mod select)";
+            TooltipText = @"New local profile with mod rules";
         }
 
         [BackgroundDependencyLoader]

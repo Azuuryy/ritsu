@@ -16,17 +16,15 @@ namespace osu.Game.LocalPriority
         /// <param name="dialogs">For confirmations.</param>
         /// <param name="overlays">For the mod rules picker.</param>
         /// <param name="profile">The profile the menu is for.</param>
-        /// <param name="switchTo">Switches to the profile.</param>
         /// <param name="showAutoSwitchRules">Opens the auto-switch rules editor next to the item that was right-clicked.</param>
         /// <param name="hideOthers">Hides the screen the menu was opened from (the mod rules picker takes the whole screen).</param>
         internal static MenuItem[] Create(LocalProfileManager manager, IDialogOverlay? dialogs, IOverlayManager? overlays, LocalProfile profile,
-                                          Action switchTo, Action showAutoSwitchRules, Action? hideOthers)
+                                          Action showAutoSwitchRules, Action? hideOthers)
         {
             Guid id = profile.Id;
 
             var menu = new List<MenuItem>
             {
-                new OsuMenuItem(@"Switch to this profile", MenuItemType.Standard, switchTo),
                 new OsuMenuItem(@"Sync plays already saved under this name", MenuItemType.Standard,
                     () => LocalProfileSyncDialog.Offer(manager, dialogs, id, tellWhenNoneFound: true)),
             };
@@ -46,25 +44,7 @@ namespace osu.Game.LocalPriority
             if (profile.ModRules != null)
                 menu.Add(new OsuMenuItem(@"Remove mod rules", MenuItemType.Standard, () => manager.SetModRules(id, null)));
 
-            menu.Add(new OsuMenuItem(@"Import replays (.osr) from a folder…", MenuItemType.Standard, () =>
-            {
-                hideOthers?.Invoke();
-                manager.BeginReplayImport(id);
-            }));
-
-            menu.Add(new OsuMenuItem($@"Export top {LocalProfileManager.TOP_REPLAYS_EXPORT_COUNT} replays to a folder…", MenuItemType.Standard, () =>
-            {
-                hideOthers?.Invoke();
-                manager.BeginReplayExport(id, true);
-            }));
-
-            menu.Add(new OsuMenuItem(@"Export all replays to a folder…", MenuItemType.Standard, () =>
-            {
-                hideOthers?.Invoke();
-                manager.BeginReplayExport(id, false);
-            }));
-
-            menu.Add(new OsuMenuItem(profile.AutoSwitch != null ? @"Auto-switch rules (edit)" : @"Auto-switch rules…", MenuItemType.Standard, showAutoSwitchRules));
+            menu.Add(new OsuMenuItem(profile.AutoSwitch != null ? @"Edit auto-switching instructions" : @"Add auto-switching instructions", MenuItemType.Standard, showAutoSwitchRules));
 
             menu.Add(new OsuMenuItem(@"Delete profile (keep its scores)", MenuItemType.Destructive,
                 () => LocalProfileDeletion.Request(manager, dialogs, id, profile.Name, false)));

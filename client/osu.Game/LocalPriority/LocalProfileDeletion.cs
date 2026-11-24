@@ -9,7 +9,7 @@ namespace osu.Game.LocalPriority
     /// <summary>
     /// Deleting local profiles from the profile page and the switcher. Asks first, unless Settings → Ritsu says not to.
     /// </summary>
-    public static class LocalProfileDeletion
+    public static partial class LocalProfileDeletion
     {
         /// <summary>
         /// Delete a profile, keeping its scores or not. Asks for confirmation unless the matching "without asking" setting is on.

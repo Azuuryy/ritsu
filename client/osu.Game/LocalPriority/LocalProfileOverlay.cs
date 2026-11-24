@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Humanizer;
 using osu.Framework.Allocation;
+using osu.Framework.Audio;
+using osu.Framework.Audio.Sample;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions;
 using osu.Framework.Extensions.Color4Extensions;
@@ -23,6 +25,8 @@ using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Framework.Logging;
 using osu.Framework.Screens;
+using osu.Framework.Threading;
+using osu.Framework.Utils;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Database;
@@ -97,10 +101,17 @@ namespace osu.Game.LocalPriority
 
         private IBindable<ScoringMode> scoringMode = null!;
 
+        private readonly IBindable<int> revision = new Bindable<int>();
+        private readonly IBindable<LocalProfile?> activeProfile = new Bindable<LocalProfile?>();
+
         /// <summary>
-        /// How far each list ("Best Performance", "Recent Plays", "Most Played Beatmaps") was expanded with "show more".
-        /// Kept while the page is closed and reopened (e.g. after viewing a score from it), so it opens as it was left,
-        /// until a beatmap is entered (played or watched as a replay) or another profile / mode is shown.
+        /// The ruleset shown on the page (the ruleset tabs in the header), independent of the game's ruleset.
+        /// </summary>
+        private readonly Bindable<RulesetInfo> profileRuleset = new Bindable<RulesetInfo>();
+
+        /// <summary>
+        /// How far each list was expanded with "show more" ("best", "recent", "mostPlayed"), kept across closing and reopening the page
+        /// until a beatmap is entered, or another profile or ruleset is shown.
         /// </summary>
         private readonly Dictionary<string, int> expandedLists = new Dictionary<string, int>();
 
@@ -110,24 +121,12 @@ namespace osu.Game.LocalPriority
         // after the page had already been rebuilt with the old state on reopening.
         private void onBeatmapEntered() => expandedLists.Clear();
 
-        protected override void Dispose(bool isDisposing)
-        {
-            base.Dispose(isDisposing);
-
-            if (manager.IsNotNull())
-                manager.BeatmapEntered -= onBeatmapEntered;
-        }
-
-        private readonly IBindable<int> revision = new Bindable<int>();
-        private readonly IBindable<LocalProfile?> activeProfile = new Bindable<LocalProfile?>();
-
-        /// <summary>
-        /// The ruleset shown on the page (the ruleset tabs in the header), independent of the game's ruleset.
-        /// </summary>
-        private readonly Bindable<RulesetInfo> profileRuleset = new Bindable<RulesetInfo>();
-
+        private Container page = null!;
+        private Container pageHeightHold = null!;
+        private ScheduledDelegate? releasePageHeight;
         private Container headerArea = null!;
         private FillFlowContainer sections = null!;
+        private Box sectionsBackground = null!;
         private LoadingLayer loading = null!;
         private CancellationTokenSource? refreshCancellation;
 
@@ -147,49 +146,89 @@ namespace osu.Game.LocalPriority
 
             Children = new Drawable[]
             {
-                // Popovers (picture / flag pickers) and right-click menus on the page.
-                new PopoverContainer
+                // A dying Sudden Death / Perfect Death profile's page loses its colour during its last look (see updateLastLookFade).
+                // It carries its own copy of the page background, so that goes grey too.
+                lastLookFade = new BufferedContainer
                 {
                     RelativeSizeAxes = Axes.Both,
-                    Child = new OsuContextMenuContainer
+                    Children = new Drawable[]
                     {
-                        RelativeSizeAxes = Axes.Both,
-                        Child = scroll = new OverlayScrollContainer
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        ScrollbarVisible = false,
-                        Child = new FillFlowContainer
+                        lastLookBackground = new Box
                         {
-                            RelativeSizeAxes = Axes.X,
-                            AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Vertical,
-                            Children = new Drawable[]
+                            RelativeSizeAxes = Axes.Both,
+                            Colour = BackgroundColour,
+                        },
+                            // Popovers (picture / flag pickers) and right-click menus on the page.
+                            new PopoverContainer
                             {
-                                Header,
-                                headerArea = new Container
+                                RelativeSizeAxes = Axes.Both,
+                                Child = new OsuContextMenuContainer
                                 {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                },
-                                // Section tabs (Historical, Scores) like the website profile's.
-                                tabsArea = new Container
-                                {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                },
-                                sections = new FillFlowContainer
-                                {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                    Direction = FillDirection.Vertical,
-                                    Padding = new MarginPadding { Horizontal = 10, Bottom = 10 },
-                                    Spacing = new Vector2(0, 10),
+                                    RelativeSizeAxes = Axes.Both,
+                                    Child = scroll = new OverlayScrollContainer
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        ScrollbarVisible = false,
+                                        Child = page = new Container
+                                        {
+                                            RelativeSizeAxes = Axes.X,
+                                            AutoSizeAxes = Axes.Y,
+                                            Children = new Drawable[]
+                                            {
+                                                // Invisible; keeps the page from getting shorter while it is rebuilt (see holdPageHeight).
+                                                pageHeightHold = new Container { RelativeSizeAxes = Axes.X },
+                                                pageFlow = new FillFlowContainer
+                                                {
+                                                    RelativeSizeAxes = Axes.X,
+                                                    AutoSizeAxes = Axes.Y,
+                                                    Direction = FillDirection.Vertical,
+                                                    Children = new Drawable[]
+                                                    {
+                                                        Header,
+                                                        headerArea = new Container
+                                                        {
+                                                            RelativeSizeAxes = Axes.X,
+                                                            AutoSizeAxes = Axes.Y,
+                                                        },
+                                                        // Section tabs (Historical, Scores) like the website profile's.
+                                                        tabsArea = new Container
+                                                        {
+                                                            RelativeSizeAxes = Axes.X,
+                                                            AutoSizeAxes = Axes.Y,
+                                                        },
+                                                        // Behind the sections' rounded panels: the tabs' colour, like the website profile.
+                                                        new Container
+                                                        {
+                                                            RelativeSizeAxes = Axes.X,
+                                                            AutoSizeAxes = Axes.Y,
+                                                            Children = new Drawable[]
+                                                            {
+                                                                sectionsBackground = new Box
+                                                                {
+                                                                    RelativeSizeAxes = Axes.Both,
+                                                                    Colour = ColourProvider.Background5,
+                                                                },
+                                                                sections = new FillFlowContainer
+                                                                {
+                                                                    RelativeSizeAxes = Axes.X,
+                                                                    AutoSizeAxes = Axes.Y,
+                                                                    Direction = FillDirection.Vertical,
+                                                                    Padding = new MarginPadding { Horizontal = 10, Bottom = 10 },
+                                                                    Spacing = new Vector2(0, 10),
+                                                                },
+                                                            },
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
                                 },
                             },
-                        },
-                    },
                     },
                 },
+                // The countdown stays red over the grey: it is drawn here, above the fading page.
+                countdownLayer = new Container { RelativeSizeAxes = Axes.Both },
                 loading = new LoadingLayer(true),
             };
         }
@@ -202,7 +241,6 @@ namespace osu.Game.LocalPriority
             activeProfile.BindTo(manager.ActiveProfile);
 
             revision.BindValueChanged(_ => refreshIfVisible());
-            manager.BeatmapEntered += onBeatmapEntered;
             activeProfile.BindValueChanged(p =>
             {
                 if (p.NewValue == null && displayedProfileId == null)
@@ -212,9 +250,20 @@ namespace osu.Game.LocalPriority
             });
             profileRuleset.BindValueChanged(_ => refreshIfVisible());
 
+            // Settings → Profile Colors: recolour an open page (the statistics are kept, see refresh). Dragging the picker changes it
+            // every frame, so wait until it pauses briefly instead of rebuilding the page each time.
+            profileColouring.BindTo(manager.ProfileColouring);
+            profileColour.BindTo(manager.ProfileColour);
+            profileColouring.BindValueChanged(_ => recolourIfVisible());
+            profileColour.BindValueChanged(_ => recolourIfVisible());
+
             // Score display mode (Settings → Gameplay) changes how every score on the page is shown.
             scoringMode = config.GetBindable<ScoringMode>(OsuSetting.ScoreDisplayMode);
             scoringMode.BindValueChanged(_ => refreshIfVisible());
+
+            manager.ShowLastScores += showLastScores;
+            manager.ProfileDeathFinished += onProfileDeathFinished;
+            manager.BeatmapEntered += onBeatmapEntered;
 
             State.BindValueChanged(s =>
             {
@@ -222,6 +271,14 @@ namespace osu.Game.LocalPriority
                 {
                     // Next time, open on the active profile again.
                     displayedProfileId = null;
+
+                    // Closing a dead Sudden Death / Perfect Death profile's last look at its scores ends it.
+                    if (dyingProfileId is Guid dying)
+                    {
+                        dyingProfileId = null;
+                        manager.FinishProfileDeath(dying);
+                    }
+
                     return;
                 }
 
@@ -253,6 +310,291 @@ namespace osu.Game.LocalPriority
             pendingAutoSwitchEditor = profileId;
             ShowProfile(profileId);
         }
+
+        #region Sudden Death / Perfect Death profiles
+
+        private FillFlowContainer pageFlow = null!;
+
+        /// <summary>
+        /// The page's tint, like a supporter's profile colour on the website: red for Sudden Death profiles, amber for Perfect Death ones,
+        /// otherwise Settings → Profile Colors (or the usual pink). Changing it rebuilds everything coloured by it (header, top part, sections).
+        /// </summary>
+        private void applyProfileColours(LocalProfile profile)
+        {
+            var (hue, saturation) = manager.GetProfilePageColours(profile);
+
+            if (hue == ColourProvider.Hue && saturation == ColourProvider.Saturation)
+                return;
+
+            ColourProvider.ChangeColourScheme(hue, saturation);
+
+            // The header (title, ruleset tabs) takes its colours when it is made: make a new one in the same place.
+            pageFlow.Remove(Header, true);
+            RecreateHeader();
+            Header.Ruleset.BindTarget = profileRuleset;
+            pageFlow.Add(Header);
+            pageFlow.SetLayoutPosition(Header, -1);
+
+            UpdateColours();
+            lastLookBackground.Colour = BackgroundColour;
+            sectionsBackground.Colour = ColourProvider.Background5;
+
+            // The top part is kept between refreshes when nothing in it changed: build it again in the new colours.
+            currentTopSignature = null;
+        }
+
+        /// <summary>
+        /// A Sudden Death / Perfect Death profile that failed a play: its page is open on its scores one last time.
+        /// </summary>
+        private Guid? dyingProfileId;
+
+        private BufferedContainer lastLookFade = null!;
+        private Box lastLookBackground = null!;
+        private Container countdownLayer = null!;
+
+        /// <summary>
+        /// When (game clock time) the page's fade to grey ends, or null when it isn't fading.
+        /// </summary>
+        private double? lastLookFadeEnd;
+
+        /// <summary>
+        /// The last look at a dying profile's scores: its colours slowly drain to grey, all grey when the countdown reaches zero.
+        /// Any other page is shown in full colour right away.
+        /// </summary>
+        private void updateLastLookFade(double? end)
+        {
+            if (end == lastLookFadeEnd)
+                return;
+
+            lastLookFadeEnd = end;
+            lastLookFade.ClearTransforms(false, nameof(BufferedContainer.GrayscaleStrength));
+
+            if (end is double e)
+                lastLookFade.GrayscaleTo(1, Math.Max(0, e - Time.Current));
+            else
+                lastLookFade.GrayscaleStrength = 0;
+        }
+
+        private void showCountdownAboveFade(TopSection top)
+        {
+            countdownLayer.Clear();
+            top.OnLoadComplete += _ =>
+            {
+                if (top == currentTop)
+                    countdownLayer.Child = top.CreateCountdownProxy();
+            };
+        }
+
+        private void showLastScores(Guid profileId)
+        {
+            // If the page can't open right now, closing it ends the profile right away (see the State handler).
+            dyingProfileId = profileId;
+            ShowProfile(profileId);
+        }
+
+        private void onProfileDeathFinished(Guid profileId)
+        {
+            if (dyingProfileId != profileId)
+                return;
+
+            dyingProfileId = null;
+            Hide();
+        }
+
+        private static readonly Color4 sudden_death_glow = new Color4(1f, 0.3f, 0.3f, 1f);
+        private static readonly Color4 perfect_death_glow = new Color4(1f, 0.78f, 0.2f, 1f);
+
+        /// <summary>
+        /// The page has finished sliding in (the glow waits for it).
+        /// </summary>
+        private bool opened;
+
+        private ScheduledDelegate? openedDelegate;
+
+        /// <summary>
+        /// The profile whose statistics finished loading last (the glow waits for them too).
+        /// </summary>
+        private LocalProfile? loadedProfile;
+
+        /// <summary>
+        /// The profile whose glow is shown, and the glow on the page's edge.
+        /// </summary>
+        private Guid? glowProfileId;
+
+        private Color4? edgeGlow;
+
+        protected override void PopIn()
+        {
+            // Opening: FullscreenOverlay fades its shadow in itself.
+            setEdgeGlow(null, fadeShadowBack: false);
+            base.PopIn();
+
+            opened = false;
+            openedDelegate?.Cancel();
+            openedDelegate = Scheduler.AddDelayed(() =>
+            {
+                opened = true;
+                updateGlow();
+            }, WaveContainer.APPEAR_DURATION);
+        }
+
+        protected override void PopOut()
+        {
+            openedDelegate?.Cancel();
+            opened = false;
+            loadedProfile = null;
+            glowProfileId = null;
+            glowProgress = 1;
+            if (currentTop != null)
+                currentTop.CountdownEnd = null;
+
+            base.PopOut();
+        }
+
+        private void updateGlow()
+        {
+            var mode = opened && loadedProfile != null ? loadedProfile.DeathMode : LocalDeathMode.None;
+
+            setGlow(mode switch
+            {
+                LocalDeathMode.SuddenDeath => sudden_death_glow,
+                LocalDeathMode.PerfectDeath => perfect_death_glow,
+                _ => null,
+            });
+        }
+
+        /// <summary>
+        /// Sudden Death profiles glow slightly red, Perfect Death ones golden, around the outside of the page.
+        /// </summary>
+        private void setGlow(Color4? colour)
+        {
+            glowProfileId = colour == null ? null : loadedProfile?.Id;
+            setEdgeGlow(colour);
+        }
+
+        private void setEdgeGlow(Color4? colour, bool fadeShadowBack = true)
+        {
+            if (colour == edgeGlow)
+                return;
+
+            edgeGlow = colour;
+
+            glowProgress = 1;
+
+            if (colour == null)
+            {
+                // Back to the overlay's own shadow (see FullscreenOverlay), faded in like it does when opening.
+                EdgeEffect = new EdgeEffectParameters
+                {
+                    Colour = Color4.Black.Opacity(0),
+                    Type = EdgeEffectType.Shadow,
+                    Hollow = true,
+                    Radius = 10,
+                };
+
+                if (fadeShadowBack)
+                    this.FadeEdgeEffectTo(WaveContainer.SHADOW_OPACITY, 300, Easing.OutQuint);
+
+                return;
+            }
+
+            // Built up in Update (see there), never by a transform: the opening's own shadow fade stops here,
+            // and the glow grows out of the shadow exactly as it is at this moment.
+            ClearTransforms(false, nameof(EdgeEffect));
+            glowFrom = EdgeEffect;
+            glowProgress = 0;
+            applyGlowStrength(0);
+        }
+
+        /// <summary>
+        /// The page's shadow when the glow started; the glow is a coloured, wider version of it, so one turns into the other without a cut.
+        /// </summary>
+        private EdgeEffectParameters glowFrom;
+
+        private const float glow_opacity = 0.5f;
+        private const float glow_radius = 40;
+
+        private const double glow_build_up_duration = 1200;
+
+        /// <summary>
+        /// How far the glow has built up (0 to 1); 1 when it isn't building up.
+        /// </summary>
+        private float glowProgress = 1;
+
+        protected override void Update()
+        {
+            base.Update();
+
+            if (edgeGlow == null)
+                return;
+
+            // During a dying profile's last look the glow loses its colour together with the page (see updateLastLookFade).
+            bool greyChanged = lastLookFade.GrayscaleStrength != glowGrey;
+
+            if (glowProgress >= 1 && !greyChanged)
+                return;
+
+            // Advanced by at most one 30 fps frame at a time: a slow frame (the page building its rows, the name's blur being set up)
+            // would otherwise make a time-based fade skip ahead and flash brighter in one frame.
+            if (glowProgress < 1)
+                glowProgress = (float)Math.Min(1, glowProgress + Math.Min(Time.Elapsed, 1000 / 30.0) / glow_build_up_duration);
+
+            applyGlowStrength((float)Interpolation.ApplyEasing(Easing.InOutSine, glowProgress));
+        }
+
+        /// <summary>
+        /// How grey (0 to 1) the glow was last drawn; follows the page's grey fade.
+        /// </summary>
+        private float glowGrey;
+
+        private void applyGlowStrength(float strength)
+        {
+            if (edgeGlow is not Color4 colour)
+                return;
+
+            // Same kind of effect as the overlay's own shadow (a glow-type effect would replace the shadow in one frame):
+            // its colour, opacity and size move from the shadow's to the glow's.
+            Color4 from = glowFrom.Colour.SRGB;
+            Color4 to = colour.Opacity(glow_opacity);
+
+            glowGrey = lastLookFade.GrayscaleStrength;
+
+            if (glowGrey > 0)
+            {
+                float luminance = 0.299f * to.R + 0.587f * to.G + 0.114f * to.B;
+                to = new Color4(
+                    Interpolation.ValueAt(glowGrey, to.R, luminance, 0f, 1f),
+                    Interpolation.ValueAt(glowGrey, to.G, luminance, 0f, 1f),
+                    Interpolation.ValueAt(glowGrey, to.B, luminance, 0f, 1f),
+                    to.A);
+            }
+
+            EdgeEffect = new EdgeEffectParameters
+            {
+                Colour = new Color4(
+                    Interpolation.ValueAt(strength, from.R, to.R, 0f, 1f),
+                    Interpolation.ValueAt(strength, from.G, to.G, 0f, 1f),
+                    Interpolation.ValueAt(strength, from.B, to.B, 0f, 1f),
+                    Interpolation.ValueAt(strength, from.A, to.A, 0f, 1f)),
+                Type = EdgeEffectType.Shadow,
+                Hollow = true,
+                Radius = Interpolation.ValueAt(strength, glowFrom.Radius, glow_radius, 0f, 1f),
+            };
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            base.Dispose(isDisposing);
+
+            if (manager.IsNotNull())
+            {
+                manager.ShowLastScores -= showLastScores;
+                manager.ProfileDeathFinished -= onProfileDeathFinished;
+                manager.BeatmapEntered -= onBeatmapEntered;
+            }
+        }
+
+        #endregion
 
         public void ShowProfile(Guid profileId)
         {
@@ -286,7 +628,8 @@ namespace osu.Game.LocalPriority
                 this.reordered = reordered;
 
                 RelativeSizeAxes = Axes.X;
-                Height = 40;
+                // Slim, like the website profile's section tabs.
+                Height = 26;
             }
 
             [BackgroundDependencyLoader]
@@ -437,6 +780,14 @@ namespace osu.Game.LocalPriority
         private string? cachedStatisticsKey;
 
         /// <summary>
+        /// PP totals per profile and mode, valid while <see cref="knownPerformanceRevision"/> matches (renaming or reordering profiles,
+        /// or recording attempts, then doesn't calculate every other profile's PP again).
+        /// </summary>
+        private readonly Dictionary<(Guid, string), double> knownPerformance = new Dictionary<(Guid, string), double>();
+
+        private (int, int) knownPerformanceRevision = (-1, -1);
+
+        /// <summary>
         /// Bumped when scores change from this page (deleted), so remembered statistics are calculated again.
         /// Profile changes, recorded plays, transfers and syncs bump the manager's revision instead.
         /// </summary>
@@ -455,6 +806,16 @@ namespace osu.Game.LocalPriority
             return id;
         }
 
+        private readonly IBindable<bool> profileColouring = new Bindable<bool>();
+        private readonly IBindable<Colour4> profileColour = new Bindable<Colour4>();
+        private ScheduledDelegate? pendingRecolour;
+
+        private void recolourIfVisible()
+        {
+            pendingRecolour?.Cancel();
+            pendingRecolour = Scheduler.AddDelayed(refreshIfVisible, 100);
+        }
+
         private void refreshIfVisible() => Scheduler.AddOnce(() =>
         {
             if (State.Value == Visibility.Visible)
@@ -467,21 +828,22 @@ namespace osu.Game.LocalPriority
             refreshCancellation = new CancellationTokenSource();
             var token = refreshCancellation.Token;
 
-            var allProfilesNow = manager.GetProfiles();
-            var profile = (displayedProfileId != null ? allProfilesNow.FirstOrDefault(p => p.Id == displayedProfileId) : null) ?? manager.ActiveProfile.Value;
+            var allProfiles = manager.GetProfiles();
+            var profile = (displayedProfileId != null ? allProfiles.FirstOrDefault(p => p.Id == displayedProfileId) : null) ?? manager.ActiveProfile.Value;
             var mode = profileRuleset.Value ?? gameRuleset.Value;
 
             if (profile == null || mode == null)
             {
                 headerArea.Clear();
                 sections.Clear();
+                releasePageHeightHold();
                 return;
             }
 
-            var allProfiles = manager.GetProfiles();
+            applyProfileColours(profile);
 
             // Same profile, mode and data as last time: show the remembered numbers at once (nothing recalculated or built twice).
-            string cacheKey = $@"{profile.Id}|{mode.ShortName}|{manager.Revision.Value}|{scoresVersion}";
+            string cacheKey = $@"{profile.Id}|{mode.ShortName}|{manager.Revision.Value}|{manager.PerformanceRevision.Value}|{scoresVersion}";
 
             if (cachedStatistics != null && cachedStatisticsKey == cacheKey)
             {
@@ -494,14 +856,29 @@ namespace osu.Game.LocalPriority
             populate(profile, allProfiles, null, null);
             loading.Show();
 
+            // PP totals already known for this state of the PP inputs (see LocalProfileManager.PerformanceRevision).
+            int performanceRevision = manager.PerformanceRevision.Value;
+
+            if (knownPerformanceRevision != (performanceRevision, scoresVersion))
+            {
+                knownPerformance.Clear();
+                knownPerformanceRevision = (performanceRevision, scoresVersion);
+            }
+
+            var known = new Dictionary<(Guid, string), double>(knownPerformance);
+
             Task.Run(async () =>
             {
                 var statistics = await LocalProfileStatistics.CalculateAsync(profile, mode, realm, beatmaps, manager.Store, token).ConfigureAwait(false);
                 var ppByProfile = new Dictionary<Guid, double> { [profile.Id] = statistics.PP };
 
-                // Other profiles only need their PP total (chips, local ranking).
+                // Other profiles only need their PP total (chips, local ranking), and only when it may have changed.
                 foreach (var other in allProfiles.Where(p => p.Id != profile.Id))
-                    ppByProfile[other.Id] = await LocalProfileStatistics.CalculatePerformanceAsync(other, mode, realm, beatmaps, manager.Store, token).ConfigureAwait(false);
+                {
+                    ppByProfile[other.Id] = known.TryGetValue((other.Id, mode.ShortName), out double knownPP)
+                        ? knownPP
+                        : await LocalProfileStatistics.CalculatePerformanceAsync(other, mode, realm, beatmaps, manager.Store, token).ConfigureAwait(false);
+                }
 
                 return (statistics, ppByProfile);
             }, token).ContinueWith(task => Schedule(() =>
@@ -518,6 +895,12 @@ namespace osu.Game.LocalPriority
                 }
 
                 var result = task.GetResultSafely();
+
+                if (knownPerformanceRevision == (performanceRevision, scoresVersion))
+                {
+                    foreach (var (id, pp) in result.ppByProfile)
+                        knownPerformance[(id, mode.ShortName)] = pp;
+                }
 
                 cachedStatistics = (result.statistics, result.ppByProfile);
                 cachedStatisticsKey = cacheKey;
@@ -541,6 +924,8 @@ namespace osu.Game.LocalPriority
             {
                 currentTop.SetPerformance(ppByProfile);
                 currentTop.SetLastPlayed(stats?.Plays.LastPlayed);
+                currentTop.CountdownEnd = profile.Id == dyingProfileId ? manager.LastLookEndTime : null;
+                updateLastLookFade(currentTop.CountdownEnd);
                 currentTop.DetailSlot.Child = currentDetail = new DetailSection(profile, manager, stats, localRank, profileRuleset.Value);
             }
             else
@@ -550,6 +935,7 @@ namespace osu.Game.LocalPriority
                 headerArea.Child = currentTop = new TopSection(profile, allProfiles, ppByProfile)
                     {
                         LastPlayed = stats?.Plays.LastPlayed,
+                        CountdownEnd = profile.Id == dyingProfileId ? manager.LastLookEndTime : null,
                         // The page is built twice (right away, then with the statistics): open the editor on the final one.
                         OpenAutoSwitchEditorFor = stats != null ? takePendingAutoSwitchEditor() : null,
                         SwitchTo = id =>
@@ -564,16 +950,38 @@ namespace osu.Game.LocalPriority
                             manager.Switch(created.Id);
                             LocalProfileSyncDialog.Offer(manager, dialogs, created.Id);
                         },
+                        CreateDeathProfile = mode =>
+                        {
+                            displayedProfileId = null;
+                            var created = manager.CreateDefaultProfile(mode);
+                            manager.Switch(created.Id);
+                        },
                     };
 
+                showCountdownAboveFade(currentTop);
+                updateLastLookFade(currentTop.CountdownEnd);
                 currentTop.DetailSlot.Child = currentDetail = new DetailSection(profile, manager, stats, localRank, profileRuleset.Value);
             }
+
+            holdPageHeight();
 
             sections.Clear();
             tabsArea.Clear();
 
             if (stats == null)
+            {
+                // Another profile is loading: its glow (if any) waits until it has loaded.
+                if (glowProfileId != profile.Id)
+                    setGlow(null);
+
                 return;
+            }
+
+            loadedProfile = profile;
+            updateGlow();
+
+            // Released a moment after the final build, once its text and charts have settled.
+            releasePageHeight = Scheduler.AddDelayed(releasePageHeightHold, 150);
 
             string listsKey = $@"{profile.Id}|{(profileRuleset.Value ?? gameRuleset.Value)?.ShortName}";
 
@@ -586,7 +994,11 @@ namespace osu.Game.LocalPriority
             // Default order: Scores first, then Historical; each profile can drag its own order, like supporters can.
             var profileSections = new ProfileSection[]
             {
-                new ScoresPanel(stats, score => presentScore(score, ScorePresentType.Results), scoreMenu, expandedLists),
+                new ScoresPanel(stats, score => presentScore(score, ScorePresentType.Results), scoreMenu, expandedLists)
+                {
+                    // A dying Sudden Death / Perfect Death profile's last look: every score at once.
+                    ShowAll = profile.Id == dyingProfileId,
+                },
                 new HistoricalPanel(stats, presentBeatmap, expandedLists),
             };
 
@@ -613,6 +1025,35 @@ namespace osu.Game.LocalPriority
 
                 manager.SetSectionOrder(profileId, ordered.Select(o => o.Identifier));
             });
+
+            if (profile.Id == dyingProfileId)
+            {
+                var scoresSection = profileSections.OfType<ScoresPanel>().First();
+                ScheduleAfterChildren(() => scroll.ScrollIntoView(scoresSection));
+            }
+        }
+
+        /// <summary>
+        /// Switching profiles builds the page twice (right away without statistics, then with them), and each build briefly
+        /// takes away the sections below. The scroll container gradually pulls back into range whenever the page gets shorter,
+        /// even for one frame, and that pull stays after the page grows back: every switch crept the page up.
+        /// So the page keeps at least the height it had until the final build has settled (<see cref="releasePageHeightHold"/>);
+        /// only then does a shorter profile scroll up as far as it has to.
+        /// </summary>
+        private void holdPageHeight()
+        {
+            releasePageHeight?.Cancel();
+            releasePageHeight = null;
+
+            pageHeightHold.Height = Math.Max(pageHeightHold.Height, page.DrawHeight);
+        }
+
+        private void releasePageHeightHold()
+        {
+            releasePageHeight?.Cancel();
+            releasePageHeight = null;
+
+            pageHeightHold.Height = 0;
         }
 
         /// <summary>
@@ -733,16 +1174,16 @@ namespace osu.Game.LocalPriority
             }
 
             [BackgroundDependencyLoader]
-            private void load(ScoreManager scoreManager)
+            private void load(ScoreManager scoreManager, LocalProfileManager localProfiles)
             {
                 string beatmap = score.BeatmapInfo != null ? $@"{score.BeatmapInfo.Metadata.GetDisplayTitle()} [{score.BeatmapInfo.DifficultyName}]" : @"(beatmap not found)";
 
                 BodyText = $@"{beatmap}{Environment.NewLine}{score.DisplayAccuracy}, {score.Rank.GetDescription()}, {score.TotalScore:N0}";
-                DangerousAction = () =>
+                DangerousAction = () => localProfiles.DeleteScoreShowingChange(score, () =>
                 {
                     scoreManager.Delete(score);
                     deleted();
-                };
+                });
             }
         }
 
@@ -784,6 +1225,130 @@ namespace osu.Game.LocalPriority
         {
             public Action<Guid>? SwitchTo;
             public Action? CreateProfile;
+
+            /// <summary>
+            /// "+" right-click: a new Sudden Death / Perfect Death profile.
+            /// </summary>
+            public Action<LocalDeathMode>? CreateDeathProfile;
+
+            private EditableName nameDisplay = null!;
+
+            private OsuSpriteText countdown = null!;
+
+            /// <summary>
+            /// Draws the countdown somewhere else (above the page's fade to grey); it is no longer drawn in its own place.
+            /// </summary>
+            public Drawable CreateCountdownProxy() => countdown.CreateProxy();
+
+            /// <summary>
+            /// A dying Sudden Death / Perfect Death profile: when (game clock time) its last look at its scores ends, counted down in red.
+            /// </summary>
+            public double? CountdownEnd
+            {
+                get => countdownEnd;
+                set
+                {
+                    countdownEnd = value;
+
+                    if (value == null)
+                        stopCountdownSounds();
+                }
+            }
+
+            private double? countdownEnd;
+
+            protected override void Update()
+            {
+                base.Update();
+
+                if (CountdownEnd is not double end)
+                {
+                    countdown.Alpha = 0;
+                    lastSecondsLeft = null;
+                    stopCountdownSounds();
+                    return;
+                }
+
+                // minutes:seconds:hundredths, e.g. 1:00:00 → 0:45:42 → 0:00:00.
+                double remainingMs = Math.Max(0, end - Time.Current);
+                var remaining = TimeSpan.FromMilliseconds(remainingMs);
+                countdown.Text = $@"{(int)remaining.TotalMinutes}:{remaining.Seconds:00}:{remaining.Milliseconds / 10:00}";
+                countdown.Alpha = 1;
+
+                // Every whole second (as the display reaches x:xx:00): a tick and a small pulse.
+                int secondsLeft = (int)Math.Ceiling(remainingMs / 1000);
+
+                if (lastSecondsLeft != null && secondsLeft < lastSecondsLeft)
+                    onSecondPassed(secondsLeft);
+
+                lastSecondsLeft = secondsLeft;
+            }
+
+            private int? lastSecondsLeft;
+
+            private Sample? runningOutSample;
+            private Sample? runningOutFinalSample;
+
+            private void loadCountdownSamples(AudioManager audio)
+            {
+                runningOutSample = audio.Samples.Get(@"Multiplayer/Matchmaking/Ranked/time-running-out");
+                runningOutFinalSample = audio.Samples.Get(@"Multiplayer/Matchmaking/Ranked/time-running-out-final");
+            }
+
+            private readonly List<SampleChannel> playingSounds = new List<SampleChannel>();
+
+            private void play(Sample? sample)
+            {
+                var channel = sample?.Play();
+
+                if (channel != null)
+                    playingSounds.Add(channel);
+            }
+
+            /// <summary>
+            /// Countdown sounds still ringing fade out quickly when the countdown ends (the page closes, or the profile is gone).
+            /// </summary>
+            private void stopCountdownSounds(bool fade = true)
+            {
+                foreach (var channel in playingSounds)
+                {
+                    if (fade && channel.Playing)
+                        this.TransformBindableTo(channel.Volume, 0, 150, Easing.Out).OnComplete(_ => channel.Stop());
+                    else
+                        channel.Stop();
+                }
+
+                playingSounds.Clear();
+            }
+
+            private void onSecondPassed(int secondsLeft)
+            {
+                // Silent until the last 10 seconds, and nothing on reaching 0:00:00 itself (the page closes right then).
+                if (secondsLeft > 10 || secondsLeft <= 0)
+                    return;
+
+                playingSounds.RemoveAll(c => !c.Playing);
+
+                // "Time running out", with the final one on top (and a pulse) for the last 3 seconds.
+                play(runningOutSample);
+
+                if (secondsLeft > 3)
+                    return;
+
+                play(runningOutFinalSample);
+
+                countdown.ScaleTo(1.06f, 60, Easing.OutQuint)
+                         .Then()
+                         .ScaleTo(1, 400, Easing.OutQuint);
+                countdown.FlashColour(Color4.White, 400, Easing.OutQuint);
+            }
+
+            protected override void Dispose(bool isDisposing)
+            {
+                // Gone with the page: nothing left to fade with.
+                stopCountdownSounds(fade: false);
+                base.Dispose(isDisposing);
+            }
 
             /// <summary>
             /// Hides the profile page (the mod rules picker takes the whole screen).
@@ -829,9 +1394,27 @@ namespace osu.Game.LocalPriority
             [Resolved]
             private IOverlayManager? overlayManager { get; set; }
 
-            [BackgroundDependencyLoader]
-            private void load(OverlayColourProvider colours, LocalProfileManager manager)
+            /// <summary>
+            /// Entries of the "⋮" menu next to "+". Profiles with mod rules only when enabled in settings; Sudden Death / Perfect Death
+            /// profiles always play with that mod and are deleted with their scores after a failed play.
+            /// </summary>
+            private IEnumerable<CreateOption> createOptions(LocalProfileManager manager)
             {
+                if (manager.ProfilesWithModRules.Value)
+                {
+                    yield return new CreateOption(@"New local profile with mod rules", FontAwesome.Solid.ExchangeAlt,
+                        () => LocalProfileModRulesOverlay.CreateProfileWithRules(overlayManager, manager, dialogs, HideOverlay));
+                }
+
+                yield return new CreateOption(@"New 'Sudden Death' profile", OsuIcon.ModSuddenDeath, () => CreateDeathProfile?.Invoke(LocalDeathMode.SuddenDeath), 27);
+                yield return new CreateOption(@"New 'Perfect Death' profile", OsuIcon.ModPerfect, () => CreateDeathProfile?.Invoke(LocalDeathMode.PerfectDeath), 27);
+            }
+
+            [BackgroundDependencyLoader]
+            private void load(OverlayColourProvider colours, LocalProfileManager manager, OsuColour osuColour, AudioManager audio)
+            {
+                loadCountdownSamples(audio);
+
                 // One row of profiles; with many profiles it scrolls sideways (wheel or drag), fading out towards the edges.
                 var chips = new FillFlowContainer
                 {
@@ -851,7 +1434,7 @@ namespace osu.Game.LocalPriority
                     ProfileChip? chipRef = null;
 
                     var menu = LocalProfileMenu.Create(manager, dialogs, overlayManager, snapshot,
-                        () => SwitchTo?.Invoke(id), () => chipRef?.ShowPopover(), HideOverlay);
+                        () => chipRef?.ShowPopover(), HideOverlay);
 
                     var chip = chipRef = new ProfileChip($@"{p.Name}{pp}", p.Id == profile.Id, () => SwitchTo?.Invoke(id))
                     {
@@ -871,7 +1454,7 @@ namespace osu.Game.LocalPriority
                         chip.OnLoadComplete += _ => Schedule(() => chip.ShowPopover());
                 }
 
-                // "+" (new profile) and, when enabled in settings, "+ mods" (new profile with mod rules) stay fixed right of the row.
+                // "+" (new profile) and "⋮" (more ways to create a profile, opened with a left click) stay fixed right of the row.
                 var createButtons = new FillFlowContainer
                 {
                     AutoSizeAxes = Axes.Both,
@@ -880,19 +1463,13 @@ namespace osu.Game.LocalPriority
                     Margin = new MarginPadding { Left = 10 },
                     Children = new Drawable[]
                     {
-                        new ProfileChip(null, false, () => CreateProfile?.Invoke(), FontAwesome.Solid.Plus) { TooltipText = @"New local profile" },
+                        new ProfileChip(null, false, () => CreateProfile?.Invoke(), FontAwesome.Solid.Plus)
+                        {
+                            TooltipText = @"New local profile",
+                        },
+                        new MoreCreateOptionsButton(() => createOptions(manager)),
                     },
                 };
-
-                if (manager.ProfilesWithModRules.Value)
-                {
-                    createButtons.Add(new LocalProfileModRulesButton
-                    {
-                        Size = new Vector2(58, 36),
-                        CornerRadius = 18,
-                        Action = () => LocalProfileModRulesOverlay.CreateProfileWithRules(overlayManager, manager, dialogs, HideOverlay),
-                    });
-                }
 
                 var chipRow = new GridContainer
                 {
@@ -976,7 +1553,7 @@ namespace osu.Game.LocalPriority
                                                             Origin = Anchor.CentreLeft,
                                                             Children = new Drawable[]
                                                             {
-                                                                new EditableName(profile, manager),
+                                                                nameDisplay = new EditableName(profile, manager),
                                                                 new FillFlowContainer
                                                                 {
                                                                     AutoSizeAxes = Axes.Both,
@@ -997,6 +1574,16 @@ namespace osu.Game.LocalPriority
                                                             },
                                                         },
                                                     },
+                                                },
+                                                countdown = new OsuSpriteText
+                                                {
+                                                    Anchor = Anchor.Centre,
+                                                    Origin = Anchor.Centre,
+                                                    Font = OsuFont.GetFont(size: 40, weight: FontWeight.Bold, fixedWidth: true),
+                                                    // Fixed-width digits (so the numbers don't jiggle), pulled a little closer together.
+                                                    Spacing = new Vector2(-4, 0),
+                                                    Colour = osuColour.Red,
+                                                    Alpha = 0,
                                                 },
                                                 coverToggle = new ToggleCoverButton
                                                 {
@@ -1083,9 +1670,8 @@ namespace osu.Game.LocalPriority
             {
                 base.LoadComplete();
 
-                // Same setting as the regular profile's cover toggle.
-                // Held in a field: the toggle only keeps a weak reference to it, so once garbage collected, hiding the cover
-                // stopped being saved, and the next page built (e.g. for a new profile) opened with the cover expanded.
+                // Same setting as the regular profile's cover toggle. Held in a field: a config bindable only kept by the binding
+                // (a weak reference) can be collected, after which hiding the cover stops being saved and a new profile showed it expanded.
                 coverExpanded = config.GetBindable<bool>(OsuSetting.ProfileCoverExpanded);
                 coverToggle.CoverExpanded.BindTo(coverExpanded);
                 coverToggle.CoverExpanded.BindValueChanged(_ => updateCoverState(), true);
@@ -1169,7 +1755,7 @@ namespace osu.Game.LocalPriority
                 this.manager = manager;
 
                 Size = new Vector2(65);
-                TooltipText = @"Click to change picture · right-click for options";
+                TooltipText = @"Click to change picture";
                 Action = this.ShowPopover;
             }
 
@@ -1390,6 +1976,7 @@ namespace osu.Game.LocalPriority
 
                 textBox.Hide();
                 nameText.Show();
+
                 nameText.FadeColour(IsHovered ? osuColour.Yellow : Color4.White, 200, Easing.OutQuint);
                 pen.Icon = FontAwesome.Solid.PencilAlt;
                 pen.TooltipText = @"Edit name";
@@ -1743,6 +2330,206 @@ namespace osu.Game.LocalPriority
             }
         }
 
+        // IconSize: osu! mod glyphs have empty space around them, so they need a bigger size to look as big as a FontAwesome icon.
+        private record CreateOption(string Text, IconUsage Icon, Action Action, float IconSize = 15);
+
+        /// <summary>
+        /// Round "⋮" button next to "+" (like the "more" button on a website profile). A left click opens a menu with the other kinds
+        /// of profile that can be created.
+        /// </summary>
+        private partial class MoreCreateOptionsButton : OsuClickableContainer, IHasPopover
+        {
+            private readonly Func<IEnumerable<CreateOption>> options;
+
+            private Box hover = null!;
+
+            public MoreCreateOptionsButton(Func<IEnumerable<CreateOption>> options)
+            {
+                this.options = options;
+
+                Size = new Vector2(36);
+                Masking = true;
+                CornerRadius = 18;
+                Action = toggle;
+            }
+
+            private Popover? popover;
+
+            /// <summary>
+            /// When (game clock time) the menu last closed. Pressing the button closes an open menu before the click arrives
+            /// (it loses focus), so this tells a click that the menu was open.
+            /// </summary>
+            private double? popoverClosedAt;
+
+            private bool popoverWasOpen;
+
+            protected override bool OnMouseDown(MouseDownEvent e)
+            {
+                popoverWasOpen = popover?.State.Value == Visibility.Visible || popoverClosedAt == Time.Current;
+                return base.OnMouseDown(e);
+            }
+
+            /// <summary>
+            /// A click opens the menu, or closes it when it's open.
+            /// </summary>
+            private void toggle()
+            {
+                if (popoverWasOpen)
+                {
+                    popoverWasOpen = false;
+                    popover?.Hide();
+                    return;
+                }
+
+                this.ShowPopover();
+            }
+
+            [BackgroundDependencyLoader]
+            private void load(OverlayColourProvider colours)
+            {
+                Children = new Drawable[]
+                {
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = colours.Background2,
+                    },
+                    hover = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Color4.White.Opacity(0.1f),
+                        Alpha = 0,
+                    },
+                    new SpriteIcon
+                    {
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.Centre,
+                        Icon = FontAwesome.Solid.EllipsisV,
+                        Size = new Vector2(14),
+                    },
+                };
+            }
+
+            public Popover GetPopover()
+            {
+                var created = new CreateOptionsPopover(options());
+                created.State.BindValueChanged(state =>
+                {
+                    if (state.NewValue == Visibility.Hidden)
+                        popoverClosedAt = Time.Current;
+                });
+                return popover = created;
+            }
+
+            protected override bool OnHover(HoverEvent e)
+            {
+                hover.FadeIn(100);
+                return base.OnHover(e);
+            }
+
+            protected override void OnHoverLost(HoverLostEvent e)
+            {
+                hover.FadeOut(200);
+                base.OnHoverLost(e);
+            }
+        }
+
+        /// <summary>
+        /// The "⋮" menu: one row (icon and text) per option, highlighted on hover; picking one closes the menu.
+        /// </summary>
+        private partial class CreateOptionsPopover : OsuPopover
+        {
+            private readonly IEnumerable<CreateOption> options;
+
+            public CreateOptionsPopover(IEnumerable<CreateOption> options)
+            {
+                this.options = options;
+            }
+
+            [BackgroundDependencyLoader]
+            private void load()
+            {
+                Content.Padding = new MarginPadding(5);
+
+                var rows = new FillFlowContainer
+                {
+                    AutoSizeAxes = Axes.Both,
+                    Direction = FillDirection.Vertical,
+                };
+
+                foreach (var option in options)
+                {
+                    rows.Add(new CreateOptionRow(option, () =>
+                    {
+                        Hide();
+                        option.Action();
+                    }));
+                }
+
+                Child = rows;
+            }
+        }
+
+        private partial class CreateOptionRow : OsuClickableContainer
+        {
+            private readonly CreateOption option;
+
+            private Box hover = null!;
+
+            public CreateOptionRow(CreateOption option, Action action)
+            {
+                this.option = option;
+                Action = action;
+
+                Size = new Vector2(250, 34);
+                Masking = true;
+                CornerRadius = 6;
+            }
+
+            [BackgroundDependencyLoader]
+            private void load()
+            {
+                Children = new Drawable[]
+                {
+                    hover = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = Color4.White.Opacity(0.1f),
+                        Alpha = 0,
+                    },
+                    new SpriteIcon
+                    {
+                        // Centred where a 15 px icon's centre is, whatever its size.
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.Centre,
+                        X = 12 + 15 / 2f,
+                        Icon = option.Icon,
+                        Size = new Vector2(option.IconSize),
+                    },
+                    new OsuSpriteText
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        X = 38,
+                        Text = option.Text,
+                        Font = OsuFont.GetFont(size: 15, weight: FontWeight.SemiBold),
+                    },
+                };
+            }
+
+            protected override bool OnHover(HoverEvent e)
+            {
+                hover.FadeIn(100);
+                return base.OnHover(e);
+            }
+
+            protected override void OnHoverLost(HoverLostEvent e)
+            {
+                hover.FadeOut(200);
+                base.OnHoverLost(e);
+            }
+        }
+
         #endregion
 
         #region Details
@@ -1820,7 +2607,7 @@ namespace osu.Game.LocalPriority
                                                 bigValue(@"Estimated Global Ranking",
                                                     stats?.EstimatedGlobalRank != null ? $@"#{stats.EstimatedGlobalRank:N0}" : @"-",
                                                     ruleset?.ShortName == @"osu"
-                                                        ? @"Offline estimate from a sampled PP-to-rank curve (osu! standard). Not an official rank."
+                                                        ? @"Estimate based on 10000 random accounts grabbed."
                                                         : @"Only estimated for osu! standard."),
                                                 bigValue(@"Local Ranking", localRank != null ? $@"#{localRank}" : @"-"),
                                             },
@@ -1860,10 +2647,11 @@ namespace osu.Game.LocalPriority
                                                                 value(@"pp", stats == null ? @"…" : $@"{stats.PP:N0}", performanceTooltip())),
                                                             value(@"Total Play Time", $@"{(int)time.TotalHours:N0}h {time.Minutes}m"),
                                                             // Judgement titles in their judgement's colour, like the numbers on the score rows.
-                                                            judgementValue(@"300", mania ? plays.Count(HitResult.Perfect) + plays.Count(HitResult.Great) : plays.Count(HitResult.Great), osuColour.ForHitResult(HitResult.Great)),
-                                                            judgementValue(@"100", plays.Count(HitResult.Ok) + plays.Count(HitResult.Good), osuColour.ForHitResult(HitResult.Ok)),
-                                                            judgementValue(@"50", plays.Count(HitResult.Meh), osuColour.ForHitResult(HitResult.Meh)),
-                                                            judgementValue(@"Miss", plays.Count(HitResult.Miss), osuColour.ForHitResult(HitResult.Miss)),
+                                                            judgement(@"300", mania ? plays.Count(HitResult.Perfect) + plays.Count(HitResult.Great) : plays.Count(HitResult.Great),
+                                                                osuColour.ForHitResult(HitResult.Great)),
+                                                            judgement(@"100", plays.Count(HitResult.Ok) + plays.Count(HitResult.Good), osuColour.ForHitResult(HitResult.Ok)),
+                                                            judgement(@"50", plays.Count(HitResult.Meh), osuColour.ForHitResult(HitResult.Meh)),
+                                                            judgement(@"Miss", plays.Count(HitResult.Miss), osuColour.ForHitResult(HitResult.Miss)),
                                                         },
                                                     },
                                                     new FillFlowContainer
@@ -1908,9 +2696,10 @@ namespace osu.Game.LocalPriority
 
             private string performanceTooltip()
             {
-                string maps = profile.CountAllAsRanked || manager.CountEverythingAsRanked.Value ? @"every beatmap" : @"ranked / approved beatmaps";
+                string maps = profile.CountAllAsRanked || manager.CountEverythingAsRanked.Value ? @"every beatmap" : @"on ranked / approved beatmaps only";
                 string relax = profile.IncludeRelaxAutopilot ? @", including Relax / Autopilot" : string.Empty;
-                return $@"Best score per beatmap on {maps}{relax}, weighted like the website. Right-click for options.";
+                string mods = profile.IgnoreUnrankedMods && !(profile.CountAllAsRanked || manager.CountEverythingAsRanked.Value) ? @" with unrankable mods" : string.Empty;
+                return $@"Total pp {maps}{mods}{relax}. Right click to change.";
             }
 
             private static Drawable bigValue(string title, string content, string? tooltip = null)
@@ -1930,19 +2719,26 @@ namespace osu.Game.LocalPriority
             private static Drawable value(string title, string content, string? tooltip = null, Color4? titleColour = null) => new CompactValue(title, content, tooltip, titleColour);
 
             /// <summary>
-            /// Judgement count, shortened from 10,000 on (417,473 shows as 417.4k, the exact count in the tooltip) so the row stays on one line.
+            /// Judgement count: from 5 digits on it's shortened to one decimal, truncated rather than rounded (12,345 -> 12.3K,
+            /// 1,234,567 -> 1.2M), with the exact count in the tooltip.
             /// </summary>
-            private static Drawable judgementValue(string title, long count, Color4 titleColour)
+            private static Drawable judgement(string title, long count, Color4 titleColour)
             {
-                if (count < 10_000)
-                    return value(title, count.ToString(@"N0"), null, titleColour);
+                string exact = $@"{count:N0}";
+                return count < 10_000 ? value(title, exact, null, titleColour) : value(title, shortCount(count), exact, titleColour);
+            }
 
-                // Truncated rather than rounded, so the shown value never exceeds the real count.
-                string shortened = count < 10_000_000
-                    ? $@"{Math.Floor(count / 100d) / 10:N1}k"
-                    : $@"{Math.Floor(count / 100_000d) / 10:N1}M";
+            private static string shortCount(long count)
+            {
+                (long scale, string suffix) = count switch
+                {
+                    >= 1_000_000_000 => (1_000_000_000L, @"B"),
+                    >= 1_000_000 => (1_000_000L, @"M"),
+                    _ => (1_000L, @"K"),
+                };
 
-                return value(title, shortened, count.ToString(@"N0"), titleColour);
+                long tenths = count / (scale / 10);
+                return $@"{tenths / 10}.{tenths % 10}{suffix}";
             }
 
             private static Drawable grade(ScoreRank rank, int? count) => new FillFlowContainer
@@ -1992,9 +2788,13 @@ namespace osu.Game.LocalPriority
                 {
                     State = { Value = profile.IncludeRelaxAutopilot },
                 },
+                new ToggleMenuItem(@"Ignore 'Unranked' mod status", MenuItemType.Standard, v => manager.SetRankingOptions(profile.Id, ignoreUnrankedMods: v))
+                {
+                    State = { Value = profile.IgnoreUnrankedMods },
+                },
                 new ToggleMenuItem(manager.CountEverythingAsRanked.Value
                         ? @"Count every play as ranked (on for every profile in Settings)"
-                        : @"Count every play as ranked (this profile only)", MenuItemType.Standard, v => manager.SetRankingOptions(profile.Id, countAllAsRanked: v))
+                        : @"Count ANY play as if it was ranked", MenuItemType.Standard, v => manager.SetRankingOptions(profile.Id, countAllAsRanked: v))
                 {
                     State = { Value = profile.CountAllAsRanked },
                 },
@@ -2180,10 +2980,16 @@ namespace osu.Game.LocalPriority
             private readonly LocalProfileStatistics stats;
             private readonly Action<ScoreInfo> present;
             private readonly Func<ScoreInfo, MenuItem[]> menu;
-            private readonly IDictionary<string, int> expandedLists;
 
             private FillFlowContainer bestFlow = null!;
             private FillFlowContainer recentFlow = null!;
+
+            /// <summary>
+            /// Start with both lists fully expanded.
+            /// </summary>
+            public bool ShowAll { get; init; }
+
+            private readonly IDictionary<string, int> expandedLists;
 
             public ScoresPanel(LocalProfileStatistics stats, Action<ScoreInfo> present, Func<ScoreInfo, MenuItem[]> menu, IDictionary<string, int> expandedLists)
             {
@@ -2223,7 +3029,7 @@ namespace osu.Game.LocalPriority
                         {
                             new SubsectionHeader(@"Best Performance", stats.BestScores.Count),
                             bestFlow = createList(),
-                            new SubsectionHeader(@"Recent Plays", stats.SavedScoreCount)
+                            new SubsectionHeader(@"Recent Plays", stats.RecentPlayCount)
                             {
                                 Margin = new MarginPadding { Top = 15 },
                             },
@@ -2232,6 +3038,7 @@ namespace osu.Game.LocalPriority
                     },
                 };
 
+                // As far as each list was expanded last time; a dying profile's last look (ShowAll) shows everything anyway.
                 fill(bestFlow, stats.BestScores.ToArray(), @"No PP scores yet.", @"best");
                 fill(recentFlow, stats.RecentScores.ToArray(), @"No submitted plays yet on this profile.", @"recent");
             }
@@ -2263,7 +3070,7 @@ namespace osu.Game.LocalPriority
                     return;
                 }
 
-                int shown = Math.Min(scores.Length, expansion_steps[step]);
+                int shown = ShowAll ? scores.Length : Math.Min(scores.Length, expansion_steps[step]);
 
                 // The first rows were loaded with the statistics; "show more" loads the next ones here.
                 LocalScoreEntry.Load(scores.Take(shown), realm);
@@ -2274,6 +3081,13 @@ namespace osu.Game.LocalPriority
 
                     if (score == null)
                         continue;
+
+                    // Failed / quit plays aren't saved scores: nothing to open, no right-click menu (like on the website).
+                    if (s.Unfinished != null)
+                    {
+                        flow.Add(new ScoreRow(score, null, null, null));
+                        continue;
+                    }
 
                     flow.Add(new ScoreRow(score, s.PP, s.Weight, () => present(score))
                     {
@@ -2406,7 +3220,7 @@ namespace osu.Game.LocalPriority
 
             public ITooltip<ScoreRowTooltipContent> GetCustomTooltip() => new ScoreRowTooltip();
 
-            public ScoreRow(ScoreInfo score, double? pp, double? weight, Action onClick)
+            public ScoreRow(ScoreInfo score, double? pp, double? weight, Action? onClick)
             {
                 this.score = score;
                 this.pp = pp;
@@ -2864,7 +3678,8 @@ namespace osu.Game.LocalPriority
                     Padding = new MarginPadding { Horizontal = gap / 2 };
 
                     // The icon's own tooltip is off, so only this cell (and therefore only this mod) answers the hover.
-                    Child = new ModIcon(mod, showTooltip: false, showExtendedInformation: false) { Scale = new Vector2(icon_scale) };
+                    // Customised mods expand to show their value (e.g. "1.30x"), like on the results screen.
+                    Child = new ModIcon(mod, showTooltip: false) { Scale = new Vector2(icon_scale) };
                 }
 
                 public ITooltip<Mod> GetCustomTooltip() => new ModTooltip(colourProvider);

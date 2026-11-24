@@ -178,6 +178,9 @@ namespace osu.Game.Overlays.Mods
             }
         }
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
         private Drawable? extraSection;
 
         /// <summary>
@@ -213,6 +216,10 @@ namespace osu.Game.Overlays.Mods
             foreach (var mod in SelectedMods.Value)
             {
                 var settings = mod.CreateSettingsControls().ToList();
+
+                // Ritsu: Sudden Death / Perfect Death profiles never restart on fail, so that setting isn't offered.
+                if (localProfiles != null)
+                    settings.RemoveAll(control => localProfiles.IsModSettingHidden(mod, control));
 
                 if (settings.Count > 0)
                     sectionsFlow.Add(new ModCustomisationSection(mod, settings));

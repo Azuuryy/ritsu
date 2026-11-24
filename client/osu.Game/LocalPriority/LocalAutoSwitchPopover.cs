@@ -75,7 +75,9 @@ namespace osu.Game.LocalPriority
                         AutoSizeAxes = Axes.Y,
                         Alpha = 0.75f,
                         Text = @"Selecting a beatmap (and mods) in song select that matches every filled-in condition makes this profile active. "
-                               + @"On beatmaps no profile wants, the profile from before comes back. Ranges: ""5-7"", ""5+"", ""-7"" or ""6"".",
+                               + @"On beatmaps no profile wants, the profile from before comes back. "
+                               + @"Separate several values with commas, any of them counts (""180, 190"" = 180 or 190 BPM). "
+                               + @"Numbers: ""6"", ""=6"", "">5"", "">=5"", ""<7"", ""<=7"", ""5-7"", or both sides like "">5 <7"". Decimals use a dot.",
                     },
                     enabled = new OsuCheckbox
                     {
@@ -84,11 +86,11 @@ namespace osu.Game.LocalPriority
                         Current = { Value = profile.AutoSwitch?.Enabled ?? true },
                     },
                     field(@"Tags (any of them; local, voted or mapper tags)", tags = box(string.Join(@", ", rules.Tags), @"skillset/jumps, jumps/cross-screen")),
-                    field(@"Star rating", stars = box(LocalAutoSwitchRules.FormatRange(rules.MinStars, rules.MaxStars), @"e.g. 5-7")),
-                    field(@"BPM", bpm = box(LocalAutoSwitchRules.FormatRange(rules.MinBpm, rules.MaxBpm), @"e.g. 180+")),
-                    field(@"Length in seconds", length = box(LocalAutoSwitchRules.FormatRange(rules.MinLength, rules.MaxLength), @"e.g. 60-240")),
-                    field(@"Mapper (part of the name)", mapper = box(rules.Mapper, string.Empty)),
-                    field(@"Title, artist or difficulty (part of it)", name = box(rules.Name, string.Empty)),
+                    field(@"Star rating", stars = box(rules.Stars, @"e.g. 5-7 or >6.5")),
+                    field(@"BPM", bpm = box(rules.Bpm, @"e.g. 180, 190 or >=200")),
+                    field(@"Length in seconds", length = box(rules.Length, @"e.g. <90 or 60-240")),
+                    field(@"Mapper (part of the name; any of them)", mapper = box(rules.Mapper, @"e.g. Sotarks, Monstrata")),
+                    field(@"Title, artist or difficulty (part of it; any of them)", name = box(rules.Name, string.Empty)),
                     field(@"Selected mods", modsButton = new RoundedButton
                     {
                         RelativeSizeAxes = Axes.X,
@@ -197,7 +199,7 @@ namespace osu.Game.LocalPriority
         };
 
         /// <summary>
-        /// The rule as filled in, or null (with the reason) when a range can't be read.
+        /// The rule as filled in, or null (with the reason) when a number field can't be read.
         /// </summary>
         private LocalAutoSwitchRules? tryBuildRules(out string? problem)
         {
@@ -207,40 +209,36 @@ namespace osu.Game.LocalPriority
             {
                 Enabled = enabled.Current.Value,
                 Tags = tags.Text.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(LocalBeatmapTags.Normalise).Where(t => t.Length > 0).Distinct().ToList(),
-                Mapper = mapper.Text.Trim(),
-                Name = name.Text.Trim(),
+                Mapper = string.Join(@", ", LocalAutoSwitchCondition.Split(mapper.Text)),
+                Name = string.Join(@", ", LocalAutoSwitchCondition.Split(name.Text)),
                 Mods = modsCondition.Clone().Mods,
                 ModMatch = modsCondition.ModMatch,
                 ExactModSettings = modsCondition.ExactModSettings,
             };
 
-            if (!LocalAutoSwitchRules.TryParseRange(stars.Text, out double? minStars, out double? maxStars))
-            {
-                problem = @"Star rating: use a range like 5-7, 5+, -7 or 6.";
+            if ((problem = number(stars, @"Star rating", @"5-7, >6.5 or 4, 6", out string starsCondition)) != null)
                 return null;
-            }
 
-            if (!LocalAutoSwitchRules.TryParseRange(bpm.Text, out double? minBpm, out double? maxBpm))
-            {
-                problem = @"BPM: use a range like 180-220, 180+, -220 or 200.";
+            if ((problem = number(bpm, @"BPM", @"180, 190, >=200 or 180-220", out string bpmCondition)) != null)
                 return null;
-            }
 
-            if (!LocalAutoSwitchRules.TryParseRange(length.Text, out double? minLength, out double? maxLength))
-            {
-                problem = @"Length: use seconds, like 60-240, 60+, -240 or 120.";
+            if ((problem = number(length, @"Length", @"<90, 60-240 or >=120 (seconds)", out string lengthCondition)) != null)
                 return null;
-            }
 
-            rules.MinStars = minStars;
-            rules.MaxStars = maxStars;
-            rules.MinBpm = minBpm;
-            rules.MaxBpm = maxBpm;
-            rules.MinLength = minLength;
-            rules.MaxLength = maxLength;
+            rules.Stars = starsCondition;
+            rules.Bpm = bpmCondition;
+            rules.Length = lengthCondition;
 
             return rules;
         }
+
+        /// <summary>
+        /// Reads a number field into <paramref name="condition"/>; returns what's wrong with it, or null when it's fine.
+        /// </summary>
+        private static string? number(OsuTextBox box, string label, string examples, out string condition) =>
+            LocalAutoSwitchCondition.TryNormaliseNumber(box.Text, out condition, out string? bad)
+                ? null
+                : $@"{label}: can't read ""{bad}"". Use e.g. {examples}.";
 
         private void save()
         {

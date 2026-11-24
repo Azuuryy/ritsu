@@ -1,13 +1,15 @@
 // Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
+using System.Runtime.Serialization;
+using Newtonsoft.Json;
 using osu.Game.Beatmaps;
 using osu.Game.Online.API;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
+using osu.Game.Utils;
 
 namespace osu.Game.LocalPriority
 {
@@ -34,6 +36,7 @@ namespace osu.Game.LocalPriority
 
     /// <summary>
     /// When a profile becomes active by itself: selecting a beatmap in song select that matches every condition that is filled in.
+    /// Every field is a comma-separated list that matches when any of its entries does (see <see cref="LocalAutoSwitchCondition"/>).
     /// </summary>
     public class LocalAutoSwitchRules
     {
@@ -44,28 +47,63 @@ namespace osu.Game.LocalPriority
         /// </summary>
         public List<string> Tags { get; set; } = new List<string>();
 
-        public double? MinStars { get; set; }
-        public double? MaxStars { get; set; }
-
-        public double? MinBpm { get; set; }
-        public double? MaxBpm { get; set; }
-
         /// <summary>
-        /// Length in seconds.
+        /// Star rating condition, e.g. "5-7", "&gt;6.5" or "4, 6".
         /// </summary>
-        public double? MinLength { get; set; }
-
-        public double? MaxLength { get; set; }
+        public string Stars { get; set; } = string.Empty;
 
         /// <summary>
-        /// Part of the mapper's name.
+        /// BPM condition, e.g. "180, 190" or "&gt;=200".
+        /// </summary>
+        public string Bpm { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Length condition in seconds, e.g. "&lt;90" or "60-240".
+        /// </summary>
+        public string Length { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Parts of the mapper's name (any of them).
         /// </summary>
         public string Mapper { get; set; } = string.Empty;
 
         /// <summary>
-        /// Part of the title, artist or difficulty name.
+        /// Parts of the title, artist or difficulty name (any of them).
         /// </summary>
         public string Name { get; set; } = string.Empty;
+
+        // Rules saved before the conditions were text kept min/max numbers. They are read once and turned into the text fields.
+        [JsonProperty]
+        private double? MinStars { set => legacyStars.min = value; }
+
+        [JsonProperty]
+        private double? MaxStars { set => legacyStars.max = value; }
+
+        [JsonProperty]
+        private double? MinBpm { set => legacyBpm.min = value; }
+
+        [JsonProperty]
+        private double? MaxBpm { set => legacyBpm.max = value; }
+
+        [JsonProperty]
+        private double? MinLength { set => legacyLength.min = value; }
+
+        [JsonProperty]
+        private double? MaxLength { set => legacyLength.max = value; }
+
+        private (double? min, double? max) legacyStars, legacyBpm, legacyLength;
+
+        [OnDeserialized]
+        private void onDeserialized(StreamingContext context)
+        {
+            static string upgrade(string current, (double? min, double? max) old) =>
+                string.IsNullOrWhiteSpace(current) ? LocalAutoSwitchCondition.FromRange(old.min, old.max) : current;
+
+            Stars = upgrade(Stars, legacyStars);
+            Bpm = upgrade(Bpm, legacyBpm);
+            Length = upgrade(Length, legacyLength);
+            legacyStars = legacyBpm = legacyLength = default;
+        }
 
         /// <summary>
         /// Mods that have to be selected (picked in the mod rules picker; how they have to match: <see cref="ModMatch"/>).
@@ -80,7 +118,7 @@ namespace osu.Game.LocalPriority
         public bool ExactModSettings { get; set; }
 
         public bool HasAnyCondition =>
-            Tags.Count > 0 || MinStars != null || MaxStars != null || MinBpm != null || MaxBpm != null || MinLength != null || MaxLength != null
+            Tags.Count > 0 || !string.IsNullOrWhiteSpace(Stars) || !string.IsNullOrWhiteSpace(Bpm) || !string.IsNullOrWhiteSpace(Length)
             || !string.IsNullOrWhiteSpace(Mapper) || !string.IsNullOrWhiteSpace(Name) || Mods.Count > 0;
 
         /// <param name="beatmap">The selected beatmap.</param>
@@ -106,22 +144,21 @@ namespace osu.Game.LocalPriority
                     return false;
             }
 
-            if (!inRange(beatmap.StarRating, MinStars, MaxStars))
+            // Compared the way song select shows them: stars to two decimals, whole BPM, whole seconds.
+            if (!LocalAutoSwitchCondition.MatchesNumber(Stars, Math.Round(beatmap.StarRating, 2)))
                 return false;
 
-            if (!inRange(beatmap.BPM, MinBpm, MaxBpm))
+            if (!LocalAutoSwitchCondition.MatchesNumber(Bpm, FormatUtils.RoundBPM(beatmap.BPM)))
                 return false;
 
-            if (!inRange(beatmap.Length / 1000, MinLength, MaxLength))
+            if (!LocalAutoSwitchCondition.MatchesNumber(Length, Math.Floor(beatmap.Length / 1000)))
                 return false;
 
-            if (!string.IsNullOrWhiteSpace(Mapper) && !contains(beatmap.Metadata.Author.Username, Mapper))
+            if (!LocalAutoSwitchCondition.MatchesText(Mapper, beatmap.Metadata.Author.Username))
                 return false;
 
-            if (!string.IsNullOrWhiteSpace(Name)
-                && !contains(beatmap.Metadata.Title, Name) && !contains(beatmap.Metadata.TitleUnicode, Name)
-                && !contains(beatmap.Metadata.Artist, Name) && !contains(beatmap.Metadata.ArtistUnicode, Name)
-                && !contains(beatmap.DifficultyName, Name))
+            if (!LocalAutoSwitchCondition.MatchesText(Name, beatmap.Metadata.Title, beatmap.Metadata.TitleUnicode,
+                    beatmap.Metadata.Artist, beatmap.Metadata.ArtistUnicode, beatmap.DifficultyName))
                 return false;
 
             return true;
@@ -179,10 +216,6 @@ namespace osu.Game.LocalPriority
             return ExactModSettings ? $@"{match} (exact settings)" : match;
         }
 
-        private static bool inRange(double value, double? min, double? max) => (min == null || value >= min) && (max == null || value <= max);
-
-        private static bool contains(string? text, string part) => text?.Contains(part.Trim(), StringComparison.OrdinalIgnoreCase) == true;
-
         /// <summary>
         /// Short description, e.g. "tags skillset/jumps · 5–7★".
         /// </summary>
@@ -191,74 +224,14 @@ namespace osu.Game.LocalPriority
             var parts = new List<string>();
 
             if (Tags.Count > 0) parts.Add($@"tags {string.Join(@", ", Tags)}");
-            if (MinStars != null || MaxStars != null) parts.Add($@"{FormatRange(MinStars, MaxStars)}★");
-            if (MinBpm != null || MaxBpm != null) parts.Add($@"{FormatRange(MinBpm, MaxBpm)} BPM");
-            if (MinLength != null || MaxLength != null) parts.Add($@"{FormatRange(MinLength, MaxLength)}s");
+            if (!string.IsNullOrWhiteSpace(Stars)) parts.Add($@"{Stars}★");
+            if (!string.IsNullOrWhiteSpace(Bpm)) parts.Add($@"{Bpm} BPM");
+            if (!string.IsNullOrWhiteSpace(Length)) parts.Add($@"{Length}s");
             if (!string.IsNullOrWhiteSpace(Mapper)) parts.Add($@"mapper ""{Mapper}""");
             if (!string.IsNullOrWhiteSpace(Name)) parts.Add($@"name ""{Name}""");
             if (Mods.Count > 0) parts.Add($@"mods {DescribeMods()}");
 
             return parts.Count == 0 ? @"no conditions" : string.Join(@" · ", parts);
-        }
-
-        /// <summary>
-        /// "5-7", "5+", "-7", "6" (exactly) or "" for no limit.
-        /// </summary>
-        public static string FormatRange(double? min, double? max)
-        {
-            string f(double v) => v.ToString(@"0.##", CultureInfo.InvariantCulture);
-
-            if (min != null && max != null)
-                return min == max ? f(min.Value) : $@"{f(min.Value)}-{f(max.Value)}";
-            if (min != null)
-                return $@"{f(min.Value)}+";
-            if (max != null)
-                return $@"-{f(max.Value)}";
-
-            return string.Empty;
-        }
-
-        /// <summary>
-        /// Reads "5-7", "5+", "-7" or "6". Returns false for text that isn't a range.
-        /// </summary>
-        public static bool TryParseRange(string text, out double? min, out double? max)
-        {
-            min = max = null;
-            text = (text ?? string.Empty).Trim().Replace(',', '.').Replace('–', '-');
-
-            if (text.Length == 0)
-                return true;
-
-            static bool num(string s, out double v) => double.TryParse(s.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v);
-
-            if (text.EndsWith('+') && num(text[..^1], out double atLeast))
-            {
-                min = atLeast;
-                return true;
-            }
-
-            int dash = text.IndexOf('-', 1);
-
-            if (text.StartsWith('-') && num(text[1..], out double atMost))
-            {
-                max = atMost;
-                return true;
-            }
-
-            if (dash > 0 && num(text[..dash], out double from) && num(text[(dash + 1)..], out double to))
-            {
-                min = Math.Min(from, to);
-                max = Math.Max(from, to);
-                return true;
-            }
-
-            if (num(text, out double exact))
-            {
-                min = max = exact;
-                return true;
-            }
-
-            return false;
         }
 
         public LocalAutoSwitchRules Clone()

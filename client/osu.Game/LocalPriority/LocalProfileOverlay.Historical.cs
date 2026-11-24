@@ -49,9 +49,9 @@ namespace osu.Game.LocalPriority
             private Container chartContainer = null!;
             private FillFlowContainer mostPlayedFlow = null!;
 
-            private readonly IDictionary<string, int> expandedLists;
-
             private const string most_played_list = @"mostPlayed";
+
+            private readonly IDictionary<string, int> expandedLists;
 
             public HistoricalPanel(LocalProfileStatistics stats, Action<BeatmapInfo> presentBeatmap, IDictionary<string, int> expandedLists)
             {

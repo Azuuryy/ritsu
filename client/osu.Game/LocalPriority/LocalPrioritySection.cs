@@ -6,15 +6,20 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Localisation;
 using osu.Framework.Logging;
+using osu.Game.Graphics;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
 using osu.Game.Overlays.Settings;
+using osuTK;
 
 namespace osu.Game.LocalPriority
 {
@@ -35,20 +40,103 @@ namespace osu.Game.LocalPriority
 
         public LocalPrioritySection()
         {
-            Children = new Drawable[]
-            {
-                new LocalProfileBehaviourSettings(),
-                // Ritsu never signs in to an online account, so the online lookup settings are left out.
-            };
+            // Every patch with settings here has its own "Patch N. …" subsection (a PatchSettingsSubsection in one of its own files),
+            // so no patch has to edit this list. They are shown in patch order.
+            Children = typeof(LocalPrioritySection).Assembly.GetTypes()
+                                                   .Where(t => t.IsSubclassOf(typeof(PatchSettingsSubsection)) && !t.IsAbstract)
+                                                   .Select(t => (PatchSettingsSubsection)Activator.CreateInstance(t)!)
+                                                   .OrderBy(s => s.PatchNumber)
+                                                   .ToArray();
         }
     }
 
     /// <summary>
-    /// How local profiles are created and deleted.
+    /// The subsection of Settings → Ritsu that belongs to one part of the local profiles code, titled by its summary
+    /// (Patchsu titles these "Patch N. Summary"; Ritsu has no numbered patches, so only the summary shows).
+    /// Settings → Ritsu finds every subclass by itself, so a subclass only needs a public parameterless constructor.
     /// </summary>
-    public partial class LocalProfileBehaviourSettings : SettingsSubsection
+    public abstract partial class PatchSettingsSubsection : SettingsSubsection
     {
-        protected override LocalisableString Header => @"Local profiles";
+        /// <summary>
+        /// The number of the patch file (0002 → 2).
+        /// </summary>
+        public abstract int PatchNumber { get; }
+
+        /// <summary>
+        /// What the patch does, in three words at most.
+        /// </summary>
+        protected abstract string Summary { get; }
+
+        protected sealed override LocalisableString Header => Summary;
+    }
+
+    /// <summary>
+    /// A group of settings inside a subsection, headed by a plaque like the suggested offset note in Audio settings.
+    /// A search that matches none of its settings hides the whole group, plaque included.
+    /// </summary>
+    public abstract partial class LocalSettingsGroup : FillFlowContainer, IFilterable
+    {
+        private readonly string title;
+
+        private readonly FillFlowContainer content;
+
+        protected override Container<Drawable> Content => content;
+
+        /// <summary>
+        /// Search terms of the group besides its title.
+        /// </summary>
+        protected virtual IEnumerable<LocalisableString> Keywords => Array.Empty<LocalisableString>();
+
+        public IEnumerable<LocalisableString> FilterTerms => Keywords.Prepend(title);
+
+        public bool MatchingFilter
+        {
+            set => this.FadeTo(value ? 1 : 0);
+        }
+
+        public bool FilteringActive { get; set; }
+
+        protected LocalSettingsGroup(string title)
+        {
+            this.title = title;
+
+            RelativeSizeAxes = Axes.X;
+            AutoSizeAxes = Axes.Y;
+            Direction = FillDirection.Vertical;
+            Spacing = new Vector2(0, SettingsSection.ITEM_SPACING_V2);
+
+            AddRangeInternal(new Drawable[]
+            {
+                new Container
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Padding = SettingsPanel.CONTENT_PADDING,
+                    Child = new SettingsNote
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        Current = { Value = new SettingsNote.Data(title, SettingsNote.Type.Informational) },
+                    },
+                },
+                content = new FillFlowContainer
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Direction = FillDirection.Vertical,
+                    Spacing = new Vector2(0, SettingsSection.ITEM_SPACING_V2),
+                },
+            });
+        }
+    }
+
+    /// <summary>
+    /// Patch 2: how local profiles are created and deleted, with the profile colour and online lookup groups under it.
+    /// </summary>
+    public partial class LocalProfileBehaviourSettings : PatchSettingsSubsection
+    {
+        public override int PatchNumber => 2;
+
+        protected override string Summary => @"Local profiles";
 
         public override IEnumerable<LocalisableString> FilterTerms => base.FilterTerms.Concat(new LocalisableString[]
         {
@@ -64,6 +152,18 @@ namespace osu.Game.LocalPriority
         private SettingsButtonV2 exportTopReplaysButton = null!;
         private SettingsButtonV2 exportAllReplaysButton = null!;
         private SettingsButtonV2 rebuildStatisticsButton = null!;
+        private SettingsButtonV2 resetDeathCountsButton = null!;
+        private readonly IBindable<int> revision = new Bindable<int>();
+
+        /// <summary>
+        /// Ritsu: shows how far Sudden Death / Perfect Death profile numbering got (refreshed whenever the profiles change).
+        /// </summary>
+        private void updateDeathCountsButton()
+        {
+            var (suddenDeath, perfectDeath) = manager.GetDeathProfileCounts();
+            resetDeathCountsButton.Text = $@"Reset SD/PF profile count";
+            resetDeathCountsButton.Enabled.Value = suddenDeath > 0 || perfectDeath > 0;
+        }
 
         protected override void LoadComplete()
         {
@@ -75,12 +175,15 @@ namespace osu.Game.LocalPriority
                 importReplaysButton.Enabled.Value = p.NewValue != null;
                 exportTopReplaysButton.Enabled.Value = p.NewValue != null;
                 exportAllReplaysButton.Enabled.Value = p.NewValue != null;
-                exportTopReplaysButton.Text = $@"Export top {LocalProfileManager.TOP_REPLAYS_EXPORT_COUNT} replays of {(p.NewValue != null ? $@"""{p.NewValue.Name}""" : @"the active profile")} to a folder…";
-                exportAllReplaysButton.Text = $@"Export all replays of {(p.NewValue != null ? $@"""{p.NewValue.Name}""" : @"the active profile")} to a folder…";
+                exportTopReplaysButton.Text = $@"Export top {LocalProfileManager.TOP_REPLAYS_EXPORT_COUNT} replays of {(p.NewValue != null ? $@"""{p.NewValue.Name}""" : @"the active profile")} to a folder";
+                exportAllReplaysButton.Text = $@"Export all replays of {(p.NewValue != null ? $@"""{p.NewValue.Name}""" : @"the active profile")} to a folder";
                 importReplaysButton.Text = p.NewValue != null
-                    ? $@"Import replays (.osr) from a folder as ""{p.NewValue.Name}""…"
-                    : @"Import replays (.osr) from a folder (switch to a local profile first)";
+                    ? $@"Import replays from a folder as ""{p.NewValue.Name}""…"
+                    : @"Import replays from a folder. Needs local profile.";
             }, true);
+
+            revision.BindTo(manager.Revision);
+            revision.BindValueChanged(_ => Scheduler.AddOnce(updateDeathCountsButton), true);
         }
 
         [Resolved]
@@ -183,9 +286,19 @@ namespace osu.Game.LocalPriority
                     Keywords = new[] { @"statistics", @"stats", @"rebuild", @"recalculate", @"repair", @"replay", @"play count", @"history" },
                     Action = rebuildStatistics,
                 },
+                resetDeathCountsButton = new SettingsButtonV2
+                {
+                    TooltipText = @"New Sudden Death / Perfect Death profiles are numbered by how many were ever created. This starts both back at ""SD Profile 1"" and ""PF Profile 1"".",
+                    Keywords = new[] { @"sudden", @"death", @"perfect", @"sd", @"pf", @"count", @"number", @"reset" },
+                    Action = () =>
+                    {
+                        manager.ResetDeathProfileCounts();
+                        updateDeathCountsButton();
+                    },
+                },
                 new DangerousSettingsButtonV2
                 {
-                    Text = @"Remove scores whose beatmap difficulty can't be calculated",
+                    Text = @"Remove scores for beatmaps that can't be calculated",
                     Keywords = new[] { @"difficulty", @"broken", @"error", @"calculate", @"pp" },
                     Action = manager.RequestRemoveUncalculableScores,
                 },
@@ -197,27 +310,24 @@ namespace osu.Game.LocalPriority
                 },
                 new SettingsItemV2(new FormCheckBox
                 {
-                    Caption = @"Delete profiles without asking (keeping their scores)",
+                    Caption = @"Delete profiles without asking. Keeps their scores",
                     Current = manager.DeleteKeepingScoresWithoutAsking,
                 }),
                 new SettingsItemV2(new FormCheckBox
                 {
-                    Caption = @"Delete profiles without asking (together with their scores)",
+                    Caption = @"Delete profiles without asking WITH their scores",
                     Current = manager.DeleteWithScoresWithoutAsking,
                 }),
                 new SettingsItemV2(new FormCheckBox
                 {
                     Caption = @"Suggest syncing plays saved under the same name",
-                    HintText = @"After creating or renaming a profile, offer to count plays already saved under its name "
-                               + @"(online account, guest plays, older profiles) as its own. Always available from the profile's right-click menu.",
+                    HintText = @"After creating or renaming a profile to a name that already has scores in local database, offer to count them towards this profile",
                     Current = manager.SuggestSyncingSameNamePlays,
                 }),
                 new SettingsItemV2(new FormCheckBox
                 {
                     Caption = @"Create profiles with mod rules",
-                    HintText = @"Adds a second ""new profile"" button to the profile page and the switcher. It opens mod select first: "
-                               + @"pick mods, then choose under ""Profile rules"" whether the profile blocks them, only allows them "
-                               + @"(optionally only with the chosen settings) and/or selects them whenever you switch to it.",
+                    HintText = @"Adds a second ""New Profile"" button to the profile page. It opens mod select where you can configure everything",
                     Current = manager.ProfilesWithModRules,
                 }),
                 new SettingsItemV2(new FormCheckBox
@@ -232,34 +342,270 @@ namespace osu.Game.LocalPriority
                 }),
                 new SettingsItemV2(new FormCheckBox
                 {
-                    Caption = @"Calculate and show total hit accuracy",
+                    Caption = @"Show total hit accuracy",
+                    HintText = @"Calculated from every judgment recorded that can be seen in local profile page. Purely statistical.",
                     Current = manager.ShowTotalAccuracy,
                 }),
                 new SettingsItemV2(new FormCheckBox
                 {
-                    Caption = @"Count everything as ranked",
+                    Caption = @"Count every map and play as ranked",
                     Current = manager.CountEverythingAsRanked,
                 }),
                 new SettingsItemV2(new FormCheckBox
                 {
-                    Caption = @"Do not hide unranked scores when not counting them",
+                    Caption = @"Count LOCAL maps towards PP",
+                    HintText = @"When off, plays on beatmaps marked LOCAL (changed in the editor) are not shown on profiles at all.",
+                    Current = manager.LocalMapsGivePerformance,
+                }),
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = @"Gray out scores that do not go towards PP rather instead of hiding",
                     Current = manager.ShowNonCountingScores,
                 }),
+                new LocalProfileColourSettings(),
+                // Ritsu never signs in to an online account, so the online lookup settings are left out.
             };
+        }
+    }
+
+    /// <summary>
+    /// A colour for the local profile pages, like the profile colour osu!supporters pick on the website.
+    /// </summary>
+    public partial class LocalProfileColourSettings : LocalSettingsGroup
+    {
+        public LocalProfileColourSettings()
+            : base(@"Profile Colors")
+        {
+        }
+
+        protected override IEnumerable<LocalisableString> Keywords => new LocalisableString[]
+        {
+            @"colour", @"color", @"hue", @"tint", @"theme", @"supporter", @"rgb",
+        };
+
+        [Resolved]
+        private LocalProfileManager manager { get; set; } = null!;
+
+        private Container pickerArea = null!;
+        private FillFlowContainer preview = null!;
+
+        [BackgroundDependencyLoader]
+        private void load()
+        {
+            LocalCompactColourPicker picker;
+
+            Children = new Drawable[]
+            {
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = @"Color profile pages",
+                    HintText = @"Tints every local profile page with the color below, like an osu!supporter's profile color. "
+                               + @"Sudden Death and Perfect Death profiles keep their red and gold.",
+                    Current = manager.ProfileColouring,
+                }),
+                pickerArea = new Container
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Padding = SettingsPanel.CONTENT_PADDING,
+                    Child = picker = new LocalCompactColourPicker
+                    {
+                        Current = manager.ProfileColour,
+                        // The page shades this colour gives (its brightness doesn't matter, the page keeps its own).
+                        Footer = preview = new FillFlowContainer
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Height = 16,
+                            Direction = FillDirection.Horizontal,
+                            Masking = true,
+                            CornerRadius = 5,
+                        },
+                    },
+                },
+            };
+
+            // The website's profile colour presets are osu!'s overlay colour schemes.
+            picker.Suggestions.AddRange(new[]
+            {
+                OverlayColourScheme.Red, OverlayColourScheme.Orange, OverlayColourScheme.Lime, OverlayColourScheme.Green,
+                OverlayColourScheme.Aquamarine, OverlayColourScheme.Blue, OverlayColourScheme.Purple, OverlayColourScheme.Plum, OverlayColourScheme.Pink,
+            }.Select(scheme => Colour4.FromHSV(scheme.GetHue() / 360f, 1, 1)));
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            manager.ProfileColouring.BindValueChanged(e =>
+            {
+                if (e.NewValue)
+                    pickerArea.FadeIn(200, Easing.OutQuint);
+                else
+                    pickerArea.Hide();
+            }, true);
+            manager.ProfileColour.BindValueChanged(_ => updatePreview(), true);
+        }
+
+        private void updatePreview()
+        {
+            var hsv = manager.ProfileColour.Value.ToHSV();
+            var colours = new OverlayColourProvider((int)MathF.Round(hsv.X * 360) % 360);
+            colours.ChangeColourScheme(colours.Hue, hsv.Y);
+
+            var shades = new[]
+            {
+                colours.Background5, colours.Background3, colours.Dark3, colours.Colour4, colours.Colour3, colours.Colour1, colours.Light1, colours.Content2,
+            };
+
+            preview.ChildrenEnumerable = shades.Select(c => new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Width = 1f / shades.Length,
+                Colour = c,
+            });
+        }
+    }
+
+    /// <summary>
+    /// A colour picker that fits the settings panel in about half the height of <see cref="OsuColourPicker"/>:
+    /// the hue / saturation square on the left, presets, hex code and an optional footer on the right.
+    /// </summary>
+    public partial class LocalCompactColourPicker : CompositeDrawable, IHasCurrentValue<Colour4>
+    {
+        private const float hsv_width = 150;
+        private const float spacing = 10;
+
+        private readonly BindableWithCurrent<Colour4> current = new BindableWithCurrent<Colour4>();
+
+        public Bindable<Colour4> Current
+        {
+            get => current.Current;
+            set => current.Current = value;
+        }
+
+        /// <summary>
+        /// Preset colours, shown as swatches.
+        /// </summary>
+        public BindableList<Colour4> Suggestions { get; } = new BindableList<Colour4>();
+
+        /// <summary>
+        /// Shown under the hex code (full width of the right column).
+        /// </summary>
+        public Drawable? Footer { get; init; }
+
+        private OsuHSVColourPicker hsv = null!;
+        private CompactSwatches swatches = null!;
+        private OsuHexColourPicker hex = null!;
+
+        public LocalCompactColourPicker()
+        {
+            RelativeSizeAxes = Axes.X;
+            AutoSizeAxes = Axes.Y;
+            Masking = true;
+            CornerRadius = 10;
+        }
+
+        [BackgroundDependencyLoader(true)]
+        private void load(OverlayColourProvider? colourProvider, OsuColour osuColour)
+        {
+            var column = new FillFlowContainer
+            {
+                RelativeSizeAxes = Axes.X,
+                AutoSizeAxes = Axes.Y,
+                Direction = FillDirection.Vertical,
+                Children = new Drawable[]
+                {
+                    swatches = new CompactSwatches
+                    {
+                        Colours = { BindTarget = Suggestions },
+                    },
+                    hex = new OsuHexColourPicker
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        Width = 1,
+                        Padding = new MarginPadding { Horizontal = spacing, Bottom = spacing },
+                        Spacing = spacing,
+                    },
+                },
+            };
+
+            if (Footer != null)
+            {
+                column.Add(new Container
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Padding = new MarginPadding { Horizontal = spacing, Bottom = spacing },
+                    Child = Footer,
+                });
+            }
+
+            InternalChildren = new Drawable[]
+            {
+                new Box
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Colour = colourProvider?.Dark6 ?? osuColour.GreySeaFoamDarker,
+                },
+                new GridContainer
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    ColumnDimensions = new[] { new Dimension(GridSizeMode.Absolute, hsv_width), new Dimension() },
+                    RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
+                    Content = new[]
+                    {
+                        new Drawable[]
+                        {
+                            hsv = new OsuHSVColourPicker { Width = hsv_width },
+                            column,
+                        },
+                    },
+                },
+            };
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            hsv.Current = Current;
+            swatches.Current = Current;
+            hex.Current = Current;
+        }
+
+        private partial class CompactSwatches : OsuSwatchColourPicker
+        {
+            public CompactSwatches()
+            {
+                Content.Padding = new MarginPadding(spacing);
+                Content.Anchor = Anchor.TopLeft;
+                Content.Origin = Anchor.TopLeft;
+            }
+
+            [BackgroundDependencyLoader]
+            private void load()
+            {
+                // the whole picker has one background behind the right column.
+                Background.Alpha = 0;
+            }
         }
     }
 
     /// <summary>
     /// Whether local profiles may use the signed-in online account for read-only lookups (beatmaps, tags, leaderboards).
     /// </summary>
-    public partial class LocalOnlineLookupSettings : SettingsSubsection
+    public partial class LocalOnlineLookupSettings : LocalSettingsGroup
     {
-        protected override LocalisableString Header => @"Online lookups on local profiles";
+        public LocalOnlineLookupSettings()
+            : base(@"Online lookups on local profiles")
+        {
+        }
 
-        public override IEnumerable<LocalisableString> FilterTerms => base.FilterTerms.Concat(new LocalisableString[]
+        protected override IEnumerable<LocalisableString> Keywords => new LocalisableString[]
         {
             @"leaderboard", @"beatmap", @"tags", @"download", @"online", @"account", @"ban",
-        });
+        };
 
         [Resolved]
         private LocalProfileManager manager { get; set; } = null!;
@@ -281,12 +627,12 @@ namespace osu.Game.LocalPriority
             {
                 toggleItem = new SettingsItemV2(new FormCheckBox
                 {
-                    Caption = @"Use the online account for lookups on local profiles",
+                    Caption = @"Use your online account for beatmap and leaderboard requests while using local profile",
                     Current = manager.LocalProfilesUseOnlineAccount,
                 }),
                 new SettingsItemV2(accountTextBox = new FormTextBox
                 {
-                    Caption = @"Online account used for lookups",
+                    Caption = @"Account used for connectivity",
                     ReadOnly = true,
                 })
                 {
@@ -314,8 +660,8 @@ namespace osu.Game.LocalPriority
             bool enabled = manager.LocalProfilesUseOnlineAccount.Value;
 
             toggleItem.Note.Value = new SettingsNote.Data(
-                @"Warning: Ritsu is a modified, unofficial client. Sending requests to osu! servers with your account from it "
-                + @"might get your account restricted or banned. Use at your own risk.",
+                @"Warning: Ritsu is a modified, unofficial client. This will send requests to osu! servers with your account from it "
+                + @"might get your account restricted or banned. Use responsibly.",
                 enabled ? SettingsNote.Type.Critical : SettingsNote.Type.Warning);
 
             // While a local profile is shown as the player, the signed-in online account is kept separately.
@@ -339,8 +685,8 @@ namespace osu.Game.LocalPriority
 
                 default:
                     accountTextBox.Current.Value = manager.IsLocalProfileActive && !enabled
-                        ? @"Not used (local profile is fully offline)"
-                        : @"Not signed in: switch to the online account and sign in first";
+                        ? @"None. Client does not send any data."
+                        : @"Not signed in. Sign in first to use it";
                     break;
             }
         }

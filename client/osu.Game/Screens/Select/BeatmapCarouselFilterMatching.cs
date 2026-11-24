@@ -174,7 +174,8 @@ namespace osu.Game.Screens.Select
             if (criteria.UserTags.Any())
             {
                 // Ritsu: tags given to the beatmap locally count like voted tags.
-                var allUserTags = beatmap.Metadata.UserTags.Concat(LocalBeatmapTags.Current?.Get(beatmap) ?? Array.Empty<string>()).ToArray();
+                var localUserTags = LocalBeatmapTags.Current?.Get(beatmap) ?? Array.Empty<string>();
+                IEnumerable<string> allUserTags = localUserTags.Count == 0 ? beatmap.Metadata.UserTags : beatmap.Metadata.UserTags.Concat(localUserTags).ToArray();
 
                 foreach (var tagFilter in criteria.UserTags)
                 {

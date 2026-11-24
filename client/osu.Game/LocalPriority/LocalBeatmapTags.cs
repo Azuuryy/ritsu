@@ -32,7 +32,11 @@ namespace osu.Game.LocalPriority
 
         private readonly Storage storage;
         private readonly object sync = new object();
-        private readonly Dictionary<string, string[]> tags;
+
+        /// <summary>
+        /// Replaced (never changed in place) on every change, so song select's filtering reads it without locking.
+        /// </summary>
+        private volatile Dictionary<string, string[]> tags;
 
         public LocalBeatmapTags(Storage storage)
         {
@@ -50,9 +54,9 @@ namespace osu.Game.LocalPriority
             if (string.IsNullOrEmpty(key))
                 return Array.Empty<string>();
 
-            // Called for every beatmap while song select filters: no copying (the stored arrays are never changed, only replaced).
-            lock (sync)
-                return tags.Count > 0 && tags.TryGetValue(key, out string[]? list) ? list : Array.Empty<string>();
+            // Called for every beatmap while song select filters: no copying and no lock (the dictionary and its arrays are never changed, only replaced).
+            var current = tags;
+            return current.Count > 0 && current.TryGetValue(key, out string[]? list) ? list : Array.Empty<string>();
         }
 
         public static string Normalise(string tag) => string.Join(' ', (tag ?? string.Empty).Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
@@ -71,7 +75,7 @@ namespace osu.Game.LocalPriority
                 if (list.Contains(tag))
                     return;
 
-                tags[beatmap.MD5Hash] = list.Append(tag).ToArray();
+                tags = new Dictionary<string, string[]>(tags) { [beatmap.MD5Hash] = list.Append(tag).ToArray() };
                 save();
             }
 
@@ -86,12 +90,14 @@ namespace osu.Game.LocalPriority
                     return;
 
                 string[] remaining = list.Where(t => t != tag).ToArray();
+                var changed = new Dictionary<string, string[]>(tags);
 
                 if (remaining.Length == 0)
-                    tags.Remove(beatmap.MD5Hash);
+                    changed.Remove(beatmap.MD5Hash);
                 else
-                    tags[beatmap.MD5Hash] = remaining;
+                    changed[beatmap.MD5Hash] = remaining;
 
+                tags = changed;
                 save();
             }
 
@@ -103,8 +109,7 @@ namespace osu.Game.LocalPriority
         /// </summary>
         public IReadOnlyList<string> AllTags()
         {
-            lock (sync)
-                return tags.Values.SelectMany(t => t).Distinct().OrderBy(t => t).ToArray();
+            return tags.Values.SelectMany(t => t).Distinct().OrderBy(t => t).ToArray();
         }
 
         private Dictionary<string, string[]>? read()
@@ -124,7 +129,12 @@ namespace osu.Game.LocalPriority
         {
             try
             {
-                LocalDurableFile.WriteText(storage, file, JsonConvert.SerializeObject(tags, Formatting.Indented));
+                LocalDurableFile.Write(storage, file, stream =>
+                {
+                    using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false), 4096, true))
+                    using (var json = new JsonTextWriter(writer))
+                        JsonSerializer.CreateDefault(new JsonSerializerSettings { Formatting = Formatting.Indented }).Serialize(json, tags);
+                });
             }
             catch (Exception e)
             {
