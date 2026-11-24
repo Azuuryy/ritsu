@@ -641,6 +641,51 @@ namespace osu.Game.LocalPriority
         /// since it was counted from the score rather than recorded as an attempt.
         /// </summary>
         /// <summary>
+        /// Fills in play statistics counted again from saved scores (keyed by profile user ID, then ruleset short name),
+        /// e.g. after profiles.json was lost. Every value only goes up: attempts recorded without a score (failed, quit or
+        /// restarted) are kept, and plays already counted aren't counted twice.
+        /// </summary>
+        /// <returns>How many profiles changed.</returns>
+        public int MergeStatisticsFromScores(IReadOnlyDictionary<int, Dictionary<string, LocalPlayStatistics>> fromScores)
+        {
+            int changedProfiles = 0;
+
+            lock (sync)
+            {
+                foreach (var profile in data.Profiles)
+                {
+                    if (!fromScores.TryGetValue(profile.UserId, out var perRuleset))
+                        continue;
+
+                    bool changed = false;
+
+                    foreach (var (ruleset, counted) in perRuleset)
+                    {
+                        // Replaced, not changed in place: profile copies handed out by the store share the dictionaries.
+                        var merged = profile.Stats.TryGetValue(ruleset, out var current) ? current.Clone() : new LocalPlayStatistics();
+
+                        if (merged.MergeMaximum(counted))
+                        {
+                            profile.Stats[ruleset] = merged;
+                            changed = true;
+                        }
+                    }
+
+                    if (changed)
+                        changedProfiles++;
+                }
+
+                if (changedProfiles > 0)
+                    save();
+            }
+
+            if (changedProfiles > 0)
+                Changed?.Invoke();
+
+            return changedProfiles;
+        }
+
+        /// <summary>
         /// Plays recorded on days before <paramref name="cutoff"/> (every profile and ruleset), as counted in the play history.
         /// </summary>
         public long CountDailyPlaysBefore(DateTime cutoff)
@@ -1231,6 +1276,60 @@ namespace osu.Game.LocalPriority
         /// Total hits as the website counts them: every basic judgement that isn't a miss (300 / 100 / 50 and mania's geki / katu).
         /// </summary>
         public long TotalHits => Count(HitResult.Perfect) + Count(HitResult.Great) + Count(HitResult.Good) + Count(HitResult.Ok) + Count(HitResult.Meh);
+
+        /// <summary>
+        /// Raises every value to at least the one in <paramref name="other"/> (per hit result, beatmap and day).
+        /// </summary>
+        /// <returns>Whether anything changed.</returns>
+        public bool MergeMaximum(LocalPlayStatistics other)
+        {
+            bool changed = false;
+
+            if (other.PlayCount > PlayCount)
+            {
+                PlayCount = other.PlayCount;
+                changed = true;
+            }
+
+            if (other.PlayTimeSeconds > PlayTimeSeconds + 0.5)
+            {
+                PlayTimeSeconds = other.PlayTimeSeconds;
+                changed = true;
+            }
+
+            if (other.LastPlayed != null && (LastPlayed == null || other.LastPlayed > LastPlayed))
+            {
+                LastPlayed = other.LastPlayed;
+                changed = true;
+            }
+
+            Hits ??= new Dictionary<HitResult, long>();
+            BeatmapPlays ??= new Dictionary<string, long>();
+            DailyPlays ??= new Dictionary<string, long>();
+
+            changed |= raise(Hits, other.Hits);
+            changed |= raise(BeatmapPlays, other.BeatmapPlays);
+            changed |= raise(DailyPlays, other.DailyPlays);
+
+            return changed;
+
+            static bool raise<TKey>(Dictionary<TKey, long> target, Dictionary<TKey, long>? source)
+                where TKey : notnull
+            {
+                bool any = false;
+
+                foreach (var (key, value) in source ?? new Dictionary<TKey, long>())
+                {
+                    if (value > target.GetValueOrDefault(key))
+                    {
+                        target[key] = value;
+                        any = true;
+                    }
+                }
+
+                return any;
+            }
+        }
 
         public LocalPlayStatistics Clone() => new LocalPlayStatistics
         {

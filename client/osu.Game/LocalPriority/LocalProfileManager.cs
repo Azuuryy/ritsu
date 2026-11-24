@@ -1099,6 +1099,80 @@ namespace osu.Game.LocalPriority
             refreshScoreDisplays();
         }
 
+        /// <summary>
+        /// Settings button: counts every local profile's saved scores (replays) again as plays (play count, play time, hits,
+        /// most played beatmaps and play history) and fills in its statistics with them (values only go up, see
+        /// <see cref="LocalProfileStore.MergeStatisticsFromScores"/>). Synced plays are left out, since the profile page counts
+        /// them on top. Runs in the background.
+        /// </summary>
+        public System.Threading.Tasks.Task<(int Profiles, int Scores)> RebuildStatisticsFromScoresAsync() => System.Threading.Tasks.Task.Run(() =>
+        {
+            var profiles = Store.GetProfiles().ToDictionary(p => p.UserId);
+            var synced = profiles.Values.SelectMany(p => p.SyncedScores).Select(s => s.ScoreId).ToHashSet();
+            var cutoff = new DateTimeOffset(OLDEST_VALID_PLAY_DATE, TimeSpan.Zero);
+            var counted = new Dictionary<int, Dictionary<string, LocalPlayStatistics>>();
+            int scoreCount = 0;
+
+            realm.Run(r =>
+            {
+                foreach (var score in r.All<ScoreInfo>().Filter($@"{nameof(ScoreInfo.DeletePending)} == false"))
+                {
+                    int userId = score.RealmUser.OnlineID;
+
+                    if (!profiles.ContainsKey(userId) || synced.Contains(score.ID) || score.Date < cutoff)
+                        continue;
+
+                    if (!counted.TryGetValue(userId, out var perRuleset))
+                        counted[userId] = perRuleset = new Dictionary<string, LocalPlayStatistics>();
+
+                    string ruleset = score.Ruleset.ShortName;
+
+                    if (!perRuleset.TryGetValue(ruleset, out var stats))
+                        perRuleset[ruleset] = stats = new LocalPlayStatistics();
+
+                    stats.PlayCount++;
+
+                    // A score of a ruleset that isn't installed (or with mods that can't be read) counts at normal speed.
+                    double rate = 1;
+
+                    try
+                    {
+                        if (score.Ruleset.Available)
+                            rate = ModUtils.CalculateRateWithMods(score.Mods);
+                    }
+                    catch (Exception)
+                    {
+                        rate = 1;
+                    }
+
+                    if (score.BeatmapInfo != null && rate > 0)
+                        stats.PlayTimeSeconds += score.BeatmapInfo.Length / 1000 / rate;
+
+                    if (stats.LastPlayed == null || score.Date > stats.LastPlayed)
+                        stats.LastPlayed = score.Date;
+
+                    // Plays are counted per beatmap MD5 hash (scores keep a different hash), like recorded attempts.
+                    stats.AddPlay(score.BeatmapInfo?.MD5Hash, score.Date, 1);
+
+                    foreach (var (result, count) in score.Statistics)
+                    {
+                        if (count <= 0)
+                            continue;
+
+                        stats.Hits.TryGetValue(result, out long existing);
+                        stats.Hits[result] = existing + count;
+                    }
+
+                    scoreCount++;
+                }
+            });
+
+            int changed = Store.MergeStatisticsFromScores(counted);
+
+            Schedule(() => revision.Value++);
+            return (changed, scoreCount);
+        });
+
         #endregion
 
         #region Replay import

@@ -4,9 +4,11 @@ using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Localisation;
+using osu.Framework.Logging;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
@@ -61,6 +63,7 @@ namespace osu.Game.LocalPriority
         private SettingsButtonV2 importReplaysButton = null!;
         private SettingsButtonV2 exportTopReplaysButton = null!;
         private SettingsButtonV2 exportAllReplaysButton = null!;
+        private SettingsButtonV2 rebuildStatisticsButton = null!;
 
         protected override void LoadComplete()
         {
@@ -94,6 +97,28 @@ namespace osu.Game.LocalPriority
             }
 
             dialogs?.Push(new RemoveOldPlaysDialog(scores, plays, manager.RemovePlaysBefore2000));
+        }
+
+        private void rebuildStatistics()
+        {
+            rebuildStatisticsButton.Enabled.Value = false;
+
+            manager.RebuildStatisticsFromScoresAsync().ContinueWith(t => Schedule(() =>
+            {
+                rebuildStatisticsButton.Enabled.Value = true;
+
+                if (t.IsFaulted)
+                {
+                    Logger.Error(t.Exception?.InnerException ?? t.Exception, @"Could not rebuild play statistics from saved scores");
+                    return;
+                }
+
+                var (profiles, scores) = t.GetResultSafely();
+
+                dialogs?.Push(new LocalPriorityInfoDialog(@"Play statistics rebuilt",
+                    $@"Counted {scores:N0} saved score(s) of local profiles again; {profiles:N0} profile(s) got higher statistics. "
+                    + @"Values only go up, so attempts recorded without a score (failed, quit or restarted) are kept."));
+            }));
         }
 
         private partial class RemoveOldPlaysDialog : DangerousActionDialog
@@ -149,6 +174,14 @@ namespace osu.Game.LocalPriority
                         if (activeProfile.Value != null)
                             manager.BeginReplayExport(activeProfile.Value.Id, false);
                     },
+                },
+                rebuildStatisticsButton = new SettingsButtonV2
+                {
+                    Text = @"Rebuild play statistics from saved scores (every profile)",
+                    TooltipText = @"Counts every saved score (replay) of every local profile again: play count, play time, hits, most played beatmaps "
+                                  + @"and play history. Values only go up, so attempts recorded without a score are kept.",
+                    Keywords = new[] { @"statistics", @"stats", @"rebuild", @"recalculate", @"repair", @"replay", @"play count", @"history" },
+                    Action = rebuildStatistics,
                 },
                 new DangerousSettingsButtonV2
                 {
