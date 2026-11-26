@@ -15,6 +15,7 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.LocalPriority;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Graphics;
@@ -244,7 +245,8 @@ namespace osu.Game.Screens.Select
             }
             else
             {
-                if (Mods.Value.Any(m => !m.Ranked))
+                // Ritsu: no "unranked" badge when the active local profile counts these mods as ranked.
+                if (Mods.Value.Any(m => !LocalPriorityPolicy.IsModRanked(m)))
                 {
                     unrankedBadge.MoveToX(0, duration, easing);
                     unrankedBadge.FadeIn(duration, easing);

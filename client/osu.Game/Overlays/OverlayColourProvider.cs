@@ -125,16 +125,28 @@ namespace osu.Game.Overlays
         /// the accent keeps tracking this hue (1:1 with the legacy single-hue behaviour).
         /// </remarks>
         /// <param name="hue">The proposed hue degree.</param>
-        public void ChangeColourScheme(int hue)
+        public void ChangeColourScheme(int hue) => ChangeColourScheme(hue, 1);
+
+        /// <summary>
+        /// How strongly every shade is coloured, from 0 (grey) to 1 (normal). Ritsu: local profile page colours (Settings → Profile Colors).
+        /// </summary>
+        public float Saturation { get; private set; } = 1;
+
+        /// <summary>
+        /// Changes the chrome <see cref="Hue"/> (like <see cref="ChangeColourScheme(int)"/>) and the <see cref="Saturation"/>.
+        /// </summary>
+        public void ChangeColourScheme(int hue, float saturation)
         {
             int normalisedHue = normaliseHue(hue);
             int newAccent = accentHueOverridden ? AccentHue : normalisedHue;
+            float newSaturation = Math.Clamp(saturation, 0, 1);
 
-            if (Hue == normalisedHue && AccentHue == newAccent)
+            if (Hue == normalisedHue && AccentHue == newAccent && Saturation == newSaturation)
                 return;
 
             Hue = normalisedHue;
             AccentHue = newAccent;
+            Saturation = newSaturation;
             ColoursChanged?.Invoke();
         }
 
@@ -210,8 +222,8 @@ namespace osu.Game.Overlays
             if (OsuColour.IsGrayscaleTheme)
                 return Framework.Graphics.Colour4.FromHSL(Hue / 360f, 0f, lightness);
             if (OsuColour.IsMidnightTheme)
-                return Framework.Graphics.Colour4.FromHSL(midnightBaseHue() / 360f, saturation, lightness);
-            return Framework.Graphics.Colour4.FromHSL(Hue / 360f, saturation, lightness);
+                return Framework.Graphics.Colour4.FromHSL(midnightBaseHue() / 360f, saturation * Saturation, lightness);
+            return Framework.Graphics.Colour4.FromHSL(Hue / 360f, saturation * Saturation, lightness);
         }
 
         private Color4 getAccentColour(float saturation, float lightness)
@@ -227,9 +239,9 @@ namespace osu.Game.Overlays
                 // member, small enough that it doesn't drift into a
                 // neighbouring colour family (mauve stays mauve, etc.).
                 float midnightAccent = (midnightBaseHue() + 20f) % 360f;
-                return Framework.Graphics.Colour4.FromHSL(midnightAccent / 360f, saturation, lightness);
+                return Framework.Graphics.Colour4.FromHSL(midnightAccent / 360f, saturation * Saturation, lightness);
             }
-            return Framework.Graphics.Colour4.FromHSL(AccentHue / 360f, saturation, lightness);
+            return Framework.Graphics.Colour4.FromHSL(AccentHue / 360f, saturation * Saturation, lightness);
         }
     }
 

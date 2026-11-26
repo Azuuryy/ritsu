@@ -45,13 +45,20 @@ Optional graphical scenarios run only with `-IncludeGameScenarios`; they open a 
 
 ## Changing the client
 
-Every change to `client/` must also be reflected in [`patches/client-offline.patch`](patches/client-offline.patch), then checked with `Bootstrap.ps1`. The patch is applied to the pinned upstream revision, so it must stay applicable in both directions:
+Every change to `client/` must also be reflected in the client patches, then checked with `Bootstrap.ps1`. The client patches are applied in this order:
+
+1. [`patches/client-offline.patch`](patches/client-offline.patch): everything except local profiles.
+2. [`patches/client-local-profiles.patch`](patches/client-local-profiles.patch): local profiles. osu!local profiles (`osu.Game/LocalPriority`) decide who is playing (profile page, switcher, play recording, score transfer, PP exclusions, replay import and export). Ritsu's profile data (`RitsuProfileManager`) is kept underneath for commands, memos, collections, play-history filters, playtime, the profile leaderboard scope and the local ranked status.
+
+Put a change in the patch for the feature it belongs to. The client only builds with both patches applied. The patches must stay applicable in both directions. Revert them in reverse order to check, starting with the last one:
 
 ```powershell
-git apply --reverse --check --directory=client -- patches/client-offline.patch
+git apply --reverse --check --directory=client -- patches/client-local-profiles.patch
 ```
 
-Keep `dependencies.json` and `ritsu-source-bundle.json` consistent with the bundled revision. Do not leave a client change out of the patch.
+The earlier patches can only be checked in reverse once the later ones have been reverted. `Bootstrap.ps1` does this in a temporary index without touching `client/`.
+
+Keep `dependencies.json` and `ritsu-source-bundle.json` consistent with the bundled revision. Do not leave a client change out of the patches.
 
 Add tests where practical. Visual tests live in `client/osu.Game.Tests`; the `Ritsu.Validation` project covers offline checks.
 

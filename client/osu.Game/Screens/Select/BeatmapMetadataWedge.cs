@@ -175,6 +175,8 @@ namespace osu.Game.Screens.Select
                                                 Alpha = 0,
                                             },
                                             mapperTags = new MetadataDisplay(BeatmapsetsStrings.ShowInfoMapperTags),
+                                            // Ritsu: tags given to this difficulty locally (online tag voting is stripped).
+                                            osu.Game.LocalPriority.LocalPriorityDiagnostics.IsDisabled(@"tags") ? Empty() : new osu.Game.LocalPriority.LocalBeatmapTagsDisplay(beatmap, t => songSelect?.AddToSearch(t)),
                                         },
                                     },
                                 },

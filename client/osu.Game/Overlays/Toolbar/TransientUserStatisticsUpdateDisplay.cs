@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
@@ -13,6 +13,7 @@ using osu.Framework.Threading;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.LocalPriority;
 using osu.Game.Online;
 using osu.Game.Resources.Localisation.Web;
 using osuTK;
@@ -23,13 +24,16 @@ namespace osu.Game.Overlays.Toolbar
     {
         public Bindable<ScoreBasedUserStatisticsUpdate?> LatestUpdate { get; } = new Bindable<ScoreBasedUserStatisticsUpdate?>();
 
+        // Ritsu: the active local profile's PP and estimated global rank after a saved score, shown the same way.
+        private readonly Bindable<ScoreBasedUserStatisticsUpdate?> latestLocalUpdate = new Bindable<ScoreBasedUserStatisticsUpdate?>();
+
         private Statistic<int> globalRank = null!;
         private Statistic<int> pp = null!;
 
         private ScheduledDelegate? shrinkDelegate;
 
         [BackgroundDependencyLoader]
-        private void load(UserStatisticsWatcher? userStatisticsWatcher)
+        private void load(UserStatisticsWatcher? userStatisticsWatcher, LocalProfileManager? localProfiles)
         {
             RelativeSizeAxes = Axes.Y;
 
@@ -52,18 +56,24 @@ namespace osu.Game.Overlays.Toolbar
 
             if (userStatisticsWatcher != null)
                 ((IBindable<ScoreBasedUserStatisticsUpdate?>)LatestUpdate).BindTo(userStatisticsWatcher.LatestUpdate);
+
+            if (localProfiles != null)
+                ((IBindable<ScoreBasedUserStatisticsUpdate?>)latestLocalUpdate).BindTo(localProfiles.LatestStatisticsUpdate);
         }
 
         protected override void LoadComplete()
         {
             base.LoadComplete();
 
-            LatestUpdate.BindValueChanged(val =>
-            {
-                if (val.NewValue == null)
-                    return;
+            LatestUpdate.BindValueChanged(val => display(val.NewValue));
+            latestLocalUpdate.BindValueChanged(val => display(val.NewValue));
+        }
 
-                var update = val.NewValue;
+        private void display(ScoreBasedUserStatisticsUpdate? update)
+        {
+            {
+                if (update == null)
+                    return;
 
                 // null handling here is best effort because it is annoying.
 
@@ -107,7 +117,7 @@ namespace osu.Game.Overlays.Toolbar
                         this.ResizeWidthTo(0, 500, Easing.OutQuint);
                     });
                 }
-            });
+            }
         }
 
         private partial class Statistic<T> : CompositeDrawable

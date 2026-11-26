@@ -10,11 +10,13 @@ using System.Threading.Tasks;
 using JetBrains.Annotations;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Containers;
 using osu.Framework.Logging;
 using osu.Framework.Screens;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Database;
+using osu.Game.LocalPriority;
 using osu.Game.Online;
 using osu.Game.Online.API;
 using osu.Game.Online.Multiplayer;
@@ -22,9 +24,11 @@ using osu.Game.Online.Rooms;
 using osu.Game.Online.Spectator;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Notifications;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 using osu.Game.Screens.Ranking;
+using osu.Game.Utils;
 
 namespace osu.Game.Screens.Play
 {
@@ -37,6 +41,16 @@ namespace osu.Game.Screens.Play
         /// The token to be used for the current submission. This is fetched via a request created by <see cref="CreateTokenRequest"/>.
         /// </summary>
         private long? token;
+
+        [Resolved(canBeNull: true)]
+        [CanBeNull]
+        private LocalProfileManager localProfiles { get; set; }
+
+        private bool localPlayRecorded;
+
+        // Ritsu: the local profile's PP / estimated rank from before this play, for the toolbar statistics update.
+        [CanBeNull]
+        private LocalStatisticsUpdateTracker localStatisticsUpdate;
 
         [Resolved]
         private IAPIProvider api { get; set; }
@@ -196,6 +210,8 @@ namespace osu.Game.Screens.Play
 
             score.ScoreInfo.Date = DateTimeOffset.Now;
 
+            recordLocalPlay(score);
+
             await submitScore(score).ConfigureAwait(false);
             spectatorClient.EndPlaying(token, GameplayState);
             userStatisticsWatcher?.RegisterForStatisticsUpdateAfter(score.ScoreInfo);
@@ -217,6 +233,21 @@ namespace osu.Game.Screens.Play
             });
 
             spectatorClient.BeginPlaying(token, GameplayState, Score);
+
+            if (!LocalPriorityDiagnostics.IsDisabled(@"recording"))
+                localStatisticsUpdate = localProfiles?.BeginStatisticsUpdate(Ruleset.Value);
+        }
+
+        protected override async Task ImportScore(Score score)
+        {
+            await base.ImportScore(score).ConfigureAwait(false);
+
+            // Ritsu: show how the saved score changed the local profile's PP and estimated rank (once per play).
+            var tracker = localStatisticsUpdate;
+            localStatisticsUpdate = null;
+
+            if (tracker != null)
+                localProfiles?.CompleteStatisticsUpdate(tracker, score.ScoreInfo);
         }
 
         public override bool Pause()
@@ -231,15 +262,39 @@ namespace osu.Game.Screens.Play
             return paused;
         }
 
+        protected override void PerformFail()
+        {
+            // Ritsu: failing as a Sudden Death / Perfect Death profile ends the profile. The fail screen still shows, but without
+            // retrying or restarting on fail; then its scores are shown one last time and it is deleted (see LocalProfileOverlay).
+            if (localProfiles?.BeginProfileDeath(Score.ScoreInfo.UserID) == true)
+            {
+                Configuration.AllowRestart = false;
+
+                foreach (var failMod in GameplayState.Mods.OfType<ModFailCondition>())
+                    failMod.Restart.Value = false;
+
+                // The profile's scores open together with the fail screen's buttons.
+                FailOverlay.State.BindValueChanged(state =>
+                {
+                    if (state.NewValue == Visibility.Visible)
+                        localProfiles?.FailScreenShown();
+                });
+            }
+
+            base.PerformFail();
+        }
+
         protected override void ConcludeFailedScore(Score score)
         {
             base.ConcludeFailedScore(score);
+            recordLocalPlay(score);
             submitFromFailOrQuit(score);
         }
 
         public override bool OnExiting(ScreenExitEvent e)
         {
             bool exiting = base.OnExiting(e);
+            recordLocalPlay(Score);
             submitFromFailOrQuit(Score);
             statics.SetValue(Static.LastLocalUserScore, Score?.ScoreInfo.DeepClone());
             return exiting;
@@ -257,6 +312,62 @@ namespace osu.Game.Screens.Play
                     await submitScore(scoreCopy).ConfigureAwait(false);
                     spectatorClient.EndPlaying(token, GameplayState);
                 }).FireAndForget();
+            }
+        }
+
+        /// <summary>
+        /// Ritsu: count this attempt for the active local profile, once, whether it was finished, failed, quit or restarted
+        /// (the website counts every submitted attempt the same way). Play time is how far into the map the attempt got,
+        /// from the first to the last object, in real seconds (adjusted for rate-changing mods).
+        /// </summary>
+        private void recordLocalPlay(Score score)
+        {
+            if (localPlayRecorded || score == null || !LoadedBeatmapSuccessfully || LocalPriorityDiagnostics.IsDisabled(@"recording"))
+                return;
+
+            localPlayRecorded = true;
+
+            try
+            {
+                int userId = score.ScoreInfo.UserID;
+
+                if (localProfiles == null || userId > LocalPriorityPolicy.LOCAL_PROFILE_ID_CEILING)
+                    return;
+
+                if (Mods.Value.Any(m => !m.UserPlayable))
+                    return;
+
+                var hits = new System.Collections.Generic.Dictionary<HitResult, int>(score.ScoreInfo.Statistics);
+
+                double seconds = 0;
+
+                if (GameplayState?.Beatmap != null && GameplayClockContainer != null)
+                {
+                    (double start, double end) = GameplayState.Beatmap.CalculatePlayableBounds();
+                    double rate = ModUtils.CalculateRateWithMods(GameplayState.Mods);
+                    double reached = Math.Clamp(GameplayClockContainer.CurrentTime, start, Math.Max(start, end));
+
+                    if (rate > 0 && double.IsFinite(reached - start))
+                        seconds = (reached - start) / 1000 / rate;
+                }
+
+                // An attempt counts as a play once it reached whichever comes first: 10 seconds played,
+                // 30 judged objects (hit or missed), or a 30 combo.
+                int judgedObjects = hits.Where(h => h.Key.IsBasic()).Sum(h => h.Value);
+
+                if (seconds < 10 && judgedObjects < 30 && score.ScoreInfo.MaxCombo < 30)
+                    return;
+
+                string beatmapHash = score.ScoreInfo.BeatmapInfo?.MD5Hash ?? GameplayState?.Beatmap.BeatmapInfo.MD5Hash;
+
+                // Failed and quit plays are listed in the profile's Recent Plays for a day (rank F, no PP), like on the website.
+                var unfinished = GameplayState?.HasPassed == false ? LocalUnfinishedPlay.From(score.ScoreInfo, beatmapHash ?? string.Empty) : null;
+
+                localProfiles.RecordPlay(userId, score.ScoreInfo.Ruleset.ShortName, seconds, hits, beatmapHash, unfinished);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Ritsu: could not record play statistics.");
             }
         }
 

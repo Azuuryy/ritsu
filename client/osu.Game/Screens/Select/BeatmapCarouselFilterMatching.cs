@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using osu.Framework.Statistics;
 using osu.Game.Beatmaps;
 using osu.Game.Graphics.Carousel;
+using osu.Game.LocalPriority;
 using osu.Game.Utils;
 
 namespace osu.Game.Screens.Select
@@ -108,6 +109,15 @@ namespace osu.Game.Screens.Select
             {
                 match = beatmap.Match(criteria.SearchTerms);
 
+                // Ritsu: plain search also finds beatmaps by the tags given to them locally (every term must match metadata or a local tag).
+                if (!match)
+                {
+                    var localTags = LocalBeatmapTags.Current?.Get(beatmap) ?? Array.Empty<string>();
+
+                    if (localTags.Count > 0)
+                        match = criteria.SearchTerms.All(term => beatmap.Match(term) || localTags.Any(tag => term.Matches(tag)));
+                }
+
                 // if a match wasn't found via text matching of terms, do a second catch-all check matching against online IDs.
                 // this should be done after text matching so we can prioritise matching numbers in metadata.
                 if (!match && criteria.SearchNumber.HasValue)
@@ -163,13 +173,17 @@ namespace osu.Game.Screens.Select
 
             if (criteria.UserTags.Any())
             {
+                // Ritsu: tags given to the beatmap locally count like voted tags.
+                var localUserTags = LocalBeatmapTags.Current?.Get(beatmap) ?? Array.Empty<string>();
+                IEnumerable<string> allUserTags = localUserTags.Count == 0 ? beatmap.Metadata.UserTags : beatmap.Metadata.UserTags.Concat(localUserTags).ToArray();
+
                 foreach (var tagFilter in criteria.UserTags)
                 {
                     if (tagFilter.ExcludeTerm)
                     {
                         // if `ExcludeTerm` is true, `Matches()` will return true if a user tag *doesn't match* the excluded term.
                         // thus, every user tag must pass this filter.
-                        foreach (string tag in beatmap.Metadata.UserTags)
+                        foreach (string tag in allUserTags)
                             match &= tagFilter.Matches(tag);
                     }
                     else
@@ -178,7 +192,7 @@ namespace osu.Game.Screens.Select
                         // the expected behaviour is that a beatmap should be displayed if at least one of the user tags passes the filter.
                         bool anyTagMatched = false;
 
-                        foreach (string tag in beatmap.Metadata.UserTags)
+                        foreach (string tag in allUserTags)
                             anyTagMatched |= tagFilter.Matches(tag);
 
                         match &= anyTagMatched;

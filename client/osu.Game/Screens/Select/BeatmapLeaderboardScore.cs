@@ -104,10 +104,17 @@ namespace osu.Game.Screens.Select
         [Resolved]
         private IAPIProvider api { get; set; } = null!;
 
+        [Resolved(canBeNull: true)]
+        private osu.Game.LocalPriority.LocalProfileManager? localProfiles { get; set; }
+
         // Anchos pensados para un score fixed-width medido contra un digito, no
         // contra la 'm' (ver NumericSpriteText). Con NumericSpriteText el peor caso
         // de classic, "12,345,678", da 140px y le sobran 40 de los 200.
         private const float standardised_right_content_width = 170;
+
+        [Resolved]
+        private osu.Game.Database.RealmAccess realm { get; set; } = null!;
+
         private const float expanded_right_content_width = 200;
         private const float grade_width = 35;
         private const float username_min_width = 120;
@@ -706,6 +713,28 @@ namespace osu.Game.Screens.Select
         {
             get
             {
+                var items = vanillaContextMenuItems;
+
+                // Ritsu: the menu below stops before Delete when a score has no replay file, so saved plays without one
+                // couldn't be deleted. They get it here; online leaderboard scores aren't in the database, so they still don't.
+                if (Score.Files.Count > 0 || localProfiles == null || !realm.Run(r => r.Find<ScoreInfo>(Score.ID) is ScoreInfo saved && !saved.DeletePending))
+                    return items;
+
+                var withLocal = items.ToList();
+
+                if (withLocal.Count > 0)
+                    withLocal.Add(new OsuMenuItemSpacer());
+
+                withLocal.Add(new OsuMenuItem(Resources.Localisation.Web.CommonStrings.ButtonsDelete, MenuItemType.Destructive, () => dialogOverlay?.Push(new LocalScoreDeleteDialog(Score))));
+
+                return withLocal.ToArray();
+            }
+        }
+
+        private MenuItem[] vanillaContextMenuItems
+        {
+            get
+            {
                 List<MenuItem> items = new List<MenuItem>();
 
                 // system mods should never be copied across regardless of anything.
@@ -714,15 +743,12 @@ namespace osu.Game.Screens.Select
                 if (copyableMods.Length > 0)
                     items.Add(new OsuMenuItem(SongSelectStrings.UseTheseMods, MenuItemType.Highlighted, () => SelectedMods.Value = copyableMods));
 
-                var transfer = RitsuScoreTransferMenu.Create(ritsuProfiles, dialogOverlay, Score.ID);
-                if (transfer != null)
-                    items.Add(transfer);
-
-                if (ritsuProfiles?.BelongsToActiveProfile(Score.ID) == true)
+                // osu!local: move this score to another local profile (changes its player in the database), or exclude it from PP.
+                // These replace Ritsu's own "Transfer / Assign score to profile" and "Exclude this score from profile PP".
+                if (localProfiles != null)
                 {
-                    bool included = ritsuProfiles.IsScoreIncludedInPP(Score.ID);
-                    items.Add(new OsuMenuItem(included ? "Exclude this score from profile PP" : "Include this score in profile PP", MenuItemType.Standard,
-                        () => ritsuProfiles.SetScoreIncludedInPP(Score.ID, !included)));
+                    items.Add(osu.Game.LocalPriority.LocalProfileScoreTransfer.CreateMenuItem(localProfiles, Score));
+                    items.Add(osu.Game.LocalPriority.LocalPerformanceExclusions.CreateScoreMenuItem(localProfiles, Score));
                 }
 
                 if (library != null && collectionRealm != null && Score.BeatmapInfo is { } beatmap)

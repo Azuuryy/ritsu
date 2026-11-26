@@ -47,6 +47,7 @@ using osu.Game.Graphics.UserInterface;
 using osu.Game.Input;
 using osu.Game.Input.Bindings;
 using osu.Game.IO;
+using osu.Game.LocalPriority;
 using osu.Game.Localisation;
 using osu.Game.Online;
 using osu.Game.Online.API;
@@ -210,6 +211,8 @@ namespace osu.Game
 
         private BeatmapDifficultyCache difficultyCache;
 
+        private LocalProfileManager localProfileManager;
+
         private IBeatmapUpdater beatmapUpdater;
         private OnlineAssetCachingStore onlineAssetStore;
 
@@ -335,6 +338,14 @@ namespace osu.Game
 
             CurrentLanguage.BindValueChanged(val => frameworkLocale.Value = val.NewValue.ToCultureCode());
 
+            // osu!local profiles live in "ritsu/local-profiles/" next to the database. They are loaded before the API is created,
+            // so the game starts in the profile that was active when it was last closed.
+            var localProfileStore = new LocalProfileStore(Storage);
+            LocalPriorityPolicy.LocalProfilesUseOnlineAccount = false;
+            LocalPriorityPolicy.SetInitialLocalUser(localProfileStore.ActiveProfile?.ToUser());
+            dependencies.Cache(localProfileManager = new LocalProfileManager(localProfileStore));
+            localProfileManager.BindGameMods(SelectedMods);
+
             dependencies.CacheAs(API ??= new Offline.OfflineAPIProvider(LocalConfig));
 
             var ritsuProfiles = new Offline.RitsuProfileManager(Storage, realm);
@@ -347,8 +358,8 @@ namespace osu.Game
             if (API is Offline.OfflineAPIProvider offlineProfilesApi)
             {
                 largeStore.AddTextureSource(Host.CreateTextureLoaderStore(new StorageBackedResourceStore(ritsuProfiles.AvatarStorage)));
-                offlineProfilesApi.SetLocalProfile(ritsuProfiles.GetActiveProfile());
-                ritsuProfiles.Changed += () => Schedule(() => offlineProfilesApi.SetLocalProfile(ritsuProfiles.GetActiveProfile()));
+                // osu!local profiles decide who is playing; Ritsu's profile data follows the active osu!local profile.
+                localProfileManager.ActiveProfile.BindValueChanged(p => Schedule(() => RitsuProfileBridge.Follow(ritsuProfiles, p.NewValue)), true);
             }
 
             var defaultBeatmap = new DummyWorkingBeatmap(Audio, Textures);
@@ -596,6 +607,9 @@ namespace osu.Game
                 base.Content.Add(apiAccess);
             else if (API is Offline.OfflineAPIProvider offlineApi)
                 base.Content.Add(offlineApi);
+
+            // osu!local profile switching.
+            base.Content.Add(localProfileManager);
 
             base.Content.Add(SpectatorClient);
             base.Content.Add(MultiplayerClient);

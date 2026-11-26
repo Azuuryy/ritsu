@@ -25,6 +25,15 @@ namespace osu.Game
     {
         internal void ShowRitsuReplayImport(Guid? profileId = null)
         {
+            // osu!local: import into the active local profile ("Import replays (.osr) from a folder…" on its profile page).
+            var localProfileManager = Dependencies.Get<LocalPriority.LocalProfileManager>();
+
+            if (profileId == null && localProfileManager?.ActiveProfile.Value is { } localProfile)
+            {
+                localProfileManager.BeginReplayImport(localProfile.Id);
+                return;
+            }
+
             var profiles = Dependencies.Get<RitsuProfileManager>();
             var importer = new RitsuReplayImporter(RulesetStore, BeatmapManager, Dependencies.Get<BeatmapDifficultyCache>(), ScoreManager, profiles, Dependencies.Get<osu.Game.Database.RealmAccess>(), Storage);
             dialogOverlay.Push(new Commands.RitsuReplayImportDialog(importer, profiles.GetProfiles(), profileId ?? profiles.ActiveProfileId));

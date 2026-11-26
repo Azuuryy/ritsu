@@ -22,6 +22,7 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.LocalPriority;
 using osu.Game.Resources.Localisation.Web;
 using osu.Game.Scoring;
 using osu.Game.Localisation;
@@ -206,7 +207,8 @@ namespace osu.Game.Screens.Ranking.Expanded.Statistics
                     finalPerformance = (int)Math.Round(ToriiPausePenalty.Apply(pp.Value, pauseCount), MidpointRounding.AwayFromZero);
                 }
 
-                if (!scoreInfo.BeatmapInfo!.Status.GrantsPerformancePoints())
+                // osu!local: a local profile can count every play as ranked (this profile only).
+                if (!LocalPriorityPolicy.GrantsPerformance(scoreInfo.BeatmapInfo!.Status))
                 {
                     Alpha = 0.5f;
                     TooltipText = ResultsScreenStrings.NoPPForUnrankedBeatmaps;
@@ -243,7 +245,7 @@ namespace osu.Game.Screens.Ranking.Expanded.Statistics
             if (scoreInfo.IsLegacyScore)
                 modsToCheck = modsToCheck.Where(m => m is not ModClassic);
 
-            return modsToCheck.Any(m => !m.Ranked);
+            return modsToCheck.Any(m => !LocalPriorityPolicy.IsModRanked(m));
         }
 
         public override void Appear()
