@@ -1,7 +1,11 @@
 // Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions.Color4Extensions;
@@ -10,8 +14,12 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Effects;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.Textures;
 using osu.Framework.Input.Events;
+using osu.Framework.IO.Stores;
 using osu.Framework.Localisation;
+using osu.Framework.Logging;
+using osu.Framework.Platform;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Drawables;
 using osu.Game.Graphics;
@@ -24,6 +32,8 @@ using osu.Game.Overlays.Profile;
 using osu.Game.Overlays.Profile.Sections;
 using osu.Game.Overlays.Profile.Sections.Historical;
 using osuTK;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 using osuTK.Graphics;
 
 namespace osu.Game.LocalPriority
@@ -38,6 +48,9 @@ namespace osu.Game.LocalPriority
             public override LocalisableString Title => @"Historical";
 
             public override string Identifier => @"historical";
+
+            // Rows below the visible part still get loaded (see UpdatingContainer); they just aren't drawn.
+            protected override bool RequiresChildrenUpdate => true;
 
             private static readonly int[] expansion_steps = { ScoresPanel.COMPACT_COUNT, 50, 100, 150, LocalProfileStatistics.MOST_PLAYED_LIMIT };
 
@@ -106,7 +119,7 @@ namespace osu.Game.LocalPriority
                             {
                                 Margin = new MarginPadding { Top = 15 },
                             },
-                            mostPlayedFlow = new FillFlowContainer
+                            mostPlayedFlow = new UpdatingFillFlowContainer
                             {
                                 RelativeSizeAxes = Axes.X,
                                 AutoSizeAxes = Axes.Y,
@@ -158,12 +171,21 @@ namespace osu.Game.LocalPriority
                     return;
                 }
 
+                addMostPlayed(0, step);
+            }
+
+            /// <summary>
+            /// Adds the rows after the first <paramref name="from"/> up to the step's count, then a "show more" button (rows already shown stay).
+            /// </summary>
+            private void addMostPlayed(int from, int step)
+            {
                 int shown = Math.Min(stats.MostPlayed.Count, expansion_steps[step]);
+                var adding = stats.MostPlayed.Skip(from).Take(shown - from).ToArray();
 
                 // The first rows were loaded with the statistics; "show more" loads the next beatmaps here.
-                LocalBeatmapEntry.Load(stats.MostPlayed.Take(shown), realm);
+                LocalBeatmapEntry.Load(adding, realm);
 
-                foreach (var entry in stats.MostPlayed.Take(shown))
+                foreach (var entry in adding)
                 {
                     var beatmap = entry.Beatmap;
 
@@ -176,7 +198,9 @@ namespace osu.Game.LocalPriority
 
                 if (shown < stats.MostPlayed.Count && step + 1 < expansion_steps.Length)
                 {
-                    mostPlayedFlow.Add(new ShowMoreButton
+                    ShowMoreButton button = null!;
+
+                    mostPlayedFlow.Add(button = new ShowMoreButton
                     {
                         Anchor = Anchor.TopCentre,
                         Origin = Anchor.TopCentre,
@@ -184,7 +208,9 @@ namespace osu.Game.LocalPriority
                         Action = () =>
                         {
                             expandedLists[most_played_list] = step + 1;
-                            fillMostPlayed(step + 1);
+                            mostPlayedFlow.Remove(button, false);
+                            Schedule(button.Dispose);
+                            addMostPlayed(shown, step + 1);
                         },
                     });
                 }
@@ -361,114 +387,130 @@ namespace osu.Game.LocalPriority
                 TooltipText = @"Show in song select";
             }
 
+            private bool childrenUpdatedOnce;
+
+            // Out of view a row is neither drawn nor updated inside, except once right after it is made (see ScoreRow).
+            protected override bool RequiresChildrenUpdate => !childrenUpdatedOnce || base.RequiresChildrenUpdate;
+
+            protected override void UpdateAfterChildren()
+            {
+                base.UpdateAfterChildren();
+                childrenUpdatedOnce = true;
+            }
+
             [BackgroundDependencyLoader]
             private void load(OverlayColourProvider colours, OsuColour osuColour)
             {
                 var metadata = beatmap.Metadata;
 
-                Children = new Drawable[]
+                // One cached picture per row (see ScoreRow), redrawn only when the row changes (hover, the thumbnail loading).
+                Child = new CachedDrawBuffer
                 {
-                    // Website item colours: lighter than the section behind it.
-                    new Box
+                    RelativeSizeAxes = Axes.Both,
+                    Children = new Drawable[]
                     {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = colours.Background2,
-                    },
-                    hover = new Box
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = Color4.White.Opacity(0.06f),
-                        Alpha = 0,
-                    },
-                    new GridContainer
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        ColumnDimensions = new[]
+                        // Website item colours: lighter than the section behind it.
+                        new Box
                         {
-                            new Dimension(GridSizeMode.Absolute, 80),
-                            new Dimension(GridSizeMode.Absolute, 12),
-                            new Dimension(),
-                            new Dimension(GridSizeMode.AutoSize),
+                            RelativeSizeAxes = Axes.Both,
+                            Colour = colours.Background2,
                         },
-                        Content = new[]
+                        hover = new Box
                         {
-                            new Drawable[]
+                            RelativeSizeAxes = Axes.Both,
+                            Colour = Color4.White.Opacity(0.06f),
+                            Alpha = 0,
+                        },
+                        new GridContainer
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            ColumnDimensions = new[]
                             {
-                                new Container
+                                new Dimension(GridSizeMode.Absolute, 80),
+                                new Dimension(GridSizeMode.Absolute, 12),
+                                new Dimension(),
+                                new Dimension(GridSizeMode.AutoSize),
+                            },
+                            Content = new[]
+                            {
+                                new Drawable[]
                                 {
-                                    RelativeSizeAxes = Axes.Both,
-                                    Masking = true,
-                                    CornerRadius = 8,
-                                    Child = new UpdateableBeatmapBackgroundSprite
+                                    new Container
                                     {
                                         RelativeSizeAxes = Axes.Both,
-                                        Beatmap = { Value = beatmap },
+                                        Masking = true,
+                                        CornerRadius = 8,
+                                        // Loaded once the row has been on screen briefly, dropped a while after it left (like the game's own background sprites).
+                                        Child = new DelayedLoadUnloadWrapper(() => new BeatmapThumbnail(beatmap), 500, 10000)
+                                        {
+                                            RelativeSizeAxes = Axes.Both,
+                                        },
                                     },
-                                },
-                                Empty(),
-                                new FillFlowContainer
-                                {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                    Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft,
-                                    Direction = FillDirection.Vertical,
-                                    Children = new Drawable[]
+                                    Empty(),
+                                    new FillFlowContainer
                                     {
-                                        new OsuTextFlowContainer(t => t.Font = OsuFont.GetFont(size: 17, weight: FontWeight.Bold))
+                                        RelativeSizeAxes = Axes.X,
+                                        AutoSizeAxes = Axes.Y,
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        Direction = FillDirection.Vertical,
+                                        Children = new Drawable[]
                                         {
-                                            RelativeSizeAxes = Axes.X,
-                                            AutoSizeAxes = Axes.Y,
-                                        }.With(f =>
-                                        {
-                                            // Like the website: just the song title here (the artist only follows after "by").
-                                            f.AddText(new RomanisableString(metadata.TitleUnicode, metadata.Title));
-                                            f.AddText($@" [{beatmap.DifficultyName}] ");
-                                            f.AddText($@"by {metadata.Artist}", t => t.Font = OsuFont.GetFont(size: 17, weight: FontWeight.Regular));
-                                        }),
-                                        new FillFlowContainer
-                                        {
-                                            AutoSizeAxes = Axes.Both,
-                                            Direction = FillDirection.Horizontal,
-                                            Children = new Drawable[]
+                                            new OsuTextFlowContainer(t => t.Font = OsuFont.GetFont(size: 17, weight: FontWeight.Bold))
                                             {
-                                                new OsuSpriteText
+                                                RelativeSizeAxes = Axes.X,
+                                                AutoSizeAxes = Axes.Y,
+                                            }.With(f =>
+                                            {
+                                                // Like the website: just the song title here (the artist only follows after "by").
+                                                f.AddText(new RomanisableString(metadata.TitleUnicode, metadata.Title));
+                                                f.AddText($@" [{beatmap.DifficultyName}] ");
+                                                f.AddText($@"by {metadata.Artist}", t => t.Font = OsuFont.GetFont(size: 17, weight: FontWeight.Regular));
+                                            }),
+                                            new FillFlowContainer
+                                            {
+                                                AutoSizeAxes = Axes.Both,
+                                                Direction = FillDirection.Horizontal,
+                                                Children = new Drawable[]
                                                 {
-                                                    Text = @"mapped by ",
-                                                    Font = OsuFont.GetFont(size: 12),
-                                                    Colour = colours.Foreground1,
+                                                    new OsuSpriteText
+                                                    {
+                                                        Text = @"mapped by ",
+                                                        Font = OsuFont.GetFont(size: 12),
+                                                        Colour = colours.Foreground1,
+                                                    },
+                                                    new MapperLink(metadata.Author),
                                                 },
-                                                new MapperLink(metadata.Author),
                                             },
                                         },
                                     },
-                                },
-                                new FillFlowContainer
-                                {
-                                    AutoSizeAxes = Axes.Both,
-                                    Anchor = Anchor.CentreRight,
-                                    Origin = Anchor.CentreRight,
-                                    Direction = FillDirection.Horizontal,
-                                    Spacing = new Vector2(5, 0),
-                                    Margin = new MarginPadding { Horizontal = 15 },
-                                    Colour = osuColour.Yellow,
-                                    Children = new Drawable[]
+                                    new FillFlowContainer
                                     {
-                                        new SpriteIcon
+                                        AutoSizeAxes = Axes.Both,
+                                        Anchor = Anchor.CentreRight,
+                                        Origin = Anchor.CentreRight,
+                                        Direction = FillDirection.Horizontal,
+                                        Spacing = new Vector2(5, 0),
+                                        Margin = new MarginPadding { Horizontal = 15 },
+                                        Colour = osuColour.Yellow,
+                                        Children = new Drawable[]
                                         {
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft,
-                                            Icon = FontAwesome.Solid.Play,
-                                            Size = new Vector2(14),
-                                        },
-                                        new OsuSpriteText
-                                        {
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft,
-                                            Text = plays.ToString(@"N0"),
-                                            Font = OsuFont.GetFont(size: 22, weight: FontWeight.Regular),
-                                            // Text sits low in its box (room below the baseline): lift the digits to the arrow's middle.
-                                            Y = -4,
+                                            new SpriteIcon
+                                            {
+                                                Anchor = Anchor.CentreLeft,
+                                                Origin = Anchor.CentreLeft,
+                                                Icon = FontAwesome.Solid.Play,
+                                                Size = new Vector2(14),
+                                            },
+                                            new OsuSpriteText
+                                            {
+                                                Anchor = Anchor.CentreLeft,
+                                                Origin = Anchor.CentreLeft,
+                                                Text = plays.ToString(@"N0"),
+                                                Font = OsuFont.GetFont(size: 22, weight: FontWeight.Regular),
+                                                // Text sits low in its box (room below the baseline): lift the digits to the arrow's middle.
+                                                Y = -4,
+                                            },
                                         },
                                     },
                                 },
@@ -525,6 +567,124 @@ namespace osu.Game.LocalPriority
                     TooltipText = @"View profile";
                     Action = () => game?.ShowUser(new APIUser { Id = author.OnlineID > 1 ? author.OnlineID : 1, Username = author.Username }); // ID 1: looked up by name
                 }
+            }
+        }
+
+        /// <summary>
+        /// A "Most Played" row's picture: the beatmap's background shrunk to thumbnail size (see <see cref="BeatmapThumbnails"/>),
+        /// instead of the full-size background (up to about 8 MB on the GPU each, for an 80×60 picture).
+        /// </summary>
+        private partial class BeatmapThumbnail : Sprite
+        {
+            private readonly BeatmapInfo beatmap;
+
+            public BeatmapThumbnail(BeatmapInfo beatmap)
+            {
+                this.beatmap = beatmap;
+
+                RelativeSizeAxes = Axes.Both;
+                FillMode = FillMode.Fill;
+                Anchor = Anchor.Centre;
+                Origin = Anchor.Centre;
+            }
+
+            [BackgroundDependencyLoader]
+            private void load(GameHost host, Storage storage)
+            {
+                Texture = BeatmapThumbnails.Get(host, storage, beatmap);
+            }
+
+            protected override void LoadComplete()
+            {
+                base.LoadComplete();
+                this.FadeInFromZero(400, Easing.OutQuint);
+            }
+        }
+
+        /// <summary>
+        /// Beatmap backgrounds shrunk to <see cref="max_height"/> once, kept while any row shows them (shared between rows and page refreshes).
+        /// </summary>
+        private static class BeatmapThumbnails
+        {
+            /// <summary>
+            /// Twice the row's picture height, for high-DPI screens.
+            /// </summary>
+            private const int max_height = 120;
+
+            private static readonly ConditionalWeakTable<GameHost, LargeTextureStore> stores = new ConditionalWeakTable<GameHost, LargeTextureStore>();
+
+            public static Texture? Get(GameHost host, Storage storage, BeatmapInfo beatmap)
+            {
+                string? file = beatmap.Metadata?.BackgroundFile;
+
+                if (string.IsNullOrEmpty(file) || beatmap.BeatmapSet == null)
+                    return null;
+
+                string? path = beatmap.BeatmapSet.GetPathForFile(file);
+
+                if (path == null)
+                    return null;
+
+                LargeTextureStore store;
+
+                lock (stores)
+                {
+                    store = stores.GetValue(host, h => new LargeTextureStore(h.Renderer,
+                        new ShrinkingTextureLoaderStore(h.CreateTextureLoaderStore(new StorageBackedResourceStore(storage.GetStorageForDirectory(@"files"))))));
+                }
+
+                try
+                {
+                    return store.Get(path);
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($@"Ritsu: could not load the background of {beatmap} for its thumbnail: {e.Message}");
+                    return null;
+                }
+            }
+
+            private class ShrinkingTextureLoaderStore : IResourceStore<TextureUpload>
+            {
+                private readonly IResourceStore<TextureUpload> textureStore;
+
+                public ShrinkingTextureLoaderStore(IResourceStore<TextureUpload> textureStore)
+                {
+                    this.textureStore = textureStore;
+                }
+
+                public TextureUpload Get(string name)
+                {
+                    var upload = textureStore.Get(name);
+                    return upload == null ? null! : shrink(upload);
+                }
+
+                public async Task<TextureUpload> GetAsync(string name, CancellationToken cancellationToken = default)
+                {
+                    var upload = await textureStore.GetAsync(name, cancellationToken).ConfigureAwait(false);
+                    return upload == null ? null! : shrink(upload);
+                }
+
+                private static TextureUpload shrink(TextureUpload upload)
+                {
+                    if (upload.Height <= max_height)
+                        return upload;
+
+                    var image = SixLabors.ImageSharp.Image.LoadPixelData(upload.Data, upload.Width, upload.Height);
+                    int width = Math.Max(1, (int)Math.Round((double)upload.Width * max_height / upload.Height));
+
+                    // The full-size upload is no longer used.
+                    upload.Dispose();
+
+                    image.Mutate(i => i.Resize(width, max_height));
+                    return new TextureUpload(image);
+                }
+
+                public Stream? GetStream(string name) => textureStore.GetStream(name);
+
+                public IEnumerable<string> GetAvailableResources() => textureStore.GetAvailableResources();
+
+                public void Dispose() => textureStore.Dispose();
             }
         }
 }

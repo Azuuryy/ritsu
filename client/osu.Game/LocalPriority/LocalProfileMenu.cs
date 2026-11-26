@@ -61,7 +61,7 @@ namespace osu.Game.LocalPriority
         {
             var parts = new List<string>();
             if (profile.ModRules?.HasAnyRule == true) parts.Add($@"Mod rules: {profile.ModRules.Describe()}");
-            if (profile.AutoSwitch?.Enabled == true) parts.Add($@"Auto-switch on: {profile.AutoSwitch.Describe()}");
+            if (profile.AutoSwitch?.HasAnyCondition == true) parts.Add($@"Auto-switch on: {profile.AutoSwitch.Describe()}");
             parts.Add(hint);
             return string.Join(@" · ", parts);
         }

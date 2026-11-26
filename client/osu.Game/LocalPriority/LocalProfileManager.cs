@@ -119,7 +119,7 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Settings → Ritsu → Local profiles: show "new profile with mod rules" buttons.
         /// </summary>
-        public Bindable<bool> ProfilesWithModRules { get; } = new Bindable<bool>();
+        public Bindable<bool> ProfilesWithModRules { get; } = new Bindable<bool>(true);
 
         /// <summary>
         /// Settings → Profile Colors: tint profile pages with <see cref="ProfileColour"/> (not Sudden Death / Perfect Death ones, they keep red / amber).
@@ -146,7 +146,7 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Settings → Ritsu: plays on beatmaps marked LOCAL (changed in the editor) can give PP. When off, profiles leave them out entirely.
         /// </summary>
-        public Bindable<bool> LocalMapsGivePerformance { get; } = new Bindable<bool>(true);
+        public Bindable<bool> LocalMapsGivePerformance { get; } = new Bindable<bool>();
 
         /// <summary>
         /// Settings → Ritsu: every local profile counts every beatmap and mod as ranked (like each profile's own option).
@@ -156,7 +156,7 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Settings → Ritsu: scores that don't count for PP stay in the profile's best scores list (faded, not weighted).
         /// </summary>
-        public Bindable<bool> ShowNonCountingScores { get; } = new Bindable<bool>();
+        public Bindable<bool> ShowNonCountingScores { get; } = new Bindable<bool>(true);
 
         /// <summary>
         /// The game's selected mods (set by <see cref="OsuGameBase"/>), corrected to follow the active profile's mod rules.
@@ -186,7 +186,7 @@ namespace osu.Game.LocalPriority
         private ScoreManager scoreManager { get; set; } = null!;
 
         /// <summary>
-        /// Textures for local profile pictures (files in "osu-local/avatars").
+        /// Textures for local profile pictures (files in "ritsu/local-profiles/avatars").
         /// </summary>
         public LargeTextureStore AvatarTextures { get; private set; } = null!;
 
@@ -252,6 +252,7 @@ namespace osu.Game.LocalPriority
             // The picker changes it every frame while dragged: save once it settles.
             ProfileColour.BindValueChanged(_ => writeProfileColours(false));
             AutoSwitchNotifications.BindValueChanged(_ => writeOptions());
+            LongerLastLook.BindValueChanged(_ => writeOptions());
             SwitchOnBeatmapStart.BindValueChanged(_ => writeOptions());
             ShowTotalAccuracy.BindValueChanged(_ => writeOptions());
             LocalMapsGivePerformance.BindValueChanged(_ => writeOptions());
@@ -301,6 +302,7 @@ namespace osu.Game.LocalPriority
 
             applyToApi();
             applyModRulesIfChanged();
+            updateSpeedrunTimer();
         }
 
         private bool readingOptions;
@@ -321,6 +323,7 @@ namespace osu.Game.LocalPriority
                 ProfileColour.Value = parseProfileColour(options.ProfileColour);
 
             AutoSwitchNotifications.Value = options.AutoSwitchNotifications;
+            LongerLastLook.Value = options.LongerLastLook;
             SwitchOnBeatmapStart.Value = options.SwitchOnBeatmapStart;
             LocalMapsGivePerformance.Value = options.LocalMapsGivePerformance;
             ShowTotalAccuracy.Value = options.ShowTotalAccuracy;
@@ -345,6 +348,7 @@ namespace osu.Game.LocalPriority
                 ProfileColouring = ProfileColouring.Value,
                 ProfileColour = ProfileColour.Value.ToHex(),
                 AutoSwitchNotifications = AutoSwitchNotifications.Value,
+                LongerLastLook = LongerLastLook.Value,
                 SwitchOnBeatmapStart = SwitchOnBeatmapStart.Value,
                 LocalMapsGivePerformance = LocalMapsGivePerformance.Value,
                 ShowTotalAccuracy = ShowTotalAccuracy.Value,
@@ -549,6 +553,11 @@ namespace osu.Game.LocalPriority
         /// Settings → Ritsu: notifications when a profile is switched to (or back) automatically.
         /// </summary>
         public Bindable<bool> AutoSwitchNotifications { get; } = new Bindable<bool>(true);
+
+        /// <summary>
+        /// Settings → Ritsu: a dead Sudden Death / Perfect Death profile's page stays open for a minute instead of 30 seconds.
+        /// </summary>
+        public Bindable<bool> LongerLastLook { get; } = new Bindable<bool>();
 
         /// <summary>
         /// At most one auto-switch notification per this many milliseconds (going back and forth doesn't flood the notifications).
@@ -1005,9 +1014,11 @@ namespace osu.Game.LocalPriority
         private const double death_fallback_time = 2500;
 
         /// <summary>
-        /// How long the dead profile's scores stay open at most.
+        /// How long the dead profile's scores stay open at most (<see cref="LongerLastLook"/> doubles it).
         /// </summary>
-        private const double death_last_look_time = 60_000;
+        private const double death_last_look_time = 30_000;
+
+        private const double death_longer_last_look_time = 60_000;
 
         /// <summary>
         /// A dead Sudden Death / Perfect Death profile's scores should open now (the profile page does this, on the update thread).
@@ -1031,6 +1042,11 @@ namespace osu.Game.LocalPriority
         public double? LastLookEndTime { get; private set; }
 
         /// <summary>
+        /// When (game clock time) the dying profile's last look at its scores started. Null until it started.
+        /// </summary>
+        public double? LastLookStartTime { get; private set; }
+
+        /// <summary>
         /// Called by gameplay when a play fails: if it was the active Sudden Death / Perfect Death profile's play, the profile dies.
         /// Returns whether it did (gameplay then blocks retrying).
         /// </summary>
@@ -1048,6 +1064,7 @@ namespace osu.Game.LocalPriority
             dyingProfileId = id;
             lastScoresShown = false;
             LastLookEndTime = null;
+            LastLookStartTime = null;
 
             deathFallback = Scheduler.AddDelayed(showLastScores, death_fallback_time);
             return true;
@@ -1070,9 +1087,12 @@ namespace osu.Game.LocalPriority
             lastScoresShown = true;
             deathFallback?.Cancel();
 
-            // The minute starts now, as the page opens (it counts it down).
-            LastLookEndTime = Time.Current + death_last_look_time;
-            deathTimeout = Scheduler.AddDelayed(() => FinishProfileDeath(id), death_last_look_time);
+            // The countdown starts now, as the page opens (it counts it down).
+            double duration = LongerLastLook.Value ? death_longer_last_look_time : death_last_look_time;
+
+            LastLookStartTime = Time.Current;
+            LastLookEndTime = Time.Current + duration;
+            deathTimeout = Scheduler.AddDelayed(() => FinishProfileDeath(id), duration);
 
             if (ShowLastScores == null)
                 FinishProfileDeath(id);
@@ -1091,6 +1111,7 @@ namespace osu.Game.LocalPriority
 
             dyingProfileId = null;
             LastLookEndTime = null;
+            LastLookStartTime = null;
             deathTimeout?.Cancel();
             deathTimeout = null;
             deathFallback?.Cancel();
@@ -1947,6 +1968,7 @@ namespace osu.Game.LocalPriority
             revision.Value++;
             applyToApi();
             applyModRulesIfChanged();
+            updateSpeedrunTimer();
         }
 
         private void applyToApi()
@@ -1986,6 +2008,9 @@ namespace osu.Game.LocalPriority
                 pendingProfileColourWrite = null;
                 Store.SetProfileColours(ProfileColouring.Value, ProfileColour.Value.ToHex());
             }
+
+            // A running Speedrun profile keeps the time it had when the game closed.
+            stopSpeedrunTimer();
 
             Store.Flush();
 

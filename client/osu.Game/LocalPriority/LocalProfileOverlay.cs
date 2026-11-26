@@ -18,6 +18,7 @@ using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Effects;
+using osu.Framework.Graphics.Primitives;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
@@ -25,6 +26,7 @@ using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Framework.Logging;
 using osu.Framework.Screens;
+using osu.Framework.Testing;
 using osu.Framework.Threading;
 using osu.Framework.Utils;
 using osu.Game.Beatmaps;
@@ -147,9 +149,13 @@ namespace osu.Game.LocalPriority
             Children = new Drawable[]
             {
                 // A dying Sudden Death / Perfect Death profile's page loses its colour during its last look (see updateLastLookFade).
-                // It carries its own copy of the page background, so that goes grey too.
-                lastLookFade = new BufferedContainer
+                // It carries its own copy of the page background, so that goes grey too. The page only moves into the buffer
+                // (drawn to a full-screen framebuffer every frame) for that last look; otherwise it is drawn directly.
+                pageHolder = new Container
                 {
+                    RelativeSizeAxes = Axes.Both,
+                    Child = pageContent = new Container
+                    {
                     RelativeSizeAxes = Axes.Both,
                     Children = new Drawable[]
                     {
@@ -177,7 +183,7 @@ namespace osu.Game.LocalPriority
                                             {
                                                 // Invisible; keeps the page from getting shorter while it is rebuilt (see holdPageHeight).
                                                 pageHeightHold = new Container { RelativeSizeAxes = Axes.X },
-                                                pageFlow = new FillFlowContainer
+                                                pageFlow = new UpdatingFillFlowContainer
                                                 {
                                                     RelativeSizeAxes = Axes.X,
                                                     AutoSizeAxes = Axes.Y,
@@ -197,7 +203,7 @@ namespace osu.Game.LocalPriority
                                                             AutoSizeAxes = Axes.Y,
                                                         },
                                                         // Behind the sections' rounded panels: the tabs' colour, like the website profile.
-                                                        new Container
+                                                        new UpdatingContainer
                                                         {
                                                             RelativeSizeAxes = Axes.X,
                                                             AutoSizeAxes = Axes.Y,
@@ -208,7 +214,7 @@ namespace osu.Game.LocalPriority
                                                                     RelativeSizeAxes = Axes.Both,
                                                                     Colour = ColourProvider.Background5,
                                                                 },
-                                                                sections = new FillFlowContainer
+                                                                sections = new UpdatingFillFlowContainer
                                                                 {
                                                                     RelativeSizeAxes = Axes.X,
                                                                     AutoSizeAxes = Axes.Y,
@@ -226,10 +232,14 @@ namespace osu.Game.LocalPriority
                                 },
                             },
                     },
+                    },
                 },
+                lastLookFade = new BufferedContainer { RelativeSizeAxes = Axes.Both },
                 // The countdown stays red over the grey: it is drawn here, above the fading page.
                 countdownLayer = new Container { RelativeSizeAxes = Axes.Both },
                 loading = new LoadingLayer(true),
+                // "New 'Speedrun' profile": the goal window, in the middle above everything.
+                speedrunGoalLayer = new Container { RelativeSizeAxes = Axes.Both },
             };
         }
 
@@ -272,6 +282,9 @@ namespace osu.Game.LocalPriority
                     // Next time, open on the active profile again.
                     displayedProfileId = null;
 
+                    // A speedrun goal still being typed in: nothing is made.
+                    speedrunGoalLayer.Clear();
+
                     // Closing a dead Sudden Death / Perfect Death profile's last look at its scores ends it.
                     if (dyingProfileId is Guid dying)
                     {
@@ -311,6 +324,37 @@ namespace osu.Game.LocalPriority
             ShowProfile(profileId);
         }
 
+        #region Speedrun profiles
+
+        private Container speedrunGoalLayer = null!;
+
+        /// <summary>
+        /// "New 'Speedrun' profile": asks for the goal in a small window in the middle; the profile is made (and switched to) once it is confirmed.
+        /// The goal counts the PP of the ruleset shown on the page; starting the run selects that ruleset in the game too.
+        /// </summary>
+        private void showSpeedrunGoalWindow()
+        {
+            var ruleset = profileRuleset.Value ?? gameRuleset.Value;
+
+            if (ruleset == null)
+                return;
+
+            speedrunGoalLayer.Child = new LocalSpeedrunGoalWindow(ruleset, goal =>
+            {
+                if (!mutableRuleset.Disabled && rulesets.GetRuleset(ruleset.ShortName) is RulesetInfo gameRulesetInfo && !mutableRuleset.Value.Equals(gameRulesetInfo))
+                    mutableRuleset.Value = gameRulesetInfo;
+
+                displayedProfileId = null;
+                var created = manager.CreateSpeedrunProfile(goal);
+                manager.Switch(created.Id);
+            })
+            {
+                State = { Value = Visibility.Visible },
+            };
+        }
+
+        #endregion
+
         #region Sudden Death / Perfect Death profiles
 
         private FillFlowContainer pageFlow = null!;
@@ -349,6 +393,133 @@ namespace osu.Game.LocalPriority
         private Guid? dyingProfileId;
 
         private BufferedContainer lastLookFade = null!;
+        private Container pageHolder = null!;
+
+        // Drawing: anything scrolled out of the page's view is "masked away" and not drawn (and its insides aren't updated), so a long
+        // expanded score list only costs what is on screen. The containers holding the sections and the rows below keep updating their
+        // children even while out of view, so things added there (sections below the visible part, rows from "show more") still load
+        // and take their size; the page's height and the scroll position when switching profiles rely on that.
+
+        private partial class UpdatingContainer : Container
+        {
+            protected override bool RequiresChildrenUpdate => true;
+        }
+
+        private partial class UpdatingFillFlowContainer : FillFlowContainer
+        {
+            protected override bool RequiresChildrenUpdate => true;
+        }
+
+        /// <summary>
+        /// Content (a score row, the statistics block) drawn once into a cached framebuffer and then shown as a single picture (one draw call
+        /// instead of one per texture change inside it). It is drawn again only when something in it changes visibly.
+        /// </summary>
+        /// <remarks>
+        /// A plain cached <see cref="BufferedContainer"/> only redraws when its size changes, and stops updating its children: hover
+        /// highlights and relative dates ("5 minutes ago") would freeze. Here the children keep updating while on screen, and any change
+        /// inside (seen as a change of their <see cref="Drawable.InvalidationID"/>) redraws the buffer.
+        /// </remarks>
+        private partial class CachedDrawBuffer : BufferedContainer
+        {
+            public CachedDrawBuffer()
+                : base(pixelSnapping: true, cachedFrameBuffer: true)
+            {
+            }
+
+            protected override bool RequiresChildrenUpdate => true;
+
+            // The frame buffer is a whole number of pixels. Drawn back into a fractional size, its nearest-pixel sampling drops or doubles a
+            // row (or column) of pixels at some positions (text looked cut off by a pixel). A whole-pixel size draws it 1:1.
+            protected override Quad ComputeScreenSpaceDrawQuad()
+            {
+                var rect = base.ComputeScreenSpaceDrawQuad().AABBFloat;
+                return Quad.FromRectangle(new RectangleF(rect.X, rect.Y, MathF.Round(rect.Width), MathF.Round(rect.Height)));
+            }
+
+            private Drawable[] contents = Array.Empty<Drawable>();
+            private double contentsListedAt = double.NegativeInfinity;
+            private long lastVersion;
+
+            protected override void UpdateAfterChildren()
+            {
+                base.UpdateAfterChildren();
+
+                // The list of what is inside is refreshed now and then (content added later, e.g. a thumbnail finishing loading).
+                if (Time.Current - contentsListedAt > 1000)
+                {
+                    contents = this.ChildrenOfType<Drawable>().Where(d => d != this).ToArray();
+                    contentsListedAt = Time.Current;
+                }
+
+                long version = contents.Length;
+
+                foreach (var d in contents)
+                    version += d.InvalidationID;
+
+                if (version == lastVersion)
+                    return;
+
+                lastVersion = version;
+                ForceRedraw();
+            }
+
+        }
+
+        /// <summary>
+        /// Animated parts (the rank badges' moving triangles) drawn above a <see cref="CachedDrawBuffer"/> instead of inside it, so they don't
+        /// make the picture redraw every frame. Each sits exactly where its placeholder (an empty spot of the same size in the picture) is,
+        /// with the placeholder's fade.
+        /// </summary>
+        private partial class LiveLayer : Container
+        {
+            private readonly List<(Drawable Placeholder, Drawable Live)> items = new List<(Drawable, Drawable)>();
+
+            public LiveLayer()
+            {
+                RelativeSizeAxes = Axes.Both;
+            }
+
+            public void Track(Drawable placeholder, Drawable live)
+            {
+                items.Add((placeholder, live));
+                Add(live);
+            }
+
+            protected override void UpdateAfterChildren()
+            {
+                base.UpdateAfterChildren();
+
+                foreach (var (placeholder, live) in items)
+                {
+                    var quad = placeholder.ScreenSpaceDrawQuad;
+                    Vector2 topLeft = ToLocalSpace(quad.TopLeft);
+
+                    live.Position = topLeft;
+                    live.Size = ToLocalSpace(quad.BottomRight) - topLeft;
+
+                    float alpha = 1;
+                    for (Drawable? d = placeholder; d != null && d is not CachedDrawBuffer; d = d.Parent)
+                        alpha *= d.Alpha;
+
+                    live.Alpha = alpha;
+                }
+            }
+        }
+        private Container pageContent = null!;
+
+        /// <summary>
+        /// Moves the page into the grey-fading buffer (a dying profile's last look) or back out of it.
+        /// </summary>
+        private void usePageBuffer(bool buffered)
+        {
+            Container<Drawable> target = buffered ? lastLookFade : pageHolder;
+
+            if (pageContent.Parent == target)
+                return;
+
+            ((Container<Drawable>)pageContent.Parent!).Remove(pageContent, false);
+            target.Add(pageContent);
+        }
         private Box lastLookBackground = null!;
         private Container countdownLayer = null!;
 
@@ -370,9 +541,15 @@ namespace osu.Game.LocalPriority
             lastLookFade.ClearTransforms(false, nameof(BufferedContainer.GrayscaleStrength));
 
             if (end is double e)
+            {
+                usePageBuffer(true);
                 lastLookFade.GrayscaleTo(1, Math.Max(0, e - Time.Current));
+            }
             else
+            {
                 lastLookFade.GrayscaleStrength = 0;
+                usePageBuffer(false);
+            }
         }
 
         private void showCountdownAboveFade(TopSection top)
@@ -956,6 +1133,7 @@ namespace osu.Game.LocalPriority
                             var created = manager.CreateDefaultProfile(mode);
                             manager.Switch(created.Id);
                         },
+                        CreateSpeedrunProfile = showSpeedrunGoalWindow,
                     };
 
                 showCountdownAboveFade(currentTop);
@@ -980,6 +1158,10 @@ namespace osu.Game.LocalPriority
             loadedProfile = profile;
             updateGlow();
 
+            // A Speedrun profile whose PP reached its goal in some other way (plays synced or imported): the run ends now.
+            if (profile.Speedrun != null && profileRuleset.Value is RulesetInfo shownRuleset)
+                manager.CheckSpeedrunGoal(profile.Id, shownRuleset, stats.PP);
+
             // Released a moment after the final build, once its text and charts have settled.
             releasePageHeight = Scheduler.AddDelayed(releasePageHeightHold, 150);
 
@@ -996,8 +1178,13 @@ namespace osu.Game.LocalPriority
             {
                 new ScoresPanel(stats, score => presentScore(score, ScorePresentType.Results), scoreMenu, expandedLists)
                 {
-                    // A dying Sudden Death / Perfect Death profile's last look: every score at once.
+                    ShowBeatmap = score => presentScore(score, null),
+                    // A dying Sudden Death / Perfect Death profile's last look: every score at once, and its best scores fade away one by one.
                     ShowAll = profile.Id == dyingProfileId,
+                    FadeOutStart = profile.Id == dyingProfileId ? manager.LastLookStartTime : null,
+                    FadeOutEnd = profile.Id == dyingProfileId ? manager.LastLookEndTime : null,
+                    Scroll = scroll,
+                    KeepPageHeight = holdPageHeight,
                 },
                 new HistoricalPanel(stats, presentBeatmap, expandedLists),
             };
@@ -1231,6 +1418,11 @@ namespace osu.Game.LocalPriority
             /// </summary>
             public Action<LocalDeathMode>? CreateDeathProfile;
 
+            /// <summary>
+            /// "⋮" menu: a new Speedrun profile (asks for its goal first).
+            /// </summary>
+            public Action? CreateSpeedrunProfile;
+
             private EditableName nameDisplay = null!;
 
             private OsuSpriteText countdown = null!;
@@ -1263,19 +1455,28 @@ namespace osu.Game.LocalPriority
 
                 if (CountdownEnd is not double end)
                 {
+                    if (speedrun != null)
+                    {
+                        updateSpeedrunTimer();
+                        return;
+                    }
+
+                    if (lastSecondsLeft == null && countdown.Alpha == 0)
+                        return;
+
                     countdown.Alpha = 0;
                     lastSecondsLeft = null;
                     stopCountdownSounds();
                     return;
                 }
 
-                // minutes:seconds:hundredths, e.g. 1:00:00 → 0:45:42 → 0:00:00.
+                // seconds:hundredths, no minutes even for the longer timer: 60:00 (or 30:00) → 12:42 → 00:00.
                 double remainingMs = Math.Max(0, end - Time.Current);
                 var remaining = TimeSpan.FromMilliseconds(remainingMs);
-                countdown.Text = $@"{(int)remaining.TotalMinutes}:{remaining.Seconds:00}:{remaining.Milliseconds / 10:00}";
+                countdown.Text = $@"{(int)remaining.TotalSeconds:00}:{remaining.Milliseconds / 10:00}";
                 countdown.Alpha = 1;
 
-                // Every whole second (as the display reaches x:xx:00): a tick and a small pulse.
+                // Every whole second (as the display reaches xx:00): the last 3 get a sound and a small pulse.
                 int secondsLeft = (int)Math.Ceiling(remainingMs / 1000);
 
                 if (lastSecondsLeft != null && secondsLeft < lastSecondsLeft)
@@ -1286,12 +1487,10 @@ namespace osu.Game.LocalPriority
 
             private int? lastSecondsLeft;
 
-            private Sample? runningOutSample;
             private Sample? runningOutFinalSample;
 
             private void loadCountdownSamples(AudioManager audio)
             {
-                runningOutSample = audio.Samples.Get(@"Multiplayer/Matchmaking/Ranked/time-running-out");
                 runningOutFinalSample = audio.Samples.Get(@"Multiplayer/Matchmaking/Ranked/time-running-out-final");
             }
 
@@ -1323,18 +1522,13 @@ namespace osu.Game.LocalPriority
 
             private void onSecondPassed(int secondsLeft)
             {
-                // Silent until the last 10 seconds, and nothing on reaching 0:00:00 itself (the page closes right then).
-                if (secondsLeft > 10 || secondsLeft <= 0)
+                // Silent until the last 3 seconds (no ticking clock), and nothing on reaching 00:00 itself (the page closes right then).
+                if (secondsLeft > 3 || secondsLeft <= 0)
                     return;
 
                 playingSounds.RemoveAll(c => !c.Playing);
 
-                // "Time running out", with the final one on top (and a pulse) for the last 3 seconds.
-                play(runningOutSample);
-
-                if (secondsLeft > 3)
-                    return;
-
+                // "Time running out" (the final one) and a pulse, once a second.
                 play(runningOutFinalSample);
 
                 countdown.ScaleTo(1.06f, 60, Easing.OutQuint)
@@ -1347,8 +1541,79 @@ namespace osu.Game.LocalPriority
             {
                 // Gone with the page: nothing left to fade with.
                 stopCountdownSounds(fade: false);
+
+                if (speedrunManager != null)
+                    speedrunManager.SpeedrunCompleted -= onSpeedrunCompleted;
+
                 base.Dispose(isDisposing);
             }
+
+            #region Speedrun timer
+
+            /// <summary>
+            /// The shown Speedrun profile's goal and time (read from the store when the page is built and when the run starts / stops),
+            /// or null for other profiles.
+            /// </summary>
+            private LocalSpeedrun? speedrun;
+
+            private LocalProfileManager? speedrunManager;
+            private LocalSpeedrunTimeDisplay speedrunTimer = null!;
+            private OsuSpriteText speedrunGoal = null!;
+            private bool? speedrunWasRunning;
+
+            /// <summary>
+            /// The finished run's time: the timer turns this blue.
+            /// </summary>
+            private static readonly Color4 speedrun_completed_colour = Color4Extensions.FromHex(@"8cb6ff");
+
+            /// <summary>
+            /// The running timer: white with a slight green tint.
+            /// </summary>
+            private static readonly Color4 speedrun_running_colour = Color4Extensions.FromHex(@"dcffe2");
+
+            /// <summary>
+            /// A Speedrun profile's timer sits where a dying profile's countdown does: greenish white, counting up the time the profile was active.
+            /// It stands still while another profile is active, and turns blue once the goal is reached.
+            /// </summary>
+            private void updateSpeedrunTimer()
+            {
+                if (speedrunManager == null || speedrun == null)
+                    return;
+
+                bool running = speedrunManager.IsSpeedrunRunning(profile.Id);
+
+                if (running != speedrunWasRunning)
+                {
+                    // Started or stopped (this profile was switched to / away from): the stored time is up to date now.
+                    speedrunWasRunning = running;
+                    speedrun = speedrunManager.Store.GetSpeedrun(profile.Id) ?? speedrun;
+                    speedrunTimer.Alpha = 1;
+                    speedrunGoal.Alpha = 1;
+
+                    // Greenish white while the run goes on (red is the dying profiles' countdown), blue once it's done.
+                    speedrunTimer.Colour = speedrun.Completed != null ? speedrun_completed_colour : speedrun_running_colour;
+                }
+
+                double seconds = running ? speedrunManager.RunningSpeedrunSeconds : speedrun.Seconds;
+                speedrunTimer.SetTime((long)Math.Floor(seconds * 100));
+            }
+
+            private void onSpeedrunCompleted(Guid id, double seconds) => Schedule(() =>
+            {
+                if (id != profile.Id || speedrun == null)
+                    return;
+
+                speedrun = speedrunManager?.Store.GetSpeedrun(profile.Id) ?? speedrun;
+                speedrunWasRunning = false;
+                speedrunTimer.SetTime((long)Math.Floor(seconds * 100));
+
+                speedrunTimer.FadeColour(speedrun_completed_colour, 1000, Easing.OutQuint);
+                speedrunTimer.ScaleTo(1.08f, 80, Easing.OutQuint)
+                         .Then()
+                         .ScaleTo(1, 600, Easing.OutQuint);
+            });
+
+            #endregion
 
             /// <summary>
             /// Hides the profile page (the mod rules picker takes the whole screen).
@@ -1408,12 +1673,20 @@ namespace osu.Game.LocalPriority
 
                 yield return new CreateOption(@"New 'Sudden Death' profile", OsuIcon.ModSuddenDeath, () => CreateDeathProfile?.Invoke(LocalDeathMode.SuddenDeath), 27);
                 yield return new CreateOption(@"New 'Perfect Death' profile", OsuIcon.ModPerfect, () => CreateDeathProfile?.Invoke(LocalDeathMode.PerfectDeath), 27);
+                yield return new CreateOption(@"New 'Speedrun' profile", OsuIcon.ModClassic, () => CreateSpeedrunProfile?.Invoke(), 27);
             }
 
             [BackgroundDependencyLoader]
             private void load(OverlayColourProvider colours, LocalProfileManager manager, OsuColour osuColour, AudioManager audio)
             {
                 loadCountdownSamples(audio);
+
+                if (profile.Speedrun != null)
+                {
+                    speedrunManager = manager;
+                    speedrun = manager.Store.GetSpeedrun(profile.Id);
+                    manager.SpeedrunCompleted += onSpeedrunCompleted;
+                }
 
                 // One row of profiles; with many profiles it scrolls sideways (wheel or drag), fading out towards the edges.
                 var chips = new FillFlowContainer
@@ -1583,6 +1856,24 @@ namespace osu.Game.LocalPriority
                                                     // Fixed-width digits (so the numbers don't jiggle), pulled a little closer together.
                                                     Spacing = new Vector2(-4, 0),
                                                     Colour = osuColour.Red,
+                                                    Alpha = 0,
+                                                },
+                                                // A Speedrun profile's timer (only dying profiles' countdowns need to be drawn above the grey fade).
+                                                speedrunTimer = new LocalSpeedrunTimeDisplay
+                                                {
+                                                    Anchor = Anchor.Centre,
+                                                    Origin = Anchor.Centre,
+                                                    Alpha = 0,
+                                                },
+                                                // A Speedrun profile's goal, under its timer.
+                                                speedrunGoal = new OsuSpriteText
+                                                {
+                                                    Anchor = Anchor.Centre,
+                                                    Origin = Anchor.TopCentre,
+                                                    Y = 20,
+                                                    Text = speedrun?.DescribeGoal() ?? string.Empty,
+                                                    Font = OsuFont.GetFont(size: 14, weight: FontWeight.SemiBold),
+                                                    Colour = colours.Content2,
                                                     Alpha = 0,
                                                 },
                                                 coverToggle = new ToggleCoverButton
@@ -2565,133 +2856,171 @@ namespace osu.Game.LocalPriority
                 var time = TimeSpan.FromSeconds(plays.PlayTimeSeconds);
                 bool mania = ruleset?.ShortName == @"mania";
 
-                InternalChildren = new Drawable[]
+                // The statistics (rankings, PP graph, judgements, grades, the statistics box) as one cached picture (see CachedDrawBuffer).
+                InternalChild = new CachedDrawBuffer
                 {
-                    new Box
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Children = new Drawable[]
                     {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = colours.Background5,
-                    },
-                    new GridContainer
-                    {
-                        RelativeSizeAxes = Axes.X,
-                        AutoSizeAxes = Axes.Y,
-                        Padding = new MarginPadding { Horizontal = WaveOverlayContainer.HORIZONTAL_PADDING, Vertical = 15 },
-                        ColumnDimensions = new[]
+                        new Box
                         {
-                            new Dimension(),
-                            new Dimension(GridSizeMode.AutoSize),
-                            new Dimension(GridSizeMode.AutoSize),
+                            RelativeSizeAxes = Axes.Both,
+                            Colour = colours.Background5,
                         },
-                        RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
-                        Content = new[]
+                        new GridContainer
                         {
-                            new Drawable[]
+                            RelativeSizeAxes = Axes.X,
+                            AutoSizeAxes = Axes.Y,
+                            Padding = new MarginPadding { Horizontal = WaveOverlayContainer.HORIZONTAL_PADDING, Vertical = 15 },
+                            ColumnDimensions = new[]
                             {
-                                new FillFlowContainer
+                                new Dimension(),
+                                new Dimension(GridSizeMode.AutoSize),
+                                new Dimension(GridSizeMode.AutoSize),
+                            },
+                            RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
+                            Content = new[]
+                            {
+                                new Drawable[]
                                 {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                    Direction = FillDirection.Vertical,
-                                    Spacing = new Vector2(0, 12),
-                                    Children = new Drawable[]
+                                    new FillFlowContainer
                                     {
-                                        new FillFlowContainer
+                                        RelativeSizeAxes = Axes.X,
+                                        AutoSizeAxes = Axes.Y,
+                                        Direction = FillDirection.Vertical,
+                                        Spacing = new Vector2(0, 12),
+                                        Children = new Drawable[]
                                         {
-                                            AutoSizeAxes = Axes.Both,
-                                            Direction = FillDirection.Horizontal,
-                                            Spacing = new Vector2(40, 0),
-                                            Children = new Drawable[]
+                                            new FillFlowContainer
                                             {
-                                                // Like the website's "Global Ranking" / "Country Ranking".
-                                                bigValue(@"Estimated Global Ranking",
-                                                    stats?.EstimatedGlobalRank != null ? $@"#{stats.EstimatedGlobalRank:N0}" : @"-",
-                                                    ruleset?.ShortName == @"osu"
-                                                        ? @"Estimate based on 10000 random accounts grabbed."
-                                                        : @"Only estimated for osu! standard."),
-                                                bigValue(@"Local Ranking", localRank != null ? $@"#{localRank}" : @"-"),
-                                            },
-                                        },
-                                        new LocalPerformanceGraph(stats?.History)
-                                        {
-                                            RelativeSizeAxes = Axes.X,
-                                            Height = 80,
-                                        },
-                                        // Like the website's profile: info (play time, judgements) on the left, achieved grades on the right.
-                                        new GridContainer
-                                        {
-                                            RelativeSizeAxes = Axes.X,
-                                            AutoSizeAxes = Axes.Y,
-                                            ColumnDimensions = new[]
-                                            {
-                                                new Dimension(),
-                                                new Dimension(GridSizeMode.AutoSize),
-                                            },
-                                            RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
-                                            Content = new[]
-                                            {
-                                                new Drawable[]
+                                                AutoSizeAxes = Axes.Both,
+                                                Direction = FillDirection.Horizontal,
+                                                Spacing = new Vector2(40, 0),
+                                                Children = new Drawable[]
                                                 {
-                                                    new FillFlowContainer
+                                                    // Like the website's "Global Ranking" / "Country Ranking".
+                                                    bigValue(@"Estimated Global Ranking",
+                                                        stats?.EstimatedGlobalRank != null ? $@"#{stats.EstimatedGlobalRank:N0}" : @"-",
+                                                        ruleset != null && LocalPriorityPolicy.HasRankEstimate(ruleset.ShortName)
+                                                            ? @"Estimate based on top 10000 and 10000 random accounts grabbed."
+                                                            : @"Not estimated for this ruleset."),
+                                                    bigValue(@"Local Ranking", localRank != null ? $@"#{localRank}" : @"-"),
+                                                },
+                                            },
+                                            new LocalPerformanceGraph(stats?.History)
+                                            {
+                                                RelativeSizeAxes = Axes.X,
+                                                Height = 80,
+                                            },
+                                            // Like the website's profile: info (play time, judgements) on the left, achieved grades on the right.
+                                            new GridContainer
+                                            {
+                                                RelativeSizeAxes = Axes.X,
+                                                AutoSizeAxes = Axes.Y,
+                                                ColumnDimensions = new[]
+                                                {
+                                                    new Dimension(),
+                                                    new Dimension(GridSizeMode.AutoSize),
+                                                },
+                                                RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
+                                                Content = new[]
+                                                {
+                                                    new Drawable[]
                                                     {
-                                                        RelativeSizeAxes = Axes.X,
-                                                        AutoSizeAxes = Axes.Y,
-                                                        Anchor = Anchor.BottomLeft,
-                                                        Origin = Anchor.BottomLeft,
-                                                        Direction = FillDirection.Full,
-                                                        Spacing = new Vector2(30, 8),
-                                                        Children = new Drawable[]
+                                                        new FillFlowContainer
                                                         {
-                                                            // Like the website's "Medals / pp / Total Play Time" row (right-click pp for the ranking options).
-                                                            new PerformanceValue(profile, manager,
-                                                                value(@"pp", stats == null ? @"…" : $@"{stats.PP:N0}", performanceTooltip())),
-                                                            value(@"Total Play Time", $@"{(int)time.TotalHours:N0}h {time.Minutes}m"),
-                                                            // Judgement titles in their judgement's colour, like the numbers on the score rows.
-                                                            judgement(@"300", mania ? plays.Count(HitResult.Perfect) + plays.Count(HitResult.Great) : plays.Count(HitResult.Great),
-                                                                osuColour.ForHitResult(HitResult.Great)),
-                                                            judgement(@"100", plays.Count(HitResult.Ok) + plays.Count(HitResult.Good), osuColour.ForHitResult(HitResult.Ok)),
-                                                            judgement(@"50", plays.Count(HitResult.Meh), osuColour.ForHitResult(HitResult.Meh)),
-                                                            judgement(@"Miss", plays.Count(HitResult.Miss), osuColour.ForHitResult(HitResult.Miss)),
+                                                            RelativeSizeAxes = Axes.X,
+                                                            AutoSizeAxes = Axes.Y,
+                                                            Anchor = Anchor.BottomLeft,
+                                                            Origin = Anchor.BottomLeft,
+                                                            Direction = FillDirection.Full,
+                                                            Spacing = new Vector2(30, 8),
+                                                            Children = new Drawable[]
+                                                            {
+                                                                // Like the website's "Medals / pp / Total Play Time" row (right-click pp for the ranking options).
+                                                                new PerformanceValue(profile, manager,
+                                                                    value(@"pp", stats == null ? @"…" : $@"{stats.PP:N0}", performanceTooltip())),
+                                                                value(@"Total Play Time", playTime(time), playTimeTooltip(time)),
+                                                                // Judgement titles in their judgement's colour, like the numbers on the score rows.
+                                                                judgement(@"300", mania ? plays.Count(HitResult.Perfect) + plays.Count(HitResult.Great) : plays.Count(HitResult.Great),
+                                                                    osuColour.ForHitResult(HitResult.Great)),
+                                                                judgement(@"100", plays.Count(HitResult.Ok) + plays.Count(HitResult.Good), osuColour.ForHitResult(HitResult.Ok)),
+                                                                judgement(@"50", plays.Count(HitResult.Meh), osuColour.ForHitResult(HitResult.Meh)),
+                                                                judgement(@"Miss", plays.Count(HitResult.Miss), osuColour.ForHitResult(HitResult.Miss)),
+                                                            },
                                                         },
-                                                    },
-                                                    new FillFlowContainer
-                                                    {
-                                                        AutoSizeAxes = Axes.Both,
-                                                        Anchor = Anchor.BottomRight,
-                                                        Origin = Anchor.BottomRight,
-                                                        Direction = FillDirection.Horizontal,
-                                                        Spacing = new Vector2(6, 0),
-                                                        Margin = new MarginPadding { Left = 20 },
-                                                        Children = new Drawable[]
+                                                        new FillFlowContainer
                                                         {
-                                                            grade(ScoreRank.XH, stats?.CountSSH),
-                                                            grade(ScoreRank.X, stats?.CountSS),
-                                                            grade(ScoreRank.SH, stats?.CountSH),
-                                                            grade(ScoreRank.S, stats?.CountS),
-                                                            grade(ScoreRank.A, stats?.CountA),
+                                                            AutoSizeAxes = Axes.Both,
+                                                            Anchor = Anchor.BottomRight,
+                                                            Origin = Anchor.BottomRight,
+                                                            Direction = FillDirection.Horizontal,
+                                                            Spacing = new Vector2(6, 0),
+                                                            Margin = new MarginPadding { Left = 20 },
+                                                            Children = new Drawable[]
+                                                            {
+                                                                grade(ScoreRank.XH, stats?.CountSSH),
+                                                                grade(ScoreRank.X, stats?.CountSS),
+                                                                grade(ScoreRank.SH, stats?.CountSH),
+                                                                grade(ScoreRank.S, stats?.CountS),
+                                                                grade(ScoreRank.A, stats?.CountA),
+                                                            },
                                                         },
                                                     },
                                                 },
                                             },
                                         },
                                     },
-                                },
-                                new Box
-                                {
-                                    RelativeSizeAxes = Axes.Y,
-                                    Width = 2,
-                                    Colour = colours.Background6,
-                                    Margin = new MarginPadding { Horizontal = 15 },
-                                },
-                                new StatisticsBox(stats, manager.ShowTotalAccuracy.Value)
-                                {
-                                    Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft,
+                                    new Box
+                                    {
+                                        RelativeSizeAxes = Axes.Y,
+                                        Width = 2,
+                                        Colour = colours.Background6,
+                                        Margin = new MarginPadding { Horizontal = 15 },
+                                    },
+                                    new StatisticsBox(stats, manager.ShowTotalAccuracy.Value)
+                                    {
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                    },
                                 },
                             },
                         },
                     },
                 };
+
+                // The grade badges' triangles move all the time: drawn live on top, so the picture itself stays cached.
+                var liveLayer = new LiveLayer();
+                AddInternal(liveLayer);
+
+                foreach (var (placeholder, badge) in gradeBadges)
+                    liveLayer.Track(placeholder, badge);
+            }
+
+            /// <summary>
+            /// Like the website's and lazer's profile: "5h 12m", with whole days in front from 24 hours on ("3d 4h 12m").
+            /// </summary>
+            private static string playTime(TimeSpan time)
+            {
+                long totalMinutes = (long)Math.Floor(time.TotalMinutes);
+                long days = totalMinutes / (24 * 60);
+                string value = $@"{totalMinutes / 60 % 24}h {totalMinutes % 60}m";
+                return days > 0 ? $@"{days:N0}d {value}" : value;
+            }
+
+            /// <summary>
+            /// Like the website's and lazer's profile: the total in hours (rounded), or in minutes while that's under 2 hours.
+            /// </summary>
+            private static string playTimeTooltip(TimeSpan time)
+            {
+                long hours = (long)Math.Round(time.TotalHours);
+
+                if (hours >= 2)
+                    return $@"{hours:N0} hours";
+
+                long minutes = (long)Math.Floor(time.TotalMinutes);
+                return minutes == 1 ? @"1 minute" : $@"{minutes:N0} minutes";
             }
 
             private string performanceTooltip()
@@ -2741,7 +3070,12 @@ namespace osu.Game.LocalPriority
                 return $@"{tenths / 10}.{tenths % 10}{suffix}";
             }
 
-            private static Drawable grade(ScoreRank rank, int? count) => new FillFlowContainer
+            /// <summary>
+            /// The grade badges (animated, drawn above the cached statistics, see <see cref="LiveLayer"/>) and their places.
+            /// </summary>
+            private readonly List<(Drawable Placeholder, Drawable Badge)> gradeBadges = new List<(Drawable, Drawable)>();
+
+            private Drawable grade(ScoreRank rank, int? count) => new FillFlowContainer
             {
                 AutoSizeAxes = Axes.Both,
                 Direction = FillDirection.Vertical,
@@ -2752,8 +3086,7 @@ namespace osu.Game.LocalPriority
                     new Container
                     {
                         Size = new Vector2(50, 25),
-                        Child = new DrawableRank(rank),
-                    },
+                    }.With(placeholder => gradeBadges.Add((placeholder, new Container { Child = new DrawableRank(rank) }))),
                     new OsuSpriteText
                     {
                         Anchor = Anchor.TopCentre,
@@ -2973,6 +3306,9 @@ namespace osu.Game.LocalPriority
 
             public override string Identifier => @"scores";
 
+            // Rows below the visible part still get loaded (see UpdatingContainer); they just aren't drawn.
+            protected override bool RequiresChildrenUpdate => true;
+
             public const int COMPACT_COUNT = 5;
 
             private static readonly int[] expansion_steps = { COMPACT_COUNT, 50, 100, 150, 200 };
@@ -2988,6 +3324,39 @@ namespace osu.Game.LocalPriority
             /// Start with both lists fully expanded.
             /// </summary>
             public bool ShowAll { get; init; }
+
+            /// <summary>
+            /// When (game clock time) a dying Sudden Death / Perfect Death profile's last look started and ends: its best scores go one by one
+            /// in between (see <see cref="planFadeOut"/>). Null on any other page.
+            /// </summary>
+            public double? FadeOutStart { get; init; }
+
+            /// <inheritdoc cref="FadeOutStart"/>
+            public double? FadeOutEnd { get; init; }
+
+            /// <summary>
+            /// Opens song select on a score's beatmap (failed / quit plays: there is no score to open, but the beatmap is there).
+            /// </summary>
+            public Action<ScoreInfo>? ShowBeatmap { get; init; }
+
+            /// <summary>
+            /// The page's scroll container: best scores in its view fade away, the others go at once.
+            /// </summary>
+            public ScrollContainer<Drawable>? Scroll { get; init; }
+
+            /// <summary>
+            /// Keeps the page at least as tall as it is now (see <see cref="LocalProfileOverlay.holdPageHeight"/>). A page getting shorter
+            /// pulls the scroll position back into range, which moves everything down while the gaps close upwards (a jerk per score).
+            /// </summary>
+            public Action? KeepPageHeight { get; init; }
+
+            private SubsectionHeader bestHeader = null!;
+
+            /// <summary>
+            /// The best scores' rows, highest PP first.
+            /// </summary>
+            private readonly List<ScoreRow> bestRows = new List<ScoreRow>();
+
 
             private readonly IDictionary<string, int> expandedLists;
 
@@ -3027,7 +3396,7 @@ namespace osu.Game.LocalPriority
                         Spacing = new Vector2(0, 4),
                         Children = new Drawable[]
                         {
-                            new SubsectionHeader(@"Best Performance", stats.BestScores.Count),
+                            bestHeader = new SubsectionHeader(@"Best Performance", stats.BestScores.Count),
                             bestFlow = createList(),
                             new SubsectionHeader(@"Recent Plays", stats.RecentPlayCount)
                             {
@@ -3039,16 +3408,174 @@ namespace osu.Game.LocalPriority
                 };
 
                 // As far as each list was expanded last time; a dying profile's last look (ShowAll) shows everything anyway.
-                fill(bestFlow, stats.BestScores.ToArray(), @"No PP scores yet.", @"best");
+                fill(bestFlow, stats.BestScores.ToArray(), @"No PP scores yet.", @"best", bestRows);
                 fill(recentFlow, stats.RecentScores.ToArray(), @"No submitted plays yet on this profile.", @"recent");
             }
 
-            private static FillFlowContainer createList() => new FillFlowContainer
+            protected override void LoadComplete()
+            {
+                base.LoadComplete();
+
+                if (FadeOutStart is double start && FadeOutEnd is double end)
+                    startFadeOut(start, end);
+            }
+
+            #region A dying profile's last look: its best scores fade away
+
+            /// <summary>
+            /// After the page opens, a moment to look at everything before the first score goes.
+            /// </summary>
+            private const double fade_out_grace_time = 5000;
+
+            /// <summary>
+            /// The top scores go one a second over the last seconds (as the countdown passes each whole second), the best one last.
+            /// </summary>
+            private const int fade_out_top_count = 10;
+
+            private const double fade_out_top_interval = 1000;
+
+            private const double fade_out_top_fade_time = 800;
+
+            /// <summary>
+            /// Scores go lowest PP first, shuffled within small runs of neighbours (#50, #47, #49, #48, then #46...), never more than
+            /// this many places out of order.
+            /// </summary>
+            private const int fade_out_neighbours = 4;
+
+            private const float row_spacing = 4;
+
+            private (double Time, ScoreRow Row, double FadeTime, double CollapseTime)[] fadeOutPlan = Array.Empty<(double, ScoreRow, double, double)>();
+            private int fadeOutNext;
+
+            private void startFadeOut(double start, double end)
+            {
+                // Each row carries the space below it as its own margin, so a row closing its gap takes the space with it smoothly (a
+                // negative margin against the list's spacing would be cut off at zero size, and everything below would bounce back).
+                bestFlow.Spacing = Vector2.Zero;
+
+                foreach (var row in bestRows)
+                    row.Margin = new MarginPadding { Bottom = row_spacing };
+
+                fadeOutPlan = planFadeOut(bestRows, start, end);
+
+                // The page opened late, or was rebuilt during the countdown: scores whose time has passed are gone already.
+                removeDueRows(fade: false);
+                scheduleNextRemoval();
+            }
+
+            /// <summary>
+            /// When each best score goes. 5 seconds to look, then all but the top 10 evenly over the rest of the countdown but its last
+            /// 10 seconds (lowest PP first, shuffled among near neighbours; 15 seconds of the usual 30, 45 of the longer minute), then the top
+            /// 10 one a second over the last 10 seconds, #1 last. The same end time gives the same order, so a rebuilt page carries on unchanged.
+            /// </summary>
+            private static (double Time, ScoreRow Row, double FadeTime, double CollapseTime)[] planFadeOut(IReadOnlyList<ScoreRow> rows, double start, double end)
+            {
+                var plan = new List<(double, ScoreRow, double, double)>(rows.Count);
+
+                int top = Math.Min(rows.Count, fade_out_top_count);
+                var rest = rows.Skip(top).Reverse().ToList();
+
+                double topStart = end - fade_out_top_count * fade_out_top_interval;
+                double mainStart = Math.Min(start + fade_out_grace_time, topStart);
+                double interval = rest.Count > 0 ? (topStart - mainStart) / rest.Count : 0;
+                double fadeTime = Math.Clamp(interval * 4, 600, 1500);
+
+                // Each gap closes in exactly the time until the next one starts closing, at a steady speed: everything below glides up
+                // in one smooth movement instead of jerking up once per score.
+                double collapseTime = interval;
+
+                var random = new Random(end.GetHashCode());
+
+                for (int run = 0; run < rest.Count;)
+                {
+                    int length = Math.Min(random.Next(2, fade_out_neighbours + 1), rest.Count - run);
+                    random.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(rest).Slice(run, length));
+                    run += length;
+                }
+
+                for (int i = 0; i < rest.Count; i++)
+                    plan.Add((mainStart + i * interval, rest[i], fadeTime, collapseTime));
+
+                for (int rank = top; rank >= 1; rank--)
+                    plan.Add((end - rank * fade_out_top_interval, rows[rank - 1], fade_out_top_fade_time, fade_out_top_interval));
+
+                return plan.ToArray();
+            }
+
+            private void scheduleNextRemoval()
+            {
+                if (fadeOutNext >= fadeOutPlan.Length)
+                    return;
+
+                Scheduler.AddDelayed(() =>
+                {
+                    removeDueRows(fade: true);
+                    scheduleNextRemoval();
+                }, Math.Max(0, fadeOutPlan[fadeOutNext].Time - Time.Current));
+            }
+
+            private void removeDueRows(bool fade)
+            {
+                while (fadeOutNext < fadeOutPlan.Length && fadeOutPlan[fadeOutNext].Time <= Time.Current)
+                {
+                    var (_, row, fadeTime, collapseTime) = fadeOutPlan[fadeOutNext++];
+                    removeRow(row, fade ? fadeTime : 0, collapseTime);
+                }
+            }
+
+            /// <summary>
+            /// A row in view slowly fades away, then closes its gap. One out of view goes at once; if it was above the view, the page
+            /// scrolls up with it so what is shown stays where it is.
+            /// </summary>
+            private void removeRow(ScoreRow row, double fadeTime, double collapseTime)
+            {
+                bestHeader.Count.Value--;
+                KeepPageHeight?.Invoke();
+
+                if (Scroll == null)
+                {
+                    bestFlow.Remove(row, true);
+                    return;
+                }
+
+                var view = Scroll.ScreenSpaceDrawQuad.AABBFloat;
+                var rowArea = row.ScreenSpaceDrawQuad.AABBFloat;
+
+                if (fadeTime > 0 && view.IntersectsWith(rowArea))
+                {
+                    // Keeps its place in the list while it fades (a fully transparent row would drop out of the layout at once).
+                    row.AlwaysPresent = true;
+                    row.FadeOut(fadeTime, Easing.InQuad);
+
+                    // No easing: gaps closing one after another join up into one steady movement.
+                    using (row.BeginDelayedSequence(fadeTime))
+                    {
+                        row.ResizeHeightTo(0, collapseTime);
+                        row.TransformTo(nameof(Margin), new MarginPadding(), collapseTime);
+                    }
+
+                    row.Expire();
+                    return;
+                }
+
+                bool above = rowArea.Bottom <= view.Top;
+                float height = row.DrawHeight + row_spacing;
+
+                bestFlow.Remove(row, true);
+
+                if (above)
+                    Scroll.ScrollTo(Scroll.Target - height, false);
+            }
+
+            #endregion
+
+            // Updates its rows while out of view (rows added by "show more" load right away), but rows out of view aren't drawn.
+            private static FillFlowContainer createList() => new UpdatingFillFlowContainer
             {
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
                 Direction = FillDirection.Vertical,
-                Spacing = new Vector2(0, 4),
+                Spacing = new Vector2(0, row_spacing),
             };
 
             [Resolved]
@@ -3057,10 +3584,10 @@ namespace osu.Game.LocalPriority
             /// <summary>
             /// Shows the list as far as it was expanded last time (see <see cref="LocalProfileOverlay.expandedLists"/>).
             /// </summary>
-            private void fill(FillFlowContainer flow, LocalScoreEntry[] scores, string emptyText, string listName) =>
-                fill(flow, scores, emptyText, listName, Math.Clamp(expandedLists.TryGetValue(listName, out int step) ? step : 0, 0, expansion_steps.Length - 1));
+            private void fill(FillFlowContainer flow, LocalScoreEntry[] scores, string emptyText, string listName, List<ScoreRow>? rows = null) =>
+                fill(flow, scores, emptyText, listName, Math.Clamp(expandedLists.TryGetValue(listName, out int step) ? step : 0, 0, expansion_steps.Length - 1), rows);
 
-            private void fill(FillFlowContainer flow, LocalScoreEntry[] scores, string emptyText, string listName, int step)
+            private void fill(FillFlowContainer flow, LocalScoreEntry[] scores, string emptyText, string listName, int step, List<ScoreRow>? rows = null)
             {
                 flow.Clear();
 
@@ -3070,35 +3597,53 @@ namespace osu.Game.LocalPriority
                     return;
                 }
 
+                addRows(flow, scores, listName, 0, step, rows);
+            }
+
+            /// <summary>
+            /// Adds the rows after the first <paramref name="from"/> up to the step's count, then a "show more" button that adds the next ones
+            /// (rows already shown stay as they are).
+            /// </summary>
+            private void addRows(FillFlowContainer flow, LocalScoreEntry[] scores, string listName, int from, int step, List<ScoreRow>? rows = null)
+            {
                 int shown = ShowAll ? scores.Length : Math.Min(scores.Length, expansion_steps[step]);
+                var adding = scores.Skip(from).Take(shown - from).ToArray();
 
                 // The first rows were loaded with the statistics; "show more" loads the next ones here.
-                LocalScoreEntry.Load(scores.Take(shown), realm);
+                LocalScoreEntry.Load(adding, realm);
 
-                foreach (var s in scores.Take(shown))
+                foreach (var s in adding)
                 {
                     var score = s.Score;
 
                     if (score == null)
                         continue;
 
-                    // Failed / quit plays aren't saved scores: nothing to open, no right-click menu (like on the website).
+                    // Failed / quit plays aren't saved scores: no results to open and no right-click menu (like on the website), but a click
+                    // still goes to the beatmap they were played on, if it's still there.
                     if (s.Unfinished != null)
                     {
-                        flow.Add(new ScoreRow(score, null, null, null));
+                        var showBeatmap = ShowBeatmap;
+                        flow.Add(new ScoreRow(score, null, null, score.BeatmapInfo != null && showBeatmap != null ? () => showBeatmap(score) : null));
                         continue;
                     }
 
-                    flow.Add(new ScoreRow(score, s.PP, s.Weight, () => present(score))
+                    var row = new ScoreRow(score, s.PP, s.Weight, () => present(score))
                     {
-                        ContextMenuItems = menu(score),
+                        // Built when the menu opens (it looks up every profile), not for every row shown.
+                        CreateContextMenuItems = () => menu(score),
                         NoPerformanceReason = s.NoPerformanceReason,
-                    });
+                    };
+
+                    flow.Add(row);
+                    rows?.Add(row);
                 }
 
                 if (shown < scores.Length && step + 1 < expansion_steps.Length)
                 {
-                    flow.Add(new ShowMoreButton
+                    ShowMoreButton button = null!;
+
+                    flow.Add(button = new ShowMoreButton
                     {
                         Anchor = Anchor.TopCentre,
                         Origin = Anchor.TopCentre,
@@ -3106,7 +3651,9 @@ namespace osu.Game.LocalPriority
                         Action = () =>
                         {
                             expandedLists[listName] = step + 1;
-                            fill(flow, scores, emptyText, listName, step + 1);
+                            flow.Remove(button, false);
+                            Schedule(button.Dispose);
+                            addRows(flow, scores, listName, shown, step + 1, rows);
                         },
                     });
                 }
@@ -3127,12 +3674,16 @@ namespace osu.Game.LocalPriority
         private partial class SubsectionHeader : CompositeDrawable
         {
             private readonly string text;
-            private readonly int count;
+
+            /// <summary>
+            /// The counter next to the title (a dying profile's best scores count down as they go).
+            /// </summary>
+            public readonly BindableInt Count = new BindableInt();
 
             public SubsectionHeader(string text, int count)
             {
                 this.text = text;
-                this.count = count;
+                Count.Value = count;
 
                 AutoSizeAxes = Axes.Both;
                 Padding = new MarginPadding { Vertical = 10 };
@@ -3176,7 +3727,7 @@ namespace osu.Game.LocalPriority
                             {
                                 Anchor = Anchor.CentreLeft,
                                 Origin = Anchor.CentreLeft,
-                                Current = { Value = count },
+                                Current = { BindTarget = Count },
                             },
                         },
                     },
@@ -3199,7 +3750,11 @@ namespace osu.Game.LocalPriority
             private readonly double? pp;
             private readonly double? weight;
 
-            public MenuItem[]? ContextMenuItems { get; init; }
+            public Func<MenuItem[]>? CreateContextMenuItems { get; init; }
+
+            private Container rankBadge = null!;
+
+            public MenuItem[]? ContextMenuItems => CreateContextMenuItems?.Invoke();
 
             /// <summary>
             /// Set for scores that give no PP on the profile: the row is faded (its PP like an unranked play's PP on the results screen).
@@ -3231,6 +3786,18 @@ namespace osu.Game.LocalPriority
                 Height = row_height;
             }
 
+            private bool childrenUpdatedOnce;
+
+            // Out of view a row is neither drawn nor updated inside, except once right after it is made, so everything in it has finished
+            // loading (colours, texts) before it first scrolls into view.
+            protected override bool RequiresChildrenUpdate => !childrenUpdatedOnce || base.RequiresChildrenUpdate;
+
+            protected override void UpdateAfterChildren()
+            {
+                base.UpdateAfterChildren();
+                childrenUpdatedOnce = true;
+            }
+
             [BackgroundDependencyLoader]
             private void load(OverlayColourProvider colours, OsuColour osuColour)
             {
@@ -3238,176 +3805,187 @@ namespace osu.Game.LocalPriority
 
                 bool counts = NoPerformanceReason == null;
 
-                Child = new RowBackground
+                // Drawn into a cached framebuffer: the row's many pieces (background, rank, texts, mod icons, PP box) are drawn once and then
+                // shown as one picture every frame, until something in the row changes (hover, a refreshed date). Pixel snapping keeps the
+                // text sharp at any scroll position.
+                Child = new CachedDrawBuffer
                 {
-                    Children = new Drawable[]
+                    RelativeSizeAxes = Axes.Both,
+                    Child = new RowBackground
                     {
-                        new Container
+                        Children = new Drawable[]
                         {
-                            RelativeSizeAxes = Axes.Both,
-                            Alpha = counts ? 1 : non_counting_content_alpha,
-                            Padding = new MarginPadding { Left = 20, Right = performance_width },
-                            Children = new Drawable[]
+                            new Container
                             {
-                                new FillFlowContainer
+                                RelativeSizeAxes = Axes.Both,
+                                Alpha = counts ? 1 : non_counting_content_alpha,
+                                Padding = new MarginPadding { Left = 20, Right = performance_width },
+                                Children = new Drawable[]
                                 {
-                                    Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft,
-                                    AutoSizeAxes = Axes.Both,
-                                    Direction = FillDirection.Horizontal,
-                                    Spacing = new Vector2(10, 0),
-                                    Children = new Drawable[]
+                                    new FillFlowContainer
                                     {
-                                        new Container
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        AutoSizeAxes = Axes.Both,
+                                        Direction = FillDirection.Horizontal,
+                                        Spacing = new Vector2(10, 0),
+                                        Children = new Drawable[]
                                         {
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft,
-                                            Size = new Vector2(50, 20),
-                                            Child = new DrawableRank(score.Rank),
-                                        },
-                                        new FillFlowContainer
-                                        {
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft,
-                                            AutoSizeAxes = Axes.Both,
-                                            Direction = FillDirection.Vertical,
-                                            Spacing = new Vector2(0, 2),
-                                            Children = new Drawable[]
+                                            rankBadge = new Container
                                             {
-                                                new FillFlowContainer
+                                                Anchor = Anchor.CentreLeft,
+                                                Origin = Anchor.CentreLeft,
+                                                Size = new Vector2(50, 20),
+                                            },
+                                            new FillFlowContainer
+                                            {
+                                                Anchor = Anchor.CentreLeft,
+                                                Origin = Anchor.CentreLeft,
+                                                AutoSizeAxes = Axes.Both,
+                                                Direction = FillDirection.Vertical,
+                                                Spacing = new Vector2(0, 2),
+                                                Children = new Drawable[]
                                                 {
-                                                    AutoSizeAxes = Axes.Both,
-                                                    Direction = FillDirection.Horizontal,
-                                                    Children = beatmap != null
-                                                        ? new Drawable[]
-                                                        {
-                                                            new OsuSpriteText
-                                                            {
-                                                                Anchor = Anchor.BottomLeft,
-                                                                Origin = Anchor.BottomLeft,
-                                                                Text = new RomanisableString(beatmap.Metadata.TitleUnicode, beatmap.Metadata.Title),
-                                                                Font = OsuFont.GetFont(size: 14, weight: FontWeight.SemiBold, italics: true),
-                                                            },
-                                                            new OsuSpriteText
-                                                            {
-                                                                Anchor = Anchor.BottomLeft,
-                                                                Origin = Anchor.BottomLeft,
-                                                                Text = @" by ",
-                                                                Font = OsuFont.GetFont(size: 12, italics: true),
-                                                            },
-                                                            new OsuSpriteText
-                                                            {
-                                                                Anchor = Anchor.BottomLeft,
-                                                                Origin = Anchor.BottomLeft,
-                                                                Text = new RomanisableString(beatmap.Metadata.ArtistUnicode, beatmap.Metadata.Artist),
-                                                                Font = OsuFont.GetFont(size: 12, italics: true),
-                                                            },
-                                                        }
-                                                        : new Drawable[]
-                                                        {
-                                                            new OsuSpriteText
-                                                            {
-                                                                Text = @"(beatmap not found)",
-                                                                Font = OsuFont.GetFont(size: 14, weight: FontWeight.SemiBold, italics: true),
-                                                            },
-                                                        },
-                                                },
-                                                new FillFlowContainer
-                                                {
-                                                    AutoSizeAxes = Axes.Both,
-                                                    Direction = FillDirection.Horizontal,
-                                                    Spacing = new Vector2(15, 0),
-                                                    Children = new Drawable[]
+                                                    new FillFlowContainer
                                                     {
-                                                        new OsuSpriteText
+                                                        AutoSizeAxes = Axes.Both,
+                                                        Direction = FillDirection.Horizontal,
+                                                        Children = beatmap != null
+                                                            ? new Drawable[]
+                                                            {
+                                                                new OsuSpriteText
+                                                                {
+                                                                    Anchor = Anchor.BottomLeft,
+                                                                    Origin = Anchor.BottomLeft,
+                                                                    Text = new RomanisableString(beatmap.Metadata.TitleUnicode, beatmap.Metadata.Title),
+                                                                    Font = OsuFont.GetFont(size: 14, weight: FontWeight.SemiBold, italics: true),
+                                                                },
+                                                                new OsuSpriteText
+                                                                {
+                                                                    Anchor = Anchor.BottomLeft,
+                                                                    Origin = Anchor.BottomLeft,
+                                                                    Text = @" by ",
+                                                                    Font = OsuFont.GetFont(size: 12, italics: true),
+                                                                },
+                                                                new OsuSpriteText
+                                                                {
+                                                                    Anchor = Anchor.BottomLeft,
+                                                                    Origin = Anchor.BottomLeft,
+                                                                    Text = new RomanisableString(beatmap.Metadata.ArtistUnicode, beatmap.Metadata.Artist),
+                                                                    Font = OsuFont.GetFont(size: 12, italics: true),
+                                                                },
+                                                            }
+                                                            : new Drawable[]
+                                                            {
+                                                                new OsuSpriteText
+                                                                {
+                                                                    Text = @"(beatmap not found)",
+                                                                    Font = OsuFont.GetFont(size: 14, weight: FontWeight.SemiBold, italics: true),
+                                                                },
+                                                            },
+                                                    },
+                                                    new FillFlowContainer
+                                                    {
+                                                        AutoSizeAxes = Axes.Both,
+                                                        Direction = FillDirection.Horizontal,
+                                                        Spacing = new Vector2(15, 0),
+                                                        Children = new Drawable[]
                                                         {
-                                                            Text = beatmap?.DifficultyName ?? string.Empty,
-                                                            Font = OsuFont.GetFont(size: 12, weight: FontWeight.Regular),
-                                                            Colour = osuColour.Yellow,
-                                                        },
-                                                        new DrawableDate(score.Date, 12)
-                                                        {
-                                                            Colour = colours.Foreground1,
+                                                            new OsuSpriteText
+                                                            {
+                                                                Text = beatmap?.DifficultyName ?? string.Empty,
+                                                                Font = OsuFont.GetFont(size: 12, weight: FontWeight.Regular),
+                                                                Colour = osuColour.Yellow,
+                                                            },
+                                                            new DrawableDate(score.Date, 12)
+                                                            {
+                                                                Colour = colours.Foreground1,
+                                                            },
                                                         },
                                                     },
                                                 },
                                             },
                                         },
                                     },
-                                },
-                                new FillFlowContainer
-                                {
-                                    Anchor = Anchor.CentreRight,
-                                    Origin = Anchor.CentreRight,
-                                    AutoSizeAxes = Axes.X,
-                                    RelativeSizeAxes = Axes.Y,
-                                    Direction = FillDirection.Horizontal,
-                                    Spacing = new Vector2(15),
-                                    Children = new Drawable[]
+                                    new FillFlowContainer
                                     {
-                                        new Container
+                                        Anchor = Anchor.CentreRight,
+                                        Origin = Anchor.CentreRight,
+                                        AutoSizeAxes = Axes.X,
+                                        RelativeSizeAxes = Axes.Y,
+                                        Direction = FillDirection.Horizontal,
+                                        Spacing = new Vector2(15),
+                                        Children = new Drawable[]
                                         {
-                                            AutoSizeAxes = Axes.X,
-                                            RelativeSizeAxes = Axes.Y,
-                                            Padding = new MarginPadding { Horizontal = 10, Vertical = 5 },
-                                            Anchor = Anchor.CentreRight,
-                                            Origin = Anchor.CentreRight,
-                                            Child = createRightContent(osuColour),
-                                        },
-                                        new ModsDisplay(score.Mods)
-                                        {
-                                            Anchor = Anchor.CentreRight,
-                                            Origin = Anchor.CentreRight,
+                                            new Container
+                                            {
+                                                AutoSizeAxes = Axes.X,
+                                                RelativeSizeAxes = Axes.Y,
+                                                Padding = new MarginPadding { Horizontal = 10, Vertical = 5 },
+                                                Anchor = Anchor.CentreRight,
+                                                Origin = Anchor.CentreRight,
+                                                Child = createRightContent(osuColour),
+                                            },
+                                            new ModsDisplay(score.Mods)
+                                            {
+                                                Anchor = Anchor.CentreRight,
+                                                Origin = Anchor.CentreRight,
+                                            },
                                         },
                                     },
                                 },
                             },
-                        },
-                        new Container
-                        {
-                            RelativeSizeAxes = Axes.Y,
-                            Width = performance_width,
-                            Anchor = Anchor.CentreRight,
-                            Origin = Anchor.CentreRight,
-                            Children = new Drawable[]
+                            new Container
                             {
-                                new Box
+                                RelativeSizeAxes = Axes.Y,
+                                Width = performance_width,
+                                Anchor = Anchor.CentreRight,
+                                Origin = Anchor.CentreRight,
+                                Children = new Drawable[]
                                 {
-                                    Anchor = Anchor.TopRight,
-                                    Origin = Anchor.TopRight,
-                                    RelativeSizeAxes = Axes.Both,
-                                    Height = 0.5f,
-                                    Colour = colours.Background3,
-                                    Shear = new Vector2(-performance_background_shear, 0),
-                                    EdgeSmoothness = new Vector2(2, 0),
-                                },
-                                new Box
-                                {
-                                    Anchor = Anchor.TopRight,
-                                    Origin = Anchor.TopRight,
-                                    RelativeSizeAxes = Axes.Both,
-                                    RelativePositionAxes = Axes.Y,
-                                    Height = -0.5f,
-                                    Position = new Vector2(0, 1),
-                                    Colour = colours.Background3,
-                                    Shear = new Vector2(performance_background_shear, 0),
-                                    EdgeSmoothness = new Vector2(2, 0),
-                                },
-                                new Container
-                                {
-                                    RelativeSizeAxes = Axes.Both,
-                                    Padding = new MarginPadding { Vertical = 5, Left = 30, Right = 20 },
-                                    Child = createPerformance(colours).With(d =>
+                                    new Box
                                     {
-                                        d.Anchor = Anchor.Centre;
-                                        d.Origin = Anchor.Centre;
-                                        d.Alpha = counts ? 1 : non_counting_performance_alpha;
-                                    }),
+                                        Anchor = Anchor.TopRight,
+                                        Origin = Anchor.TopRight,
+                                        RelativeSizeAxes = Axes.Both,
+                                        Height = 0.5f,
+                                        Colour = colours.Background3,
+                                        Shear = new Vector2(-performance_background_shear, 0),
+                                        EdgeSmoothness = new Vector2(2, 0),
+                                    },
+                                    new Box
+                                    {
+                                        Anchor = Anchor.TopRight,
+                                        Origin = Anchor.TopRight,
+                                        RelativeSizeAxes = Axes.Both,
+                                        RelativePositionAxes = Axes.Y,
+                                        Height = -0.5f,
+                                        Position = new Vector2(0, 1),
+                                        Colour = colours.Background3,
+                                        Shear = new Vector2(performance_background_shear, 0),
+                                        EdgeSmoothness = new Vector2(2, 0),
+                                    },
+                                    new Container
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        Padding = new MarginPadding { Vertical = 5, Left = 30, Right = 20 },
+                                        Child = createPerformance(colours).With(d =>
+                                        {
+                                            d.Anchor = Anchor.Centre;
+                                            d.Origin = Anchor.Centre;
+                                            d.Alpha = counts ? 1 : non_counting_performance_alpha;
+                                        }),
+                                    },
                                 },
                             },
                         },
                     },
                 };
+
+                // The rank badge's triangles move all the time: drawn live on top, so the row's picture stays cached.
+                var liveLayer = new LiveLayer();
+                Add(liveLayer);
+                liveLayer.Track(rankBadge, new Container { Child = new DrawableRank(score.Rank) });
             }
 
             /// <summary>

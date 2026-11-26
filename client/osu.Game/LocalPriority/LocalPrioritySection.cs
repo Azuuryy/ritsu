@@ -156,13 +156,13 @@ namespace osu.Game.LocalPriority
         private readonly IBindable<int> revision = new Bindable<int>();
 
         /// <summary>
-        /// Ritsu: shows how far Sudden Death / Perfect Death profile numbering got (refreshed whenever the profiles change).
+        /// Ritsu: shows how far Sudden Death / Perfect Death / Speedrun profile numbering got (refreshed whenever the profiles change).
         /// </summary>
         private void updateDeathCountsButton()
         {
             var (suddenDeath, perfectDeath) = manager.GetDeathProfileCounts();
-            resetDeathCountsButton.Text = $@"Reset SD/PF profile count";
-            resetDeathCountsButton.Enabled.Value = suddenDeath > 0 || perfectDeath > 0;
+            resetDeathCountsButton.Text = $@"Reset SD/PF/SP profile count";
+            resetDeathCountsButton.Enabled.Value = suddenDeath > 0 || perfectDeath > 0 || manager.GetSpeedrunProfileCount() > 0;
         }
 
         protected override void LoadComplete()
@@ -288,8 +288,8 @@ namespace osu.Game.LocalPriority
                 },
                 resetDeathCountsButton = new SettingsButtonV2
                 {
-                    TooltipText = @"New Sudden Death / Perfect Death profiles are numbered by how many were ever created. This starts both back at ""SD Profile 1"" and ""PF Profile 1"".",
-                    Keywords = new[] { @"sudden", @"death", @"perfect", @"sd", @"pf", @"count", @"number", @"reset" },
+                    TooltipText = @"New Sudden Death / Perfect Death / Speedrun profiles are numbered by how many were ever created. This starts them back at ""SD Profile 1"", ""PF Profile 1"" and ""SP Profile 1"".",
+                    Keywords = new[] { @"sudden", @"death", @"perfect", @"speedrun", @"sd", @"pf", @"sp", @"count", @"number", @"reset" },
                     Action = () =>
                     {
                         manager.ResetDeathProfileCounts();
@@ -317,6 +317,12 @@ namespace osu.Game.LocalPriority
                 {
                     Caption = @"Delete profiles without asking WITH their scores",
                     Current = manager.DeleteWithScoresWithoutAsking,
+                }),
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = @"Extend SD/PF death timer to 1 minute",
+                    HintText = @"How long a failed Sudden Death / Perfect Death profile's page stays open before the profile is deleted. 30 seconds by default.",
+                    Current = manager.LongerLastLook,
                 }),
                 new SettingsItemV2(new FormCheckBox
                 {

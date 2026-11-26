@@ -338,7 +338,7 @@ namespace osu.Game
 
             CurrentLanguage.BindValueChanged(val => frameworkLocale.Value = val.NewValue.ToCultureCode());
 
-            // osu!local profiles live in "osu-local/" next to the database. They are loaded before the API is created,
+            // osu!local profiles live in "ritsu/local-profiles/" next to the database. They are loaded before the API is created,
             // so the game starts in the profile that was active when it was last closed.
             var localProfileStore = new LocalProfileStore(Storage);
             LocalPriorityPolicy.LocalProfilesUseOnlineAccount = false;

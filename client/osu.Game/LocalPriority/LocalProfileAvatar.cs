@@ -19,7 +19,7 @@ namespace osu.Game.LocalPriority
         private LargeTextureStore textures { get; set; } = null!;
 
         /// <summary>
-        /// The picture's file name inside "osu-local/avatars", or null for the default picture.
+        /// The picture's file name inside "ritsu/local-profiles/avatars", or null for the default picture.
         /// </summary>
         public string? AvatarFile
         {

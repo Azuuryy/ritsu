@@ -16,12 +16,12 @@ using SixLabors.ImageSharp.Processing;
 namespace osu.Game.LocalPriority
 {
     /// <summary>
-    /// Persists local profiles and their play statistics in "osu-local/" inside the (shared) osu! data folder.
+    /// Persists local profiles and their play statistics in "ritsu/local-profiles/" inside the (shared) osu! data folder.
     /// Nothing here is written to the realm database, so sharing the database with the official game stays safe.
     /// </summary>
     public class LocalProfileStore
     {
-        public const string DIRECTORY = @"osu-local";
+        public const string DIRECTORY = @"ritsu/local-profiles";
         public const string AVATAR_DIRECTORY = @"avatars";
 
         private const string profiles_file = DIRECTORY + @"/profiles.json";
@@ -98,7 +98,7 @@ namespace osu.Game.LocalPriority
         {
             lock (sync)
             {
-                return data.Profiles.Where(p => p.AutoSwitch?.Enabled == true && p.AutoSwitch.HasAnyCondition)
+                return data.Profiles.Where(p => p.AutoSwitch?.HasAnyCondition == true)
                            .Select(p => (p.Id, p.Name, p.AutoSwitch!.Clone()))
                            .ToArray();
             }
@@ -303,7 +303,7 @@ namespace osu.Game.LocalPriority
         public LocalProfile CreateProfile(string name, CountryCode country = CountryCode.Unknown, LocalDeathMode deathMode = LocalDeathMode.None) =>
             createProfile(name, country, deathMode, 0);
 
-        private LocalProfile createProfile(string name, CountryCode country, LocalDeathMode deathMode, int deathNumber)
+        private LocalProfile createProfile(string name, CountryCode country, LocalDeathMode deathMode, int deathNumber, LocalSpeedrun? speedrun = null)
         {
             LocalProfile profile;
 
@@ -326,6 +326,7 @@ namespace osu.Game.LocalPriority
                     Country = country,
                     Created = DateTimeOffset.Now,
                     DeathMode = deathMode,
+                    Speedrun = speedrun?.Clone(),
                 };
 
                 data.Profiles.Add(profile);
@@ -340,6 +341,9 @@ namespace osu.Game.LocalPriority
                         data.PerfectDeathProfilesCreated = Math.Max(data.PerfectDeathProfilesCreated + 1, deathNumber);
                         break;
                 }
+
+                if (speedrun != null)
+                    data.SpeedrunProfilesCreated = Math.Max(data.SpeedrunProfilesCreated + 1, deathNumber);
 
                 save();
                 profile = profile.Clone();
@@ -383,6 +387,65 @@ namespace osu.Game.LocalPriority
         }
 
         /// <summary>
+        /// A Speedrun profile with this goal, numbered like Sudden Death / Perfect Death ones by how many were ever created ("SP Profile 4");
+        /// its timer starts once it is active.
+        /// </summary>
+        public LocalProfile CreateSpeedrunProfile(LocalSpeedrun goal)
+        {
+            string name;
+            int n;
+
+            lock (sync)
+            {
+                n = data.SpeedrunProfilesCreated + 1;
+
+                while (data.Profiles.Any(p => string.Equals(p.Name, $@"SP Profile {n}", StringComparison.OrdinalIgnoreCase)))
+                    n++;
+                name = $@"SP Profile {n}";
+            }
+
+            var run = goal.Clone();
+            run.Seconds = 0;
+            run.Completed = null;
+
+            return createProfile(name, CountryCode.Unknown, LocalDeathMode.None, n, run);
+        }
+
+        /// <summary>
+        /// A copy of a Speedrun profile's goal and time, or null for other profiles.
+        /// </summary>
+        public LocalSpeedrun? GetSpeedrun(Guid id)
+        {
+            lock (sync)
+                return data.Profiles.FirstOrDefault(p => p.Id == id)?.Speedrun?.Clone();
+        }
+
+        /// <summary>
+        /// Saves a running Speedrun profile's time (<paramref name="completed"/>: the goal was reached and the time is final).
+        /// Doesn't raise <see cref="Changed"/>: the time is saved every minute while the run goes on, which shouldn't recalculate anything.
+        /// </summary>
+        public void SetSpeedrunTime(Guid id, double seconds, bool completed)
+        {
+            lock (sync)
+            {
+                var profile = data.Profiles.FirstOrDefault(p => p.Id == id);
+
+                if (profile?.Speedrun == null || profile.Speedrun.Completed != null)
+                    return;
+
+                // Replaced, not changed in place: a save in progress may be writing the old one.
+                var run = profile.Speedrun.Clone();
+                run.Seconds = Math.Round(seconds, 2);
+
+                if (completed)
+                    run.Completed = DateTimeOffset.Now;
+
+                profile.Speedrun = run;
+                save();
+            }
+        }
+
+        /// <summary>
         /// How many Sudden Death / Perfect Death profiles were created (they number the next ones).
         /// </summary>
         public (int SuddenDeath, int PerfectDeath) GetDeathProfileCounts()
@@ -392,17 +455,27 @@ namespace osu.Game.LocalPriority
         }
 
         /// <summary>
-        /// Settings → Ritsu: start numbering Sudden Death / Perfect Death profiles from 1 again.
+        /// How many Speedrun profiles were created (they number the next ones).
+        /// </summary>
+        public int GetSpeedrunProfileCount()
+        {
+            lock (sync)
+                return data.SpeedrunProfilesCreated;
+        }
+
+        /// <summary>
+        /// Settings → Ritsu: start numbering Sudden Death / Perfect Death / Speedrun profiles from 1 again.
         /// </summary>
         public void ResetDeathProfileCounts()
         {
             lock (sync)
             {
-                if (data.SuddenDeathProfilesCreated == 0 && data.PerfectDeathProfilesCreated == 0)
+                if (data.SuddenDeathProfilesCreated == 0 && data.PerfectDeathProfilesCreated == 0 && data.SpeedrunProfilesCreated == 0)
                     return;
 
                 data.SuddenDeathProfilesCreated = 0;
                 data.PerfectDeathProfilesCreated = 0;
+                data.SpeedrunProfilesCreated = 0;
                 save();
             }
         }
@@ -702,7 +775,7 @@ namespace osu.Game.LocalPriority
         private LocalUnfinishedPlays? unfinishedPlays;
 
         /// <summary>
-        /// Failed and quit plays from the last day, for the profiles' Recent Plays (osu-local/unfinished-plays.json, read when first needed).
+        /// Failed and quit plays from the last day, for the profiles' Recent Plays (ritsu/local-profiles/unfinished-plays.json, read when first needed).
         /// </summary>
         public LocalUnfinishedPlays UnfinishedPlays
         {
@@ -1119,6 +1192,11 @@ namespace osu.Game.LocalPriority
             public int PerfectDeathProfilesCreated { get; set; }
 
             /// <summary>
+            /// How many Speedrun profiles were ever created (deleted ones included), numbering the next ones.
+            /// </summary>
+            public int SpeedrunProfilesCreated { get; set; }
+
+            /// <summary>
             /// Settings → Ritsu: local profiles may use the signed-in online account for beatmap / tag / leaderboard lookups.
             /// </summary>
             public bool LocalProfilesUseOnlineAccount { get; set; }
@@ -1154,7 +1232,7 @@ namespace osu.Game.LocalPriority
         public CountryCode Country { get; set; }
 
         /// <summary>
-        /// File name inside "osu-local/avatars", or null for the default picture.
+        /// File name inside "ritsu/local-profiles/avatars", or null for the default picture.
         /// </summary>
         public string? AvatarFile { get; set; }
 
@@ -1217,6 +1295,11 @@ namespace osu.Game.LocalPriority
         /// </summary>
         public bool Died { get; set; }
 
+        /// <summary>
+        /// A Speedrun profile's goal and time (see <see cref="LocalSpeedrun"/>), or null for other profiles.
+        /// </summary>
+        public LocalSpeedrun? Speedrun { get; set; }
+
         public APIUser ToUser() => new APIUser
         {
             Id = UserId,
@@ -1246,6 +1329,7 @@ namespace osu.Game.LocalPriority
             SectionOrder = new List<string>(SectionOrder ?? new List<string>()),
             DeathMode = DeathMode,
             Died = Died,
+            Speedrun = Speedrun?.Clone(),
         };
 
         public override string ToString() => Name;
@@ -1292,7 +1376,7 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Shows a second "new profile" button that first opens mod select, to create a profile with mod rules.
         /// </summary>
-        public bool ProfilesWithModRules { get; set; }
+        public bool ProfilesWithModRules { get; set; } = true;
 
         /// <summary>
         /// Settings → Profile Colors: tint every profile page (except Sudden Death / Perfect Death ones) with <see cref="ProfileColour"/>.
@@ -1315,6 +1399,11 @@ namespace osu.Game.LocalPriority
         public bool AutoSwitchNotifications { get; set; } = true;
 
         /// <summary>
+        /// A dead Sudden Death / Perfect Death profile's page stays open for a minute instead of 30 seconds before the profile is deleted.
+        /// </summary>
+        public bool LongerLastLook { get; set; }
+
+        /// <summary>
         /// Check auto-switch rules again when a beatmap is started from song select.
         /// </summary>
         public bool SwitchOnBeatmapStart { get; set; } = true;
@@ -1327,7 +1416,7 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Plays on beatmaps marked LOCAL (changed in the editor) can give PP. When off, profiles leave them out entirely.
         /// </summary>
-        public bool LocalMapsGivePerformance { get; set; } = true;
+        public bool LocalMapsGivePerformance { get; set; }
 
         /// <summary>
         /// Every local profile counts every beatmap and mod as ranked.
@@ -1337,7 +1426,7 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Scores that don't count for PP are listed (faded) among the best scores instead of being left out.
         /// </summary>
-        public bool ShowNonCountingScores { get; set; }
+        public bool ShowNonCountingScores { get; set; } = true;
 
         public LocalProfileOptions Clone() => (LocalProfileOptions)MemberwiseClone();
 
@@ -1350,6 +1439,7 @@ namespace osu.Game.LocalPriority
                                                           && other.ProfileColour == ProfileColour
                                                           && other.LocalMapsGivePerformance == LocalMapsGivePerformance
                                                           && other.AutoSwitchNotifications == AutoSwitchNotifications
+                                                          && other.LongerLastLook == LongerLastLook
                                                           && other.SwitchOnBeatmapStart == SwitchOnBeatmapStart
                                                           && other.ShowTotalAccuracy == ShowTotalAccuracy
                                                           && other.CountEverythingAsRanked == CountEverythingAsRanked
@@ -1466,7 +1556,18 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Real seconds spent playing: how far into the map each attempt got (first to last object), adjusted for rate-changing mods.
         /// </summary>
+        [JsonIgnore]
         public double PlayTimeSeconds { get; set; }
+
+        /// <summary>
+        /// <see cref="PlayTimeSeconds"/> as saved: tenths of a second are plenty (the running total in memory stays exact).
+        /// </summary>
+        [JsonProperty(nameof(PlayTimeSeconds))]
+        private double savedPlayTimeSeconds
+        {
+            get => Math.Round(PlayTimeSeconds, 1);
+            set => PlayTimeSeconds = value;
+        }
 
         public Dictionary<HitResult, long> Hits { get; set; } = new Dictionary<HitResult, long>();
 

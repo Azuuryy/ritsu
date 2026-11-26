@@ -23,7 +23,6 @@ namespace osu.Game.LocalPriority
         private readonly LocalProfile profile;
         private readonly LocalProfileManager manager;
 
-        private OsuCheckbox enabled = null!;
         private OsuTextBox tags = null!;
         private OsuTextBox stars = null!;
         private OsuTextBox bpm = null!;
@@ -74,22 +73,16 @@ namespace osu.Game.LocalPriority
                         RelativeSizeAxes = Axes.X,
                         AutoSizeAxes = Axes.Y,
                         Alpha = 0.75f,
-                        Text = @"Selecting a beatmap (and mods) in song select that matches every filled-in condition makes this profile active. "
-                               + @"On beatmaps no profile wants, the profile from before comes back. "
-                               + @"Separate several values with commas, any of them counts (""180, 190"" = 180 or 190 BPM). "
-                               + @"Numbers: ""6"", ""=6"", "">5"", "">=5"", ""<7"", ""<=7"", ""5-7"", or both sides like "">5 <7"". Decimals use a dot.",
-                    },
-                    enabled = new OsuCheckbox
-                    {
-                        RelativeSizeAxes = Axes.X,
-                        LabelText = @"Switch to this profile automatically",
-                        Current = { Value = profile.AutoSwitch?.Enabled ?? true },
+                        Text = @"Whenever all of those rules are true - will automatically switch to this profile with a small delay in carousel and instantly when entering matching for rules beatmap (configurable in settings). "
+                               + @"Profile will automatically switch back to previous one active when no rules are true."
+                               + "\n"
+                               + @"You can separate values with commas, profile will switch when either of them are true (""180, 190"" = 180 OR 190 BPM).",
                     },
                     field(@"Tags (any of them; local, voted or mapper tags)", tags = box(string.Join(@", ", rules.Tags), @"skillset/jumps, jumps/cross-screen")),
-                    field(@"Star rating", stars = box(rules.Stars, @"e.g. 5-7 or >6.5")),
-                    field(@"BPM", bpm = box(rules.Bpm, @"e.g. 180, 190 or >=200")),
-                    field(@"Length in seconds", length = box(rules.Length, @"e.g. <90 or 60-240")),
-                    field(@"Mapper (part of the name; any of them)", mapper = box(rules.Mapper, @"e.g. Sotarks, Monstrata")),
+                    field(@"Star rating", stars = box(rules.Stars, @"5-7 or >6.5")),
+                    field(@"BPM", bpm = box(rules.Bpm, @"180, 190 or >=200")),
+                    field(@"Length in seconds", length = box(rules.Length, @"<90 or 60-240")),
+                    field(@"Mapper (part of the name; any of them)", mapper = box(rules.Mapper, @"Sotarks, Monstrata")),
                     field(@"Title, artist or difficulty (part of it; any of them)", name = box(rules.Name, string.Empty)),
                     field(@"Selected mods", modsButton = new RoundedButton
                     {
@@ -112,13 +105,13 @@ namespace osu.Game.LocalPriority
                         {
                             new RoundedButton
                             {
-                                Width = 170,
+                                Width = 176,
                                 Text = @"Save",
                                 Action = save,
                             },
                             new RoundedButton
                             {
-                                Width = 170,
+                                Width = 176,
                                 Text = @"Remove rules",
                                 BackgroundColour = colours.Red3,
                                 Action = () =>
@@ -207,7 +200,6 @@ namespace osu.Game.LocalPriority
 
             var rules = new LocalAutoSwitchRules
             {
-                Enabled = enabled.Current.Value,
                 Tags = tags.Text.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(LocalBeatmapTags.Normalise).Where(t => t.Length > 0).Distinct().ToList(),
                 Mapper = string.Join(@", ", LocalAutoSwitchCondition.Split(mapper.Text)),
                 Name = string.Join(@", ", LocalAutoSwitchCondition.Split(name.Text)),

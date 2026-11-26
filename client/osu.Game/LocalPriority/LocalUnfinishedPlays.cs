@@ -17,7 +17,7 @@ namespace osu.Game.LocalPriority
 {
     /// <summary>
     /// Failed and quit plays of local profiles, shown in the profile's Recent Plays like the website shows them (rank F, no PP, not clickable).
-    /// They are never saved as scores: they are kept in osu-local/unfinished-plays.json and forgotten after <see cref="KEEP_FOR"/>.
+    /// They are never saved as scores: they are kept in ritsu/local-profiles/unfinished-plays.json and forgotten after <see cref="KEEP_FOR"/>.
     /// </summary>
     public class LocalUnfinishedPlays
     {
@@ -127,7 +127,17 @@ namespace osu.Game.LocalPriority
         public List<APIMod> Mods { get; set; } = new List<APIMod>();
         public Dictionary<HitResult, int> Statistics { get; set; } = new Dictionary<HitResult, int>();
         public long TotalScore { get; set; }
-        public double Accuracy { get; set; }
+        private double accuracy;
+
+        /// <summary>
+        /// Kept to 5 decimal places (0.12345 = 12.345%), more than any row shows.
+        /// </summary>
+        public double Accuracy
+        {
+            get => accuracy;
+            set => accuracy = Math.Round(value, 5);
+        }
+
         public int MaxCombo { get; set; }
         public DateTimeOffset Date { get; set; }
 

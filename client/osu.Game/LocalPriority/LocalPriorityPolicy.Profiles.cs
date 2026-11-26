@@ -132,7 +132,7 @@ namespace osu.Game.LocalPriority
         /// <summary>
         /// Settings → Ritsu "Count LOCAL maps towards PP": beatmaps changed in the editor can give PP (when counted as ranked).
         /// </summary>
-        public static bool LocalMapsGivePerformance { get; internal set; } = true;
+        public static bool LocalMapsGivePerformance { get; internal set; }
 
         /// <summary>
         /// Whether a beatmap status gives PP, taking <see cref="CountAllAsRanked"/> and <see cref="LocalMapsGivePerformance"/> into account.
@@ -172,40 +172,135 @@ namespace osu.Game.LocalPriority
 
         #region Estimated global rank
 
-        // PP-to-rank curve as used by Ritsu (copied there from Modosu by Azuuryy, derived from MOsu by p-720, GPL-3.0),
-        // attributed to a September 2026 sample of 10,000 osu! profiles. Standard (osu!) mode only. Offline estimate, not an official rank.
-        private static readonly (double PP, int Rank)[] rank_curve =
+        // PP-to-rank curves from the osu! performance data dumps of 2026-11-05 (every player of the top 10,000 and 10,000 random
+        // players per ruleset), highest PP first. Offline estimate, not an official rank.
+        private static readonly (double PP, int Rank)[] osu_rank_curve =
         {
-            (2.11, 2852394), (45.65, 2142296), (139.97, 1750230), (375.42, 1336787),
-            (721.22, 1020639), (1148.03, 779960), (1621.4, 595532), (2125.51, 454565),
-            (2708.02, 335739), (3302.75, 247883), (3978.95, 177279), (4665.01, 126882),
-            (5403.43, 87234), (6164.53, 58191), (6911.02, 39304), (7677.87, 26024),
-            (8519.1, 16828), (9518.04, 9896), (10741.3, 4951), (11762, 2910),
-            (13010.5, 1549), (15002.6, 553), (17051.7, 211), (18305.4, 120),
+            (32269, 1), (30616.9, 2), (30149.5, 3), (27135.2, 5), (26407.6, 7),
+            (24119.4, 11), (23160.3, 16), (21742, 25), (21135.8, 37), (20148.7, 55),
+            (19274.5, 82), (18506.6, 122), (17458.8, 182), (16634.1, 272), (15796.3, 406),
+            (14939.8, 606), (14130.9, 905), (13343.1, 1350), (12569.6, 2015), (11796.6, 3008),
+            (11007.9, 4489), (10292.4, 6700), (9604.45, 10000), (8360.95, 20000), (7515.49, 30000),
+            (6569.26, 50000), (6168.49, 60000), (5652.95, 80000), (5058.52, 110000), (4419.15, 150000),
+            (3766.61, 210000), (3161.53, 280000), (2567.87, 380000), (1975.74, 520000), (1443.37, 700000),
+            (930.88, 950000), (508.4, 1280000), (198.46, 1740000), (43.83, 2360000), (2.11, 3192119),
+        };
+
+        private static readonly (double PP, int Rank)[] taiko_rank_curve =
+        {
+            (28614.7, 1), (27080.2, 2), (24317.2, 3), (24013.2, 5), (23198, 7),
+            (22489.5, 11), (21666.7, 16), (20922, 25), (20391.2, 37), (19757.6, 55),
+            (18587.1, 82), (17735.4, 122), (16732.9, 182), (15607.2, 272), (14360.6, 406),
+            (13135.7, 606), (11915.3, 905), (10721, 1350), (9360.02, 2015), (7984.31, 3008),
+            (6629.55, 4489), (5255.1, 6700), (3937.78, 10000), (3270.9, 12000), (2629.12, 15000),
+            (2202.77, 18000), (1857.7, 21000), (1397.44, 26000), (1121, 31000), (842.77, 37000),
+            (593.62, 45000), (395.63, 55000), (263.95, 66000), (170.72, 80000), (110.03, 96000),
+            (68.63, 116000), (42.65, 140000), (25.85, 169000), (14.67, 205000), (7.91, 247000),
+            (3.79, 298000), (2.08, 360246),
+        };
+
+        private static readonly (double PP, int Rank)[] catch_rank_curve =
+        {
+            (28004.3, 1), (27197.1, 2), (27079.3, 3), (26275.5, 5), (25204.9, 7),
+            (24319.1, 11), (22975.6, 16), (21836.4, 25), (21072.6, 37), (20250.4, 55),
+            (19343.2, 82), (18419.1, 122), (16880.1, 182), (15059.7, 272), (13287, 406),
+            (11374.4, 606), (9462.41, 905), (7835.87, 1350), (6135.53, 2015), (4673.21, 3008),
+            (3534.09, 4489), (2632.3, 6700), (1964.87, 10000), (1644.88, 12000), (1405.63, 14000),
+            (1149.84, 17000), (892.29, 21000), (685.23, 25000), (520.73, 29000), (355.6, 35000),
+            (225.83, 42000), (141.85, 50000), (89.83, 60000), (57.86, 72000), (38.12, 87000),
+            (25.85, 104000), (17.79, 124000), (12.28, 149000), (8.51, 178000), (5.71, 213000),
+            (3.49, 255000), (2.08, 304984),
+        };
+
+        private static readonly (double PP, int Rank)[] mania_rank_curve =
+        {
+            (30419.3, 1), (29184.6, 2), (29117.4, 3), (27723.2, 5), (27400.2, 7),
+            (26927.6, 11), (26384.2, 16), (25285.6, 25), (24942.8, 37), (23869.7, 55),
+            (22649.3, 82), (21407.7, 122), (20071.5, 182), (18583.9, 272), (17354.1, 406),
+            (16435.9, 606), (15539.5, 905), (14559.2, 1350), (13505.3, 2015), (12387.1, 3008),
+            (11252, 4489), (10152.3, 6700), (9035.01, 10000), (8168.33, 13000), (7611.9, 16000),
+            (6821.64, 21000), (6033.29, 27000), (5431.09, 34000), (4795.08, 44000), (4227.98, 56000),
+            (3662.59, 71000), (3079.73, 91000), (2539.8, 116000), (1976.19, 149000), (1542.07, 190000),
+            (1115.49, 243000), (730.4, 310000), (413.19, 396000), (170.47, 507000), (48.65, 647000),
+            (9.61, 827000), (2.08, 1057404),
+        };
+
+        private static (double PP, int Rank)[]? rankCurve(string ruleset) => ruleset switch
+        {
+            @"osu" => osu_rank_curve,
+            @"taiko" => taiko_rank_curve,
+            @"fruits" => catch_rank_curve,
+            @"mania" => mania_rank_curve,
+            _ => null,
         };
 
         /// <summary>
-        /// Estimated global rank for a total PP value, by linear interpolation along a sampled PP-to-rank curve.
+        /// Whether global ranks are estimated for this ruleset (the four built-in ones).
         /// </summary>
-        public static int EstimateGlobalRank(double pp)
-        {
-            if (pp <= rank_curve[0].PP)
-                return rank_curve[0].Rank;
-            if (pp >= rank_curve[^1].PP)
-                return rank_curve[^1].Rank;
+        public static bool HasRankEstimate(string ruleset) => rankCurve(ruleset) != null;
 
-            for (int i = 1; i < rank_curve.Length; i++)
+        /// <summary>
+        /// Estimated global rank for a total PP value, or null for a ruleset without a curve.
+        /// Interpolates ln(rank) linearly between the two nearest samples; more PP than the best sample is #1.
+        /// </summary>
+        public static int? EstimateGlobalRank(string ruleset, double pp)
+        {
+            if (rankCurve(ruleset) is not { } curve)
+                return null;
+
+            if (pp >= curve[0].PP)
+                return 1;
+
+            for (int i = 1; i < curve.Length; i++)
             {
-                if (pp > rank_curve[i].PP)
+                if (pp < curve[i].PP)
                     continue;
 
-                var previous = rank_curve[i - 1];
-                var next = rank_curve[i];
-                double progress = (pp - previous.PP) / (next.PP - previous.PP);
-                return (int)Math.Round(previous.Rank + (next.Rank - previous.Rank) * progress);
+                var better = curve[i - 1];
+                var worse = curve[i];
+                double progress = (pp - worse.PP) / (better.PP - worse.PP);
+                return (int)Math.Round(Math.Exp(Math.Log(worse.Rank) + (Math.Log(better.Rank) - Math.Log(worse.Rank)) * progress));
             }
 
-            return rank_curve[^1].Rank;
+            return curve[^1].Rank;
+        }
+
+        /// <summary>
+        /// The least whole PP whose <see cref="EstimateGlobalRank"/> is <paramref name="rank"/> or better (the inverse of the estimate),
+        /// or null for a ruleset without a curve.
+        /// </summary>
+        public static double? EstimatePPForRank(string ruleset, int rank)
+        {
+            if (rankCurve(ruleset) is not { } curve)
+                return null;
+
+            rank = Math.Max(1, rank);
+
+            // Any PP at all gets the lowest estimated rank.
+            if (rank >= curve[^1].Rank)
+                return 1;
+
+            int i = 0;
+            while (curve[i].Rank < rank)
+                i++;
+
+            double pp = curve[i].PP;
+
+            if (i > 0 && curve[i].Rank > rank)
+            {
+                var better = curve[i - 1];
+                var worse = curve[i];
+                pp = worse.PP + (better.PP - worse.PP) * (Math.Log(worse.Rank) - Math.Log(rank)) / (Math.Log(worse.Rank) - Math.Log(better.Rank));
+            }
+
+            // The estimate rounds the rank, so settle on the first whole PP that really gets there.
+            pp = Math.Max(Math.Ceiling(pp), 1);
+            while (pp > 1 && EstimateGlobalRank(ruleset, pp - 1) <= rank)
+                pp--;
+            while (EstimateGlobalRank(ruleset, pp) > rank)
+                pp++;
+
+            return pp;
         }
 
         #endregion

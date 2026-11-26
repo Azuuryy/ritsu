@@ -40,8 +40,6 @@ namespace osu.Game.LocalPriority
     /// </summary>
     public class LocalAutoSwitchRules
     {
-        public bool Enabled { get; set; } = true;
-
         /// <summary>
         /// The beatmap needs at least one of these tags (local tags, voted tags or the mapper's tags), e.g. "skillset/jumps".
         /// </summary>
@@ -126,7 +124,7 @@ namespace osu.Game.LocalPriority
         /// <param name="ruleset">The current ruleset, to read the rule's mods with (only needed for rules with mods).</param>
         public bool Matches(BeatmapInfo beatmap, IReadOnlyList<Mod> selectedMods, Ruleset? ruleset)
         {
-            if (!Enabled || !HasAnyCondition)
+            if (!HasAnyCondition)
                 return false;
 
             if (Mods.Count > 0 && !modsMatch(selectedMods, ruleset))

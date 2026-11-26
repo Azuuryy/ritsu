@@ -62,6 +62,8 @@ namespace osu.Game.LocalPriority
                     var before = toUserStatistics(ppBefore, tracker.Ruleset);
                     var after = toUserStatistics(ppAfter, tracker.Ruleset);
 
+                    CheckSpeedrunGoal(tracker.ProfileId, tracker.Ruleset, ppAfter);
+
                     // Plays that give no PP (unranked mods, unranked maps, or simply not a new top play) change nothing: show nothing.
                     if (after.PP == before.PP && after.GlobalRank == before.GlobalRank)
                         return;
@@ -146,6 +148,9 @@ namespace osu.Game.LocalPriority
 
                 var after = await calculateUserStatistics(current, ruleset).ConfigureAwait(false);
 
+                if (after != null)
+                    CheckSpeedrunGoal(current.Id, ruleset, (double)(after.PP ?? 0));
+
                 if (after == null || (after.PP == before.PP && after.GlobalRank == before.GlobalRank))
                     return;
 
@@ -179,6 +184,8 @@ namespace osu.Game.LocalPriority
 
                 if (oldStatistics == null || newStatistics == null)
                     return;
+
+                CheckSpeedrunGoal(after.Id, ruleset, (double)(newStatistics.PP ?? 0));
 
                 if (oldStatistics.PP == newStatistics.PP && oldStatistics.GlobalRank == newStatistics.GlobalRank)
                     return;
@@ -214,8 +221,8 @@ namespace osu.Game.LocalPriority
         private static UserStatistics toUserStatistics(double pp, RulesetInfo ruleset) => new UserStatistics
         {
             PP = (decimal)pp,
-            // Same estimate as the profile page: osu! standard only, and only once there is any PP.
-            GlobalRank = ruleset.ShortName == @"osu" && pp > 0 ? LocalPriorityPolicy.EstimateGlobalRank(pp) : null,
+            // Same estimate as the profile page, only once there is any PP.
+            GlobalRank = pp > 0 ? LocalPriorityPolicy.EstimateGlobalRank(ruleset.ShortName, pp) : null,
         };
     }
 

@@ -35,7 +35,7 @@ namespace osu.Game.LocalPriority
         public IReadOnlyList<(string BeatmapHash, double PP)> BestPerformance { get; init; } = Array.Empty<(string, double)>();
 
         /// <summary>
-        /// Estimated online global rank for this PP (osu! standard only), or null.
+        /// Estimated online global rank for this PP, or null.
         /// </summary>
         public int? EstimatedGlobalRank { get; init; }
         public double Accuracy { get; init; }
@@ -595,7 +595,7 @@ namespace osu.Game.LocalPriority
                 History = history,
                 PP = totalPP,
                 BestPerformance = bestPerformance,
-                EstimatedGlobalRank = ruleset.ShortName == @"osu" && best.Length > 0 ? LocalPriorityPolicy.EstimateGlobalRank(totalPP) : null,
+                EstimatedGlobalRank = best.Length > 0 ? LocalPriorityPolicy.EstimateGlobalRank(ruleset.ShortName, totalPP) : null,
                 Accuracy = accuracy,
                 TotalAccuracy = options.ShowTotalAccuracy ? calculateTotalAccuracy(plays, ruleset) : null,
                 Plays = plays,
@@ -722,6 +722,10 @@ namespace osu.Game.LocalPriority
 
             try
             {
+                // A detached score builds new mod instances on every read of its mods (the difficulty key, the difficulty and the
+                // PP calculators read them many times): build them once.
+                score.Mods = score.Mods;
+
                 var ruleset = score.Ruleset.CreateInstance();
                 var calculator = ruleset.CreatePerformanceCalculator();
 

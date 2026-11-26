@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
+
 using System;
 using System.Linq;
 using NUnit.Framework;
-using osu.Game.Tests.Resources;
 using osu.Game.Database;
+using osu.Game.Tests.Resources;
 using osu.Framework.Extensions;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Effects;
@@ -49,18 +50,19 @@ namespace osu.Game.Tests.Visual.Navigation
             AddStep("close Torii briefing", () => { foreach (var o in Game.ChildrenOfType<osu.Game.Overlays.ToriiBriefing.ToriiBriefingOverlay>()) o.Hide(); });
         }
 
-        private float pageGrayscale() => overlay.ChildrenOfType<BufferedContainer>().First(b => b.ChildrenOfType<osu.Framework.Graphics.Cursor.PopoverContainer>().Any()).GrayscaleStrength;
+        // The page is only inside the grey-fading buffer during a last look (0002 optimisation pass); otherwise it is drawn in full colour.
+        private float pageGrayscale() => overlay.ChildrenOfType<BufferedContainer>().FirstOrDefault(b => b.ChildrenOfType<osu.Framework.Graphics.Cursor.PopoverContainer>().Any())?.GrayscaleStrength ?? 0;
 
         private OsuSpriteText countdownSprite() => overlay.ChildrenOfType<OsuSpriteText>()
-                                                         .First(t => System.Text.RegularExpressions.Regex.IsMatch(t.Text.ToString(), @"^\d:\d\d:\d\d$"));
+                                                         .First(t => System.Text.RegularExpressions.Regex.IsMatch(t.Text.ToString(), @"^\d\d:\d\d$"));
 
         private bool nameGlowGone() => !overlay.ChildrenOfType<BufferedContainer>().Any(b => b.Children.OfType<OsuSpriteText>().Any());
 
         private float countdownScale() => overlay.ChildrenOfType<OsuSpriteText>()
-                                                  .First(t => System.Text.RegularExpressions.Regex.IsMatch(t.Text.ToString(), @"^\d:\d\d:\d\d$")).Scale.X;
+                                                  .First(t => System.Text.RegularExpressions.Regex.IsMatch(t.Text.ToString(), @"^\d\d:\d\d$")).Scale.X;
 
         private string? countdownText() => overlay.ChildrenOfType<OsuSpriteText>()
-                                                  .FirstOrDefault(t => t.Alpha > 0 && System.Text.RegularExpressions.Regex.IsMatch(t.Text.ToString(), @"^\d:\d\d:\d\d$"))?.Text.ToString();
+                                                  .FirstOrDefault(t => t.Alpha > 0 && System.Text.RegularExpressions.Regex.IsMatch(t.Text.ToString(), @"^\d\d:\d\d$"))?.Text.ToString();
 
         [Test]
         public void TestDeathProfileNumbering()
@@ -182,7 +184,7 @@ namespace osu.Game.Tests.Visual.Navigation
             AddAssert("still in gameplay below", () => Game.ScreenStack.CurrentScreen is Player);
             AddWaitStep("wait 2 seconds", 10);
             AddAssert("no pulse before the last 3 seconds", () => countdownScale(), () => Is.EqualTo(1));
-            AddUntilStep("countdown shown", () => countdownText(), () => Does.Match(@"^(1:00:00|0:5\d:\d\d)$"));
+            AddUntilStep("countdown shown", () => countdownText(), () => Does.Match(@"^(30:00|2\d:\d\d)$"));
             AddUntilStep("scores shown", () => overlay.ChildrenOfType<osu.Game.Overlays.Profile.ProfileSection>().Any(s => s.Identifier == "scores"));
             AddUntilStep("edge glows red", () => overlay.EdgeEffect.Colour.SRGB.R > 0.9f && overlay.EdgeEffect.Colour.SRGB.G < 0.5f && overlay.EdgeEffect.Colour.Linear.A > 0.45f);
             AddAssert("no glow on the name", nameGlowGone);
@@ -191,7 +193,7 @@ namespace osu.Game.Tests.Visual.Navigation
             AddStep("note how grey the page is", () => grayscaleBefore = pageGrayscale());
             AddAssert("page started fading to grey", () => grayscaleBefore, () => Is.GreaterThan(0).And.LessThan(0.2f));
             AddWaitStep("wait 2 seconds", 10);
-            AddAssert("still fading, slowly", () => pageGrayscale(), () => Is.GreaterThan(grayscaleBefore).And.LessThan(0.25f));
+            AddAssert("still fading, slowly", () => pageGrayscale(), () => Is.GreaterThan(grayscaleBefore).And.LessThan(0.4f));
             AddStep("close profile page", () => overlay.Hide());
             AddUntilStep("back at song select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
             AddUntilStep("profile deleted", () => manager.Store.GetProfile(profile.Id), () => Is.Null);
@@ -206,14 +208,17 @@ namespace osu.Game.Tests.Visual.Navigation
             AddStep("die", () => manager.BeginProfileDeath(profile.UserId));
             AddUntilStep("profile page opens", () => overlay.State.Value == Visibility.Visible);
             AddUntilStep("edge glows golden", () => overlay.EdgeEffect.Colour.SRGB.R > 0.9f && overlay.EdgeEffect.Colour.SRGB.G > 0.6f && overlay.EdgeEffect.Colour.SRGB.B < 0.5f && overlay.EdgeEffect.Colour.Linear.A > 0.45f);
-            AddWaitStep("wait 50 seconds", 250);
+            AddWaitStep("wait 20 seconds", 100);
+            AddUntilStep("down to 4 seconds", () => countdownText(), () => Does.Match(@"^0[0-4]:\d\d$"));
+            AddAssert("no ticking before the last 3 seconds", () => countdownSounds(), () => Is.EqualTo(0));
             AddUntilStep("pulses in the last 3 seconds", () => countdownScale() > 1.01f);
+            AddAssert("the final sound plays", () => countdownSounds(), () => Is.GreaterThan(0));
             AddAssert("pulse is 6% at most", () => countdownScale(), () => Is.LessThanOrEqualTo(1.0601f));
             AddAssert("mostly grey near the end", () => pageGrayscale(), () => Is.GreaterThan(0.85f));
             AddAssert("edge glow mostly grey too", () => overlay.EdgeEffect.Colour.SRGB.R - overlay.EdgeEffect.Colour.SRGB.B, () => Is.LessThan(0.15f));
             AddAssert("edge glow still there", () => overlay.EdgeEffect.Colour.Linear.A, () => Is.GreaterThan(0.45f));
             AddWaitStep("wait for the rest", 70);
-            AddUntilStep("closed after a minute", () => overlay.State.Value == Visibility.Hidden);
+            AddUntilStep("closed after 30 seconds", () => overlay.State.Value == Visibility.Hidden);
             AddUntilStep("profile deleted", () => manager.Store.GetProfile(profile.Id), () => Is.Null);
             AddAssert("at song select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
 
@@ -224,6 +229,34 @@ namespace osu.Game.Tests.Visual.Navigation
             });
             AddUntilStep("statistics loaded", () => overlay.ChildrenOfType<osu.Game.Overlays.Profile.ProfileSection>().Any());
             AddAssert("back in full colour", () => pageGrayscale(), () => Is.EqualTo(0));
+        }
+
+        // Countdown sounds started so far (the top section keeps them so they can fade out when the page closes).
+        private int countdownSounds()
+        {
+            var top = overlay.ChildrenOfType<osu.Framework.Graphics.Containers.CompositeDrawable>().First(d => d.GetType().Name == "TopSection");
+            var list = (System.Collections.ICollection)top.GetType().GetField("playingSounds", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(top)!;
+            return list.Count;
+        }
+
+        [Test]
+        public void TestLongerTimer()
+        {
+            importAndWaitForSongSelect();
+            AddStep("extend the timer to a minute", () => manager.LongerLastLook.Value = true);
+            AddAssert("saved", () => manager.Store.Options.LongerLastLook, () => Is.True);
+            createProfile(LocalDeathMode.SuddenDeath);
+            AddStep("die", () => manager.BeginProfileDeath(profile.UserId));
+            AddUntilStep("profile page opens", () => overlay.State.Value == Visibility.Visible);
+            AddAssert("a minute long", () => manager.LastLookEndTime - manager.LastLookStartTime, () => Is.EqualTo(60_000).Within(0.01));
+            AddUntilStep("countdown from a minute", () => countdownText(), () => Does.Match(@"^(60:00|5\d:\d\d)$"));
+            AddWaitStep("wait 35 seconds", 175);
+            AddAssert("still open after 30 seconds", () => overlay.State.Value, () => Is.EqualTo(Visibility.Visible));
+            AddAssert("countdown below 30 seconds", () => countdownText(), () => Does.Match(@"^[0-2]\d:\d\d$"));
+            AddUntilStep("closed after a minute", () => overlay.State.Value == Visibility.Hidden);
+            AddUntilStep("profile deleted", () => manager.Store.GetProfile(profile.Id), () => Is.Null);
+            AddStep("back to 30 seconds", () => manager.LongerLastLook.Value = false);
+            AddAssert("saved off", () => manager.Store.Options.LongerLastLook, () => Is.False);
         }
 
         [Test]

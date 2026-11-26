@@ -12,7 +12,7 @@ namespace osu.Game.LocalPriority
 {
     /// <summary>
     /// Tags you give beatmaps yourself (instead of the stripped online tag voting), per difficulty.
-    /// Kept in "osu-local/beatmap-tags.json", so the shared database is never changed.
+    /// Kept in "ritsu/local-profiles/beatmap-tags.json", so the shared database is never changed.
     /// They show in song select's beatmap details, can be searched like voted tags (tag="jumps/cross-screen"! or plain text),
     /// and profiles can switch automatically on them.
     /// </summary>
