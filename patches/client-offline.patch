@@ -894,10 +894,18 @@ index 046af140d6..325c59624a 100644
          /// Describes how much of <see cref="AimDifficulty"/> is contributed to by hitcircles or sliders.
          /// A value closer to 1.0 indicates most of <see cref="AimDifficulty"/> is contributed by hitcircles.
 diff --git a/osu.Game.Rulesets.Osu/Difficulty/OsuDifficultyCalculator.cs b/osu.Game.Rulesets.Osu/Difficulty/OsuDifficultyCalculator.cs
-index a73633ca2f..140ca1eac8 100644
+index a73633c..71fefce 100644
 --- a/osu.Game.Rulesets.Osu/Difficulty/OsuDifficultyCalculator.cs
 +++ b/osu.Game.Rulesets.Osu/Difficulty/OsuDifficultyCalculator.cs
-@@ -23,7 +23,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
+@@ -10,6 +10,7 @@ using osu.Game.Rulesets.Difficulty.Preprocessing;
+ using osu.Game.Rulesets.Difficulty.Skills;
+ using osu.Game.Rulesets.Difficulty.Utils;
+ using osu.Game.Rulesets.Mods;
++using osu.Game.Rulesets.Osu.Difficulty.Evaluators;
+ using osu.Game.Rulesets.Osu.Difficulty.Preprocessing;
+ using osu.Game.Rulesets.Osu.Difficulty.Skills;
+ using osu.Game.Rulesets.Osu.Difficulty.Utils;
+@@ -23,7 +24,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
  {
      public class OsuDifficultyCalculator : DifficultyCalculator
      {
@@ -906,10 +914,42 @@ index a73633ca2f..140ca1eac8 100644
  
          public OsuDifficultyCalculator(IRulesetInfo ruleset, IWorkingBeatmap beatmap)
              : base(ruleset, beatmap)
-@@ -80,11 +80,20 @@ namespace osu.Game.Rulesets.Osu.Difficulty
+@@ -51,49 +52,37 @@ namespace osu.Game.Rulesets.Osu.Difficulty
+             if (beatmap.HitObjects.Count == 0)
+                 return new OsuDifficultyAttributes { Mods = mods };
  
-             double overallDifficulty = CalculateRateAdjustedOverallDifficulty(beatmap.Difficulty.OverallDifficulty, ModUtils.CalculateRateWithMods(mods));
+-            var aim = skills.OfType<Aim>().Single(a => a.IncludeSliders);
+-            var aimWithoutSliders = skills.OfType<Aim>().Single(a => !a.IncludeSliders);
+-            var speed = skills.OfType<Speed>().Single();
+             var flashlight = skills.OfType<Flashlight>().SingleOrDefault();
+             var reading = skills.OfType<Reading>().Single();
+-
+-            double aimDifficultyValue = aim.DifficultyValue();
+-            double aimNoSlidersDifficultyValue = aimWithoutSliders.DifficultyValue();
+-            double speedDifficultyValue = speed.DifficultyValue();
++            double clockRate = ModUtils.CalculateRateWithMods(mods);
++            var motion = getMotionDifficulty(skills, clockRate);
+             double readingDifficultyValue = reading.DifficultyValue();
+-
+-            double aimDifficultStrainCount = aim.CountTopWeightedStrains(aimDifficultyValue);
+-            double speedDifficultStrainCount = speed.CountTopWeightedObjectDifficulties(speedDifficultyValue);
+             double readingDifficultNoteCount = reading.CountTopWeightedObjectDifficulties(readingDifficultyValue);
++            double overallDifficulty = CalculateRateAdjustedOverallDifficulty(beatmap.Difficulty.OverallDifficulty, clockRate);
  
+-            double speedNotes = speed.RelevantNoteCount();
+-
+-            double aimNoSlidersTopWeightedSliderCount = aimWithoutSliders.CountTopWeightedSliders(aimNoSlidersDifficultyValue);
+-            double aimNoSlidersDifficultStrainCount = aimWithoutSliders.CountTopWeightedStrains(aimNoSlidersDifficultyValue);
+-
+-            double aimTopWeightedSliderFactor = aimNoSlidersTopWeightedSliderCount / Math.Max(1, aimNoSlidersDifficultStrainCount - aimNoSlidersTopWeightedSliderCount);
+-
+-            double speedTopWeightedSliderCount = speed.CountTopWeightedSliders(speedDifficultyValue);
+-            double speedTopWeightedSliderFactor = speedTopWeightedSliderCount / Math.Max(1, speedDifficultStrainCount - speedTopWeightedSliderCount);
+-
+-            double difficultSliders = aim.GetDifficultSliders();
+-
+-            double overallDifficulty = CalculateRateAdjustedOverallDifficulty(beatmap.Difficulty.OverallDifficulty, ModUtils.CalculateRateWithMods(mods));
+-
 -            int hitCircleCount = beatmap.HitObjects.Count(h => h is HitCircle);
 +            int hitCircleCount = beatmap.HitObjects.Count(h => h is HitCircle and not DecoyCircle);
              int sliderCount = beatmap.HitObjects.Count(h => h is Slider);
@@ -927,9 +967,22 @@ index a73633ca2f..140ca1eac8 100644
 +            int totalHits = beatmap.HitObjects.Count - decoyCount;
 +            double decoyPerformanceBonus = 0.1 * weightedDecoyCount / (20 + decoyCount);
  
-             double sliderFactor = aimDifficultyValue > 0
-                 ? OsuRatingCalculator.CalculateDifficultyRating(aimNoSlidersDifficultyValue) / OsuRatingCalculator.CalculateDifficultyRating(aimDifficultyValue)
-@@ -113,13 +122,14 @@ namespace osu.Game.Rulesets.Osu.Difficulty
+-            double sliderFactor = aimDifficultyValue > 0
+-                ? OsuRatingCalculator.CalculateDifficultyRating(aimNoSlidersDifficultyValue) / OsuRatingCalculator.CalculateDifficultyRating(aimDifficultyValue)
++            double sliderFactor = motion.Aim > 0
++                ? OsuRatingCalculator.CalculateDifficultyRating(motion.AimWithoutSliders) / OsuRatingCalculator.CalculateDifficultyRating(motion.Aim)
+                 : 1;
+ 
+             var osuRatingCalculator = new OsuRatingCalculator(totalHits, overallDifficulty);
+ 
+-            double aimRating = osuRatingCalculator.ComputeAimRating(aimDifficultyValue);
+-            double speedRating = osuRatingCalculator.ComputeSpeedRating(speedDifficultyValue);
++            double aimRating = osuRatingCalculator.ComputeAimRating(motion.Aim);
++            double speedRating = osuRatingCalculator.ComputeSpeedRating(motion.Speed);
+             double readingRating = osuRatingCalculator.ComputeReadingRating(readingDifficultyValue);
+ 
+             double flashlightRating = 0.0;
+@@ -113,26 +102,27 @@ namespace osu.Game.Rulesets.Osu.Difficulty
              double baseFlashlightPerformance = Flashlight.DifficultyToPerformance(flashlightRating);
              double baseCognitionPerformance = SumCognitionDifficulty(baseReadingPerformance, baseFlashlightPerformance);
  
@@ -945,8 +998,27 @@ index a73633ca2f..140ca1eac8 100644
 +                DecoyPerformanceBonus = decoyPerformanceBonus,
                  Mods = mods,
                  AimDifficulty = aimRating,
-                 AimDifficultSliderCount = difficultSliders,
-@@ -154,7 +164,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
+-                AimDifficultSliderCount = difficultSliders,
++                AimDifficultSliderCount = motion.DifficultSliders,
+                 SpeedDifficulty = speedRating,
+-                SpeedNoteCount = speedNotes,
++                SpeedNoteCount = motion.SpeedNotes,
+                 FlashlightDifficulty = flashlightRating,
+                 ReadingDifficulty = readingRating,
+                 SliderFactor = sliderFactor,
+-                AimDifficultStrainCount = aimDifficultStrainCount,
+-                SpeedDifficultStrainCount = speedDifficultStrainCount,
++                AimDifficultStrainCount = motion.AimStrains,
++                SpeedDifficultStrainCount = motion.SpeedStrains,
+                 ReadingDifficultNoteCount = readingDifficultNoteCount,
+-                AimTopWeightedSliderFactor = aimTopWeightedSliderFactor,
+-                SpeedTopWeightedSliderFactor = speedTopWeightedSliderFactor,
++                AimTopWeightedSliderFactor = motion.AimSliderFactor,
++                SpeedTopWeightedSliderFactor = motion.SpeedSliderFactor,
+                 MaxCombo = beatmap.GetMaxCombo(),
+                 HitCircleCount = hitCircleCount,
+                 SliderCount = sliderCount,
+@@ -154,7 +144,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty
                  return reading;
  
              // Nerf flashlight value in cognition sum when reading is greater than flashlight
@@ -955,7 +1027,7 @@ index a73633ca2f..140ca1eac8 100644
          }
  
          private double calculateStarRating(double basePerformance)
-@@ -170,9 +180,14 @@ namespace osu.Game.Rulesets.Osu.Difficulty
+@@ -170,22 +160,84 @@ namespace osu.Game.Rulesets.Osu.Difficulty
  
              // The first jump is formed by the first two hitobjects of the map.
              // If the map has less than two OsuHitObjects, the enumerator will not return anything.
@@ -972,6 +1044,90 @@ index a73633ca2f..140ca1eac8 100644
              }
  
              return objects;
+         }
+ 
++        private readonly record struct MotionDifficulty(double Aim, double AimWithoutSliders, double Speed, double AimStrains,
++            double SpeedStrains, double SpeedNotes, double AimSliderFactor, double SpeedSliderFactor, double DifficultSliders);
++
++        private sealed class SharedDifficulty
++        {
++            public readonly ReadingEvaluator.Visibility[] Visibility;
++            public MotionDifficulty? Motion;
++
++            public SharedDifficulty(int objectCount)
++            {
++                Visibility = new ReadingEvaluator.Visibility[objectCount];
++            }
++        }
++
++        private MotionDifficulty getMotionDifficulty(Skill[] skills, double clockRate)
++        {
++            SharedDifficulty? shared = SharedSkillResults != null ? (SharedDifficulty)SharedSkillResults[clockRate] : null;
++            if (shared?.Motion is MotionDifficulty cached)
++                return cached;
++
++            var aim = skills.OfType<Aim>().Single(a => a.IncludeSliders);
++            var aimWithoutSliders = skills.OfType<Aim>().Single(a => !a.IncludeSliders);
++            var speed = skills.OfType<Speed>().Single();
++            double aimDifficulty = aim.DifficultyValue();
++            double aimWithoutSlidersDifficulty = aimWithoutSliders.DifficultyValue();
++            double speedDifficulty = speed.DifficultyValue();
++            double aimStrains = aim.CountTopWeightedStrains(aimDifficulty);
++            double speedStrains = speed.CountTopWeightedObjectDifficulties(speedDifficulty);
++            double speedNotes = speed.RelevantNoteCount();
++            double aimSliderCount = aimWithoutSliders.CountTopWeightedSliders(aimWithoutSlidersDifficulty);
++            double aimWithoutSlidersStrains = aimWithoutSliders.CountTopWeightedStrains(aimWithoutSlidersDifficulty);
++            double aimSliderFactor = aimSliderCount / Math.Max(1, aimWithoutSlidersStrains - aimSliderCount);
++            double speedSliderCount = speed.CountTopWeightedSliders(speedDifficulty);
++            double speedSliderFactor = speedSliderCount / Math.Max(1, speedStrains - speedSliderCount);
++            var motion = new MotionDifficulty(aimDifficulty, aimWithoutSlidersDifficulty, speedDifficulty, aimStrains,
++                speedStrains, speedNotes, aimSliderFactor, speedSliderFactor, aim.GetDifficultSliders());
++            if (shared != null)
++                shared.Motion = motion;
++            return motion;
++        }
++
+         protected override Skill[] CreateSkills(IBeatmap beatmap, Mod[] mods)
+         {
++            SharedDifficulty? shared = null;
++            if (SharedSkillResults != null)
++            {
++                double clockRate = ModUtils.CalculateRateWithMods(mods);
++                if (SharedSkillResults.TryGetValue(clockRate, out var cached))
++                    shared = (SharedDifficulty)cached;
++                else
++                {
++                    shared = new SharedDifficulty(beatmap.HitObjects.Count);
++                    SharedSkillResults.Add(clockRate, shared);
++                }
++            }
++
++            if (shared?.Motion != null)
++                return new Skill[] { new Reading(mods, shared.Visibility) };
++
+             var skills = new List<Skill>
+             {
+                 new Aim(mods, true),
+                 new Aim(mods, false),
+                 new Speed(mods),
+-                new Reading(mods)
++                new Reading(mods, shared?.Visibility)
+             };
+ 
+             if (mods.Any(h => h is OsuModFlashlight))
+diff --git a/osu.Game/Rulesets/Difficulty/DifficultyCalculator.cs b/osu.Game/Rulesets/Difficulty/DifficultyCalculator.cs
+index bd7f3c2d6b..1ad87513ee 100644
+--- a/osu.Game/Rulesets/Difficulty/DifficultyCalculator.cs
++++ b/osu.Game/Rulesets/Difficulty/DifficultyCalculator.cs
+@@ -33,6 +33,8 @@ public abstract class DifficultyCalculator
+         /// </summary>
+         protected readonly IWorkingBeatmap WorkingBeatmap;
+ 
++        protected internal Dictionary<double, object>? SharedSkillResults { get; set; }
++
+         private Mod[] playableMods;
+ 
+         private readonly IRulesetInfo ruleset;
 diff --git a/osu.Game.Rulesets.Osu/Difficulty/OsuPerformanceCalculator.cs b/osu.Game.Rulesets.Osu/Difficulty/OsuPerformanceCalculator.cs
 index ed5f72a41e..726bfece29 100644
 --- a/osu.Game.Rulesets.Osu/Difficulty/OsuPerformanceCalculator.cs
@@ -3222,9 +3378,26 @@ index 74e16f7e0b..5168ba5d5b 100644
          private class ReplayFrameComparer : IComparer<ReplayFrame>
          {
 diff --git a/osu.Game.Rulesets.Osu/Skinning/Argon/ArgonMainCirclePiece.cs b/osu.Game.Rulesets.Osu/Skinning/Argon/ArgonMainCirclePiece.cs
-index 7508a689d2..c7ea44c3bd 100644
+index 7508a68..1f0e026 100644
 --- a/osu.Game.Rulesets.Osu/Skinning/Argon/ArgonMainCirclePiece.cs
 +++ b/osu.Game.Rulesets.Osu/Skinning/Argon/ArgonMainCirclePiece.cs
+@@ -99,14 +99,14 @@ namespace osu.Game.Rulesets.Osu.Skinning.Argon
+                         RelativeSizeAxes = Axes.Both,
+                     }
+                 },
+-                number = new OsuSpriteText
++                new HitCircleNumberContainer(number = new OsuSpriteText
+                 {
+                     Font = OsuFont.Default.With(size: 52, weight: FontWeight.Bold),
+                     Anchor = Anchor.Centre,
+                     Origin = Anchor.Centre,
+                     Y = -2,
+                     Text = @"1",
+-                },
++                }),
+                 flash = new FlashPiece(),
+                 border = new RingPiece(BORDER_THICKNESS),
+             };
 @@ -127,7 +127,10 @@ namespace osu.Game.Rulesets.Osu.Skinning.Argon
          {
              base.LoadComplete();
@@ -3238,9 +3411,18 @@ index 7508a689d2..c7ea44c3bd 100644
              accentColour.BindValueChanged(colour =>
              {
 diff --git a/osu.Game.Rulesets.Osu/Skinning/Default/MainCirclePiece.cs b/osu.Game.Rulesets.Osu/Skinning/Default/MainCirclePiece.cs
-index bcea33f63c..735a7accd4 100644
+index bcea33f..066cf25 100644
 --- a/osu.Game.Rulesets.Osu/Skinning/Default/MainCirclePiece.cs
 +++ b/osu.Game.Rulesets.Osu/Skinning/Default/MainCirclePiece.cs
+@@ -33,7 +33,7 @@ namespace osu.Game.Rulesets.Osu.Skinning.Default
+             {
+                 glow = new GlowPiece(),
+                 circle = new CirclePiece(),
+-                number = new NumberPiece(),
++                new HitCircleNumberContainer(number = new NumberPiece()),
+                 ring = new RingPiece(),
+                 flash = new FlashPiece(),
+                 explode = new ExplodePiece(),
 @@ -66,7 +66,10 @@ namespace osu.Game.Rulesets.Osu.Skinning.Default
                  circle.Colour = colour.NewValue;
              }, true);
@@ -3254,9 +3436,27 @@ index bcea33f63c..735a7accd4 100644
              drawableObject.ApplyCustomUpdateState += updateStateTransforms;
              updateStateTransforms(drawableObject, drawableObject.State.Value);
 diff --git a/osu.Game.Rulesets.Osu/Skinning/Legacy/LegacyMainCirclePiece.cs b/osu.Game.Rulesets.Osu/Skinning/Legacy/LegacyMainCirclePiece.cs
-index 1489afa98e..3868e90e1f 100644
+index 1489afa..c9b39d6 100644
 --- a/osu.Game.Rulesets.Osu/Skinning/Legacy/LegacyMainCirclePiece.cs
 +++ b/osu.Game.Rulesets.Osu/Skinning/Legacy/LegacyMainCirclePiece.cs
+@@ -197,7 +197,7 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
+ 
+             if (hasNumber)
+             {
+-                OverlayLayer.Add(hitCircleText = new SkinnableSpriteText(new OsuSkinComponentLookup(OsuSkinComponents.HitCircleText), _ => new OsuSpriteText
++                OverlayLayer.Add(new HitCircleNumberContainer(hitCircleText = new SkinnableSpriteText(new OsuSkinComponentLookup(OsuSkinComponents.HitCircleText), _ => new OsuSpriteText
+                 {
+                     Font = OsuFont.Numeric.With(size: 40),
+                     UseFullGlyphHeight = false,
+@@ -205,7 +205,7 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
+                 {
+                     Anchor = Anchor.Centre,
+                     Origin = Anchor.Centre,
+-                });
++                }));
+             }
+ 
+             bool overlayAboveNumber = skin.GetConfig<OsuSkinConfiguration, bool>(OsuSkinConfiguration.HitCircleOverlayAboveNumber)?.Value ?? true;
 @@ -418,7 +418,12 @@ namespace osu.Game.Rulesets.Osu.Skinning.Legacy
              }, true);
  
@@ -5207,10 +5407,26 @@ index 21fbbf5904..3e605794b2 100644
  
              var processor = rulesetInstance.CreateBeatmapProcessor(converted);
 diff --git a/osu.Game/Beatmaps/WorkingBeatmapCache.cs b/osu.Game/Beatmaps/WorkingBeatmapCache.cs
-index 75f1bd2a07..f0ec60eada 100644
+index 75f1bd2..def5360 100644
 --- a/osu.Game/Beatmaps/WorkingBeatmapCache.cs
 +++ b/osu.Game/Beatmaps/WorkingBeatmapCache.cs
-@@ -93,6 +93,7 @@ public void Invalidate(BeatmapInfo info)
+@@ -4,13 +4,14 @@
+ #nullable disable
+ 
+ using System;
++using System.Buffers;
+ using System.Diagnostics;
+ using System.IO;
+ using System.Linq;
++using System.Security.Cryptography;
+ using JetBrains.Annotations;
+ using osu.Framework.Audio;
+ using osu.Framework.Audio.Track;
+-using osu.Framework.Extensions;
+ using osu.Framework.Graphics.Rendering;
+ using osu.Framework.Graphics.Rendering.Dummy;
+ using osu.Framework.Graphics.Textures;
+@@ -93,6 +94,7 @@ namespace osu.Game.Beatmaps
  
          public virtual WorkingBeatmap GetWorkingBeatmap([CanBeNull] BeatmapInfo beatmapInfo)
          {
@@ -5218,7 +5434,7 @@ index 75f1bd2a07..f0ec60eada 100644
              if (beatmapInfo == null || ReferenceEquals(beatmapInfo, DefaultBeatmap.BeatmapInfo))
                  return DefaultBeatmap;
  
-@@ -101,7 +102,12 @@ public virtual WorkingBeatmap GetWorkingBeatmap([CanBeNull] BeatmapInfo beatmapI
+@@ -101,7 +103,12 @@ namespace osu.Game.Beatmaps
                  var working = workingCache.FirstOrDefault(w => beatmapInfo.Equals(w.BeatmapInfo));
  
                  if (working != null)
@@ -5231,7 +5447,7 @@ index 75f1bd2a07..f0ec60eada 100644
  
                  beatmapInfo = beatmapInfo.Detach();
  
-@@ -112,7 +118,9 @@ public virtual WorkingBeatmap GetWorkingBeatmap([CanBeNull] BeatmapInfo beatmapI
+@@ -112,7 +119,9 @@ namespace osu.Game.Beatmaps
                  workingCache.Add(working = new BeatmapManagerWorkingBeatmap(beatmapInfo, this));
  
                  // best effort; may be higher than expected.
@@ -5242,6 +5458,58 @@ index 75f1bd2a07..f0ec60eada 100644
  
                  return working;
              }
+@@ -158,7 +167,7 @@ namespace osu.Game.Beatmaps
+                 {
+                     string fileStorePath = BeatmapSetInfo.GetPathForFile(BeatmapInfo.Path);
+ 
+-                    var stream = GetStream(fileStorePath);
++                    using var stream = GetStream(fileStorePath);
+ 
+                     if (stream == null)
+                     {
+@@ -166,8 +175,7 @@ namespace osu.Game.Beatmaps
+                         return null;
+                     }
+ 
+-                    string streamMD5 = stream.ComputeMD5Hash();
+-                    string streamSHA2 = stream.ComputeSHA2Hash();
++                    var (streamMD5, streamSHA2) = computeBeatmapHashes(stream);
+ 
+                     if (streamMD5 != BeatmapInfo.MD5Hash)
+                     {
+@@ -193,6 +201,32 @@ namespace osu.Game.Beatmaps
+                 }
+             }
+ 
++            private static (string Md5, string Sha256) computeBeatmapHashes(Stream stream)
++            {
++                using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
++                using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
++                byte[] buffer = ArrayPool<byte>.Shared.Rent(8192);
++
++                try
++                {
++                    stream.Seek(0, SeekOrigin.Begin);
++                    int read;
++                    while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
++                    {
++                        var bytes = buffer.AsSpan(0, read);
++                        md5.AppendData(bytes);
++                        sha256.AppendData(bytes);
++                    }
++
++                    stream.Seek(0, SeekOrigin.Begin);
++                    return (Convert.ToHexStringLower(md5.GetHashAndReset()), Convert.ToHexStringLower(sha256.GetHashAndReset()));
++                }
++                finally
++                {
++                    ArrayPool<byte>.Shared.Return(buffer);
++                }
++            }
++
+             public override Texture GetPanelBackground() => getBackgroundFromStore(resources.BeatmapPanelTextureStore);
+ 
+             public override Texture GetBackground() => getBackgroundFromStore(resources.LargeTextureStore);
 diff --git a/osu.Game/Collections/CollectionFilterMenuItem.cs b/osu.Game/Collections/CollectionFilterMenuItem.cs
 index 7dfa45379a..9226893b44 100644
 --- a/osu.Game/Collections/CollectionFilterMenuItem.cs
@@ -7568,10 +7836,10 @@ index 0000000000..1c1d3b0922
 +}
 diff --git a/osu.Game/Commands/RitsuSimulationScreen.cs b/osu.Game/Commands/RitsuSimulationScreen.cs
 new file mode 100644
-index 0000000000..ad1d83b956
+index 0000000..9c82fdc
 --- /dev/null
 +++ b/osu.Game/Commands/RitsuSimulationScreen.cs
-@@ -0,0 +1,1291 @@
+@@ -0,0 +1,1358 @@
 +// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 +
 +using System;
@@ -7673,6 +7941,11 @@ index 0000000000..ad1d83b956
 +        private readonly OsuSpriteText modsHeader;
 +        private ScreenFooterButton? resetButton;
 +        private ScreenFooterButton? modsButton;
++        private ScreenFooterButton? scoringButton;
++        private bool stableScoring;
++        private SimulationInputs? pendingScoringInputs;
++
++        private sealed record SimulationInputs(string Accuracy, string Combo, Dictionary<HitResult, string> Judgements);
 +        private bool resetEnabled;
 +        private readonly RoundedButton applyMods;
 +        private readonly Dictionary<HitResult, OsuTextBox> fields = new Dictionary<HitResult, OsuTextBox>();
@@ -7734,6 +8007,12 @@ index 0000000000..ad1d83b956
 +                Action = resetScore,
 +            };
 +            resetButton.Enabled.Value = resetEnabled;
++            scoringButton = new ScreenFooterButton
++            {
++                Icon = FontAwesome.Solid.ExchangeAlt,
++                Action = ToggleStableScoring,
++            };
++            updateScoringButton();
 +
 +            return new[]
 +            {
@@ -7746,6 +8025,7 @@ index 0000000000..ad1d83b956
 +                    Action = toggleMods,
 +                },
 +                resetButton,
++                scoringButton,
 +            };
 +        }
 +
@@ -8057,11 +8337,39 @@ index 0000000000..ad1d83b956
 +                    return;
 +
 +                mode = next;
++                stableScoring = false;
++                pendingScoringInputs = null;
++                updateScoringButton();
 +                mods = mode.Equals(selected) ? Mods.Value.Select(mod => mod.DeepClone()).ToArray() : Array.Empty<Mod>();
 +                modPicker.Ruleset.Value = mode;
 +                modPicker.SelectedMods.Value = mods.Select(mod => mod.DeepClone()).ToArray();
 +                prepare();
 +            }, true);
++        }
++
++        private void updateScoringButton()
++        {
++            if (scoringButton == null)
++                return;
++
++            scoringButton.Enabled.Value = mode?.ShortName == "osu";
++            scoringButton.Text = stableScoring ? "PP: Stable" : "PP: Lazer";
++            scoringButton.AccentColour = stableScoring ? colours.Orange1 : colours.Blue1;
++            scoringButton.TooltipText = mode?.ShortName != "osu"
++                ? "Stable scoring is available for osu!standard"
++                : stableScoring ? "Switch to Lazer scoring" : "Switch to Stable scoring";
++        }
++
++        internal void ToggleStableScoring()
++        {
++            if (mode?.ShortName != "osu")
++                return;
++
++            pendingScoringInputs ??= new SimulationInputs(accuracy?.Text ?? string.Empty, combo?.Text ?? string.Empty,
++                fields.ToDictionary(pair => pair.Key, pair => pair.Value.Text));
++            stableScoring = !stableScoring;
++            updateScoringButton();
++            prepare();
 +        }
 +
 +        private async void prepare()
@@ -8071,6 +8379,7 @@ index 0000000000..ad1d83b956
 +            var token = preparation.Token;
 +            var selectedMode = mode;
 +            var selectedMods = mods;
++            bool useStableScoring = stableScoring;
 +            model?.Dispose();
 +            model = null;
 +            queuedCalculation?.Cancel();
@@ -8092,7 +8401,7 @@ index 0000000000..ad1d83b956
 +            setResetEnabled(false);
 +            try
 +            {
-+                var prepared = await Task.Run(() => new RitsuSimulation(working, selectedMode, selectedMods, token), token).ConfigureAwait(false);
++                var prepared = await Task.Run(() => new RitsuSimulation(working, selectedMode, selectedMods, token, useStableScoring), token).ConfigureAwait(false);
 +                if (token.IsCancellationRequested)
 +                {
 +                    prepared.Dispose();
@@ -8212,6 +8521,21 @@ index 0000000000..ad1d83b956
 +                    judgementFlow.Add(cell(field.Input.Name, judgement, field, separator()));
 +                    index++;
 +                }
++            }
++
++            if (pendingScoringInputs is { } inputs)
++            {
++                pendingScoringInputs = null;
++                accuracy!.Text = inputs.Accuracy;
++                if (combo != null)
++                    combo.Text = inputs.Combo;
++                foreach (var (hit, value) in inputs.Judgements)
++                {
++                    if (fields.TryGetValue(hit, out var field))
++                        field.Text = value;
++                }
++
++                queuedCalculation?.Cancel();
 +            }
 +
 +            calculateScore();
@@ -8625,6 +8949,7 @@ index 0000000000..ad1d83b956
 +        private readonly DifficultyAttributes difficulty;
 +        private readonly Dictionary<HitResult, int> maximum;
 +        private readonly double accuracyMaximum;
++        private readonly bool stableScoring;
 +        public IReadOnlyList<JudgementGroup> Groups { get; }
 +        public int MaxCombo => processor.MaximumCombo;
 +        public double PerfectPP { get; }
@@ -8635,13 +8960,20 @@ index 0000000000..ad1d83b956
 +        public IReadOnlyList<BeatmapTitleWedge.StatisticDifficulty.Data> Attributes { get; }
 +        public double StarRating => difficulty.StarRating;
 +
-+        public RitsuSimulation(WorkingBeatmap working, RulesetInfo mode, Mod[] mods, CancellationToken token)
++        public RitsuSimulation(WorkingBeatmap working, RulesetInfo mode, Mod[] mods, CancellationToken token, bool stableScoring = false)
 +        {
 +            this.working = working;
 +            this.mode = mode;
-+            this.mods = mods;
++            this.stableScoring = stableScoring;
 +
 +            var ruleset = mode.CreateInstance();
++            if (stableScoring)
++            {
++                if (mode.ShortName != "osu" || ruleset.CreateMod<ModClassic>() is not ModClassic classic)
++                    throw new ArgumentException("Stable scoring is available for osu!standard.");
++                mods = mods.Where(mod => mod is not ModClassic).Append(classic).ToArray();
++            }
++            this.mods = mods;
 +            if (!ModUtils.CheckValidForGameplay(mods, out _))
 +                throw new ArgumentException("The selected mods are incompatible.");
 +
@@ -8666,8 +8998,11 @@ index 0000000000..ad1d83b956
 +            {
 +                case "osu":
 +                    group(HitResult.Great, HitResult.Ok, HitResult.Meh, HitResult.Miss);
-+                    group(HitResult.LargeTickHit, HitResult.LargeTickMiss);
-+                    group(HitResult.SliderTailHit, HitResult.IgnoreMiss);
++                    if (!stableScoring)
++                    {
++                        group(HitResult.LargeTickHit, HitResult.LargeTickMiss);
++                        group(HitResult.SliderTailHit, HitResult.IgnoreMiss);
++                    }
 +                    break;
 +
 +                case "taiko":
@@ -8827,7 +9162,7 @@ index 0000000000..ad1d83b956
 +            var score = new ScoreInfo(working.BeatmapInfo, mode)
 +            {
 +                Passed = true, Accuracy = accuracy, Rank = rank, Mods = mods, MaxCombo = combo, Combo = combo,
-+                Statistics = stats, MaximumStatistics = maximum,
++                Statistics = stats, MaximumStatistics = maximum, IsLegacyScore = stableScoring,
 +            };
 +            double pp = calculator.Calculate(score, difficulty).Total;
 +            if (!double.IsFinite(pp))
@@ -16422,10 +16757,37 @@ index d51632a7ff..fc8ea29931 100644
      }
  }
 diff --git a/osu.Game.Rulesets.Osu/Difficulty/Skills/Reading.cs b/osu.Game.Rulesets.Osu/Difficulty/Skills/Reading.cs
-index 2b006f4a86..9b26b30751 100644
+index 2b006f4..81c38e8 100644
 --- a/osu.Game.Rulesets.Osu/Difficulty/Skills/Reading.cs
 +++ b/osu.Game.Rulesets.Osu/Difficulty/Skills/Reading.cs
-@@ -115,7 +115,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
+@@ -19,10 +19,17 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
+         private readonly List<DifficultyHitObject> objectList = new List<DifficultyHitObject>();
+ 
+         private readonly bool hasHiddenMod;
++        private readonly ReadingEvaluator.Visibility[]? sharedVisibility;
+ 
+         public Reading(Mod[] mods)
++            : this(mods, null)
++        {
++        }
++
++        internal Reading(Mod[] mods, ReadingEvaluator.Visibility[]? sharedVisibility)
+             : base(mods)
+         {
++            this.sharedVisibility = sharedVisibility;
+             hasHiddenMod = mods.OfType<OsuModHidden>().Any(m => !m.OnlyFadeApproachCircles.Value);
+         }
+ 
+@@ -47,7 +54,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
+ 
+         private double calculateModAdjustedDifficulty(DifficultyHitObject current)
+         {
+-            double difficulty = ReadingEvaluator.EvaluateDifficultyOf(current, hasHiddenMod);
++            double difficulty = ReadingEvaluator.EvaluateDifficultyOf(current, hasHiddenMod, sharedVisibility);
+ 
+             if (Mods.Any(m => m is OsuModTouchDevice))
+                 difficulty = Math.Pow(difficulty, 0.89);
+@@ -115,7 +122,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
              if (consistentTopNote == 0)
                  return 0;
  
@@ -16547,10 +16909,51 @@ index 4d40289c40..4e5a3ef8a0 100644
  
          private class Island : IEquatable<Island>
 diff --git a/osu.Game.Rulesets.Osu/Difficulty/Evaluators/ReadingEvaluator.cs b/osu.Game.Rulesets.Osu/Difficulty/Evaluators/ReadingEvaluator.cs
-index c27977e062..01271b3b2b 100644
+index c27977e..4a517ff 100644
 --- a/osu.Game.Rulesets.Osu/Difficulty/Evaluators/ReadingEvaluator.cs
 +++ b/osu.Game.Rulesets.Osu/Difficulty/Evaluators/ReadingEvaluator.cs
-@@ -46,7 +46,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+@@ -2,7 +2,6 @@
+ // See the LICENCE file in the repository root for full licence text.
+ 
+ using System;
+-using System.Collections.Generic;
+ using osu.Framework.Extensions.ObjectExtensions;
+ using osu.Game.Rulesets.Difficulty.Preprocessing;
+ using osu.Game.Rulesets.Difficulty.Utils;
+@@ -23,7 +22,11 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+         private const double minimum_angle_relevancy_time = 2000; // 2 seconds
+         private const double maximum_angle_relevancy_time = 200;
+ 
+-        public static double EvaluateDifficultyOf(DifficultyHitObject current, bool hidden)
++        internal readonly record struct Visibility(double Density, double PastInfluence, double AngleFactor);
++
++        public static double EvaluateDifficultyOf(DifficultyHitObject current, bool hidden) => EvaluateDifficultyOf(current, hidden, null);
++
++        internal static double EvaluateDifficultyOf(DifficultyHitObject current, bool hidden, Visibility[]? sharedVisibility)
+         {
+             if (current.BaseObject is Spinner || current.Index == 0)
+                 return 0;
+@@ -33,10 +36,16 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+ 
+             double velocity = Math.Max(1, currObj.LazyJumpDistance / currObj.AdjustedDeltaTime); // Only allow velocity to buff
+ 
+-            double currentVisibleObjectDensity = retrieveCurrentVisibleObjectDensity(currObj);
+-            double pastObjectDifficultyInfluence = getPastObjectDifficultyInfluence(currObj);
++            var visibility = sharedVisibility?[currObj.Index] ?? default;
++            if (visibility.AngleFactor == 0)
++            {
++                visibility = new Visibility(retrieveCurrentVisibleObjectDensity(currObj),
++                    getPastObjectDifficultyInfluence(currObj), getConstantAngleNerfFactor(currObj));
++                if (sharedVisibility != null)
++                    sharedVisibility[currObj.Index] = visibility;
++            }
+ 
+-            double constantAngleNerfFactor = getConstantAngleNerfFactor(currObj);
++            var (currentVisibleObjectDensity, pastObjectDifficultyInfluence, constantAngleNerfFactor) = visibility;
+ 
+             double noteDensityDifficulty = calculateDensityDifficulty(nextObj, velocity, constantAngleNerfFactor, pastObjectDifficultyInfluence, currentVisibleObjectDensity);
+ 
+@@ -46,7 +55,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
  
              double preemptDifficulty = calculatePreemptDifficulty(velocity, constantAngleNerfFactor, currObj.Preempt);
  
@@ -16559,7 +16962,7 @@ index c27977e062..01271b3b2b 100644
  
              // Having less time to process information is harder
              readingDifficulty *= highBpmBonus(currObj.AdjustedDeltaTime);
-@@ -72,7 +72,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+@@ -72,7 +81,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
              if (nextObj != null)
              {
                  // Reduce difficulty if movement to next object is small
@@ -16568,7 +16971,18 @@ index c27977e062..01271b3b2b 100644
              }
  
              // Value higher note densities exponentially
-@@ -149,7 +149,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+@@ -144,12 +153,17 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+         {
+             double pastObjectDifficultyInfluence = 0;
+ 
+-            foreach (var loopObj in retrievePastVisibleObjects(currObj))
++            for (int i = 0; i < currObj.Index; i++)
+             {
++                var loopObj = (OsuDifficultyHitObject)currObj.Previous(i);
++                if (loopObj.IsNull() || currObj.StartTime - loopObj.StartTime > reading_window_size ||
++                    loopObj.StartTime < currObj.StartTime - currObj.Preempt)
++                    break;
++
                  double loopDifficulty = currObj.OpacityAt(loopObj.BaseObject.StartTime, false);
  
                  // When aiming an object small distances mean previous objects may be cheesed, so it doesn't matter whether they were arranged confusingly.
@@ -16577,7 +16991,32 @@ index c27977e062..01271b3b2b 100644
  
                  // Account less for objects close to the max reading window
                  double timeBetweenCurrAndLoopObj = currObj.StartTime - loopObj.StartTime;
-@@ -223,7 +223,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+@@ -162,23 +176,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+             return pastObjectDifficultyInfluence;
+         }
+ 
+-        // Returns a list of objects that are visible on screen at the point in time the current object becomes visible.
+-        private static IEnumerable<OsuDifficultyHitObject> retrievePastVisibleObjects(OsuDifficultyHitObject current)
+-        {
+-            for (int i = 0; i < current.Index; i++)
+-            {
+-                OsuDifficultyHitObject hitObject = (OsuDifficultyHitObject)current.Previous(i);
+-
+-                if (hitObject.IsNull() ||
+-                    current.StartTime - hitObject.StartTime > reading_window_size ||
+-                    hitObject.StartTime < current.StartTime - current.Preempt) // Current object not visible at the time object needs to be clicked
+-                    break;
+-
+-                yield return hitObject;
+-            }
+-        }
+-
+-        // Returns the density of objects visible at the point in time the current object needs to be clicked capped by the reading window.
++        // Returns a list of objecobjects visible at the point in time the current object needs to be clicked capped by the reading window.
+         private static double retrieveCurrentVisibleObjectDensity(OsuDifficultyHitObject current)
+         {
+             double visibleObjectCount = 0;
+@@ -223,7 +221,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
                      break;
  
                  // Account less for objects that are close to the time limit.
@@ -16586,7 +17025,7 @@ index c27977e062..01271b3b2b 100644
  
                  if (loopObj.Angle.IsNotNull() && current.Angle.IsNotNull())
                  {
-@@ -238,14 +238,14 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
+@@ -238,14 +236,14 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
                          double weight = 1.0;
  
                          // Be sure that one of the angles is very sharp, when other is wide
@@ -16698,11 +17137,152 @@ index ff10e8c201..2faea96965 100644
          }
  
          private static double calculateOverlapFactor(OsuDifficultyHitObject first, OsuDifficultyHitObject second)
+diff --git a/osu.Game.Tests/NonVisual/HarmonicSkillTest.cs b/osu.Game.Tests/NonVisual/HarmonicSkillTest.cs
+new file mode 100644
+index 0000000000..fb8d351fab
+--- /dev/null
++++ b/osu.Game.Tests/NonVisual/HarmonicSkillTest.cs
+@@ -0,0 +1,59 @@
++// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
++// See the LICENCE file in the repository root for full licence text.
++
++using System;
++using System.Linq;
++using NUnit.Framework;
++using osu.Game.Rulesets.Difficulty.Preprocessing;
++using osu.Game.Rulesets.Difficulty.Skills;
++
++namespace osu.Game.Tests.NonVisual
++{
++    [TestFixture]
++    public class HarmonicSkillTest
++    {
++        [TestCase(1, 0.9, 0)]
++        [TestCase(1, 0.9, 600)]
++        [TestCase(20, 0.9, 600)]
++        [TestCase(20, 0.9, 12000)]
++        [TestCase(5, 0.9, 600)]
++        [TestCase(20, 0.75, 600)]
++        public void TestDifficultyAndWeightSumMatchOriginalFormula(double scale, double exponent, int count)
++        {
++            double[] objects = Enumerable.Range(0, count).Select(i => (i * 37 % 2000 - 20) / 64d).ToArray();
++            var skill = new TestSkill(scale, exponent, objects);
++            double expectedDifficulty = 0;
++            double expectedWeightSum = 0;
++            int rank = 0;
++
++            foreach (double note in objects.Where(note => note > 0).OrderDescending())
++            {
++                double weight = (1 + (scale / (1 + rank))) / (Math.Pow(rank, exponent) + 1 + (scale / (1 + rank)));
++                expectedWeightSum += weight;
++                expectedDifficulty += note * weight;
++                rank++;
++            }
++
++            Assert.That(BitConverter.DoubleToInt64Bits(skill.DifficultyValue()), Is.EqualTo(BitConverter.DoubleToInt64Bits(expectedDifficulty)));
++            Assert.That(BitConverter.DoubleToInt64Bits(skill.WeightSum), Is.EqualTo(BitConverter.DoubleToInt64Bits(expectedWeightSum)));
++        }
++
++        private sealed class TestSkill : HarmonicSkill
++        {
++            protected override double HarmonicScale { get; }
++            protected override double DecayExponent { get; }
++
++            public double WeightSum => NoteWeightSum;
++
++            public TestSkill(double scale, double exponent, double[] objects)
++                : base([])
++            {
++                HarmonicScale = scale;
++                DecayExponent = exponent;
++                ObjectDifficulties.AddRange(objects);
++            }
++
++            protected override double ObjectDifficultyOf(DifficultyHitObject current) => throw new NotSupportedException();
++        }
++    }
++}
 diff --git a/osu.Game/Rulesets/Difficulty/Skills/HarmonicSkill.cs b/osu.Game/Rulesets/Difficulty/Skills/HarmonicSkill.cs
-index cdd6048b86..5ddd041ed7 100644
+index cdd6048b86..4160239c7d 100644
 --- a/osu.Game/Rulesets/Difficulty/Skills/HarmonicSkill.cs
 +++ b/osu.Game/Rulesets/Difficulty/Skills/HarmonicSkill.cs
-@@ -97,7 +97,7 @@ namespace osu.Game.Rulesets.Difficulty.Skills
+@@ -11,6 +11,11 @@ namespace osu.Game.Rulesets.Difficulty.Skills
+ {
+     public abstract class HarmonicSkill : Skill
+     {
++        private const int cached_weight_count = 8192;
++        private const double default_decay_exponent = 0.9;
++        private static readonly Lazy<double[]> default_weights = new Lazy<double[]>(() => createWeightTable(1));
++        private static readonly Lazy<double[]> speed_weights = new Lazy<double[]>(() => createWeightTable(20));
++
+         /// <summary>
+         /// The sum of note weights, calculated during summation.
+         /// Required for any calculations which need to normalise difficulty value.
+@@ -27,7 +32,7 @@ public abstract class HarmonicSkill : Skill
+         /// Exponent that controls the rate of which decay increases as the index increases.
+         /// Values closer to 1 decay faster whilst lower values give more weight to lower object difficulties.
+         /// </summary>
+-        protected virtual double DecayExponent => 0.9;
++        protected virtual double DecayExponent => default_decay_exponent;
+ 
+         protected HarmonicSkill(Mod[] mods)
+             : base(mods)
+@@ -64,23 +69,45 @@ public override double DifficultyValue()
+ 
+             ApplyDifficultyTransformation(difficulties);
+ 
+-            double difficulty = 0;
+-            int index = 0;
++            Array.Sort(difficulties);
+ 
+-            foreach (double note in difficulties.OrderDescending())
+-            {
+-                // Use a harmonic sum that considers each note of the map according to a predefined weight.
+-                double weight = (1 + (HarmonicScale / (1 + index))) / (Math.Pow(index, DecayExponent) + 1 + (HarmonicScale / (1 + index)));
++            double scale = HarmonicScale;
++            double exponent = DecayExponent;
++            double[]? weights = exponent == default_decay_exponent
++                ? scale switch
++                {
++                    1 => default_weights.Value,
++                    20 => speed_weights.Value,
++                    _ => null
++                }
++                : null;
+ 
++            double difficulty = 0;
++            for (int rank = 0; rank < difficulties.Length; rank++)
++            {
++                double weight = weights != null && rank < weights.Length ? weights[rank] : calculateWeight(rank, scale, exponent);
+                 NoteWeightSum += weight;
+-
+-                difficulty += note * weight;
+-                index += 1;
++                difficulty += difficulties[difficulties.Length - 1 - rank] * weight;
+             }
+ 
+             return difficulty;
+         }
+ 
++        private static double[] createWeightTable(double scale)
++        {
++            var weights = new double[cached_weight_count];
++            for (int rank = 0; rank < weights.Length; rank++)
++                weights[rank] = calculateWeight(rank, scale, default_decay_exponent);
++
++            return weights;
++        }
++
++        private static double calculateWeight(int rank, double scale, double exponent)
++        {
++            double harmonic = scale / (1 + rank);
++            return (1 + harmonic) / (Math.Pow(rank, exponent) + 1 + harmonic);
++        }
++
+         /// <summary>
+         /// Calculates the number of object difficulties weighted against the top object difficulty.
+         /// </summary>
+@@ -97,7 +124,7 @@ public virtual double CountTopWeightedObjectDifficulties(double difficultyValue)
              if (consistentTopNote == 0)
                  return 0;
  
@@ -16871,7 +17451,7 @@ index 32db5e5327..df9c3d91df 100644
  using System;
  using System.Collections.Generic;
 diff --git a/osu.Game/Screens/Edit/Editor.cs b/osu.Game/Screens/Edit/Editor.cs
-index 865e08c581..a60727a900 100644
+index 865e08c..39b12fd 100644
 --- a/osu.Game/Screens/Edit/Editor.cs
 +++ b/osu.Game/Screens/Edit/Editor.cs
 @@ -1,7 +1,7 @@
@@ -16883,6 +17463,153 @@ index 865e08c581..a60727a900 100644
  
  using System;
  using System.Collections.Generic;
+@@ -46,6 +46,7 @@ using osu.Game.Overlays.OSD;
+ using osu.Game.Overlays.Settings.Sections.Gameplay;
+ using osu.Game.Rulesets;
+ using osu.Game.Rulesets.Edit;
++using osu.Game.Rulesets.Mods;
+ using osu.Game.Rulesets.Objects;
+ using osu.Game.Rulesets.Objects.Types;
+ using osu.Game.Screens.Backgrounds;
+@@ -83,7 +84,7 @@ namespace osu.Game.Screens.Edit
+         /// </remarks>
+         public const float WAVEFORM_VISUAL_OFFSET = 20;
+ 
+-        public override float BackgroundParallaxAmount => 0.1f;
++        public override float BackgroundParallaxAmount => editorParallax?.Value == false ? 0 : 0.1f;
+ 
+         public override bool HideOverlaysOnEnter => true;
+ 
+@@ -218,6 +219,11 @@ namespace osu.Game.Screens.Edit
+ 
+         private Bindable<float> editorBackgroundDim;
+         private Bindable<bool> editorShowStoryboard;
++        private Bindable<bool> editorParallax;
++        internal BindableBool PreviewMods { get; } = new BindableBool();
++        private readonly BindableDouble previewTempo = new BindableDouble(1);
++        private ModSettingChangeTracker? previewModSettings;
++        private bool previewEditorActive;
+         private Bindable<bool> editorHitMarkers;
+         private Bindable<bool> editorAutoSeekOnPlacement;
+         private Bindable<bool> editorLimitedDistanceSnap;
+@@ -298,6 +304,7 @@ namespace osu.Game.Screens.Edit
+             clock.ChangeSource(loadableBeatmap.Track);
+ 
+             dependencies.CacheAs(clock);
++            clock.AudioAdjustments.AddAdjustment(AdjustableProperty.Tempo, previewTempo);
+             AddInternal(clock);
+ 
+             clock.SeekingOrStopped.BindValueChanged(_ => updateSampleDisabledState());
+@@ -340,6 +347,7 @@ namespace osu.Game.Screens.Edit
+ 
+             editorBackgroundDim = config.GetBindable<float>(OsuSetting.EditorDim);
+             editorShowStoryboard = config.GetBindable<bool>(OsuSetting.EditorShowStoryboard);
++            editorParallax = config.GetBindable<bool>(OsuSetting.EditorBackgroundParallax);
+             editorHitMarkers = config.GetBindable<bool>(OsuSetting.EditorShowHitMarkers);
+             editorAutoSeekOnPlacement = config.GetBindable<bool>(OsuSetting.EditorAutoSeekOnPlacement);
+             editorLimitedDistanceSnap = config.GetBindable<bool>(OsuSetting.EditorLimitedDistanceSnap);
+@@ -437,10 +445,20 @@ namespace osu.Game.Screens.Edit
+                                                 ]
+                                             },
+                                             new OsuMenuItemSpacer(),
+-                                            new BackgroundDimMenuItem(editorBackgroundDim),
+-                                            new ToggleMenuItem(EditorStrings.ShowStoryboard)
++                                            new MenuItem(GameplaySettingsStrings.BackgroundHeader)
+                                             {
+-                                                State = { BindTarget = editorShowStoryboard },
++                                                Items = new MenuItem[]
++                                                {
++                                                    new BackgroundDimMenuItem(editorBackgroundDim),
++                                                    new BackgroundDimMenuItem(config.GetBindable<float>(OsuSetting.EditorBackgroundBlur), GameplaySettingsStrings.BackgroundBlur),
++                                                    new ToggleMenuItem("Background parallax") { State = { BindTarget = editorParallax } },
++                                                    new ToggleMenuItem("Show video") { State = { BindTarget = config.GetBindable<bool>(OsuSetting.EditorShowVideo) } },
++                                                    new ToggleMenuItem(EditorStrings.ShowStoryboard) { State = { BindTarget = editorShowStoryboard } },
++                                                    new ToggleMenuItem(GameplaySettingsStrings.LightenDuringBreaks)
++                                                    {
++                                                        State = { BindTarget = config.GetBindable<bool>(OsuSetting.EditorLightenDuringBreaks) }
++                                                    },
++                                                }
+                                             },
+                                             new OsuMenuItemSpacer(),
+                                             new ToggleMenuItem(EditorStrings.ShowHitMarkers)
+@@ -474,7 +492,14 @@ namespace osu.Game.Screens.Edit
+                                             bookmarkController.Menu,
+                                         }
+                                     },
+-                                    new EditorMenuItem(EditorStrings.TestGameplayModSelect, MenuItemType.Standard, modSelectOverlay.ToggleVisibility),
++                                    new MenuItem("Mods")
++                                    {
++                                        Items = new MenuItem[]
++                                        {
++                                            new EditorMenuItem(EditorStrings.TestGameplayModSelect, MenuItemType.Standard, modSelectOverlay.ToggleVisibility),
++                                            new ToggleMenuItem("Preview mods in Compose") { State = { BindTarget = PreviewMods } },
++                                        },
++                                    },
+                                 }
+                             },
+                             screenSwitcher = new EditorScreenSwitcherControl
+@@ -498,7 +523,7 @@ namespace osu.Game.Screens.Edit
+         [Resolved]
+         private MusicController musicController { get; set; }
+ 
+-        protected override BackgroundScreen CreateBackground() => new EditorBackgroundScreen(editorBeatmap);
++        protected override BackgroundScreen CreateBackground() => new EditorBackgroundScreen(editorBeatmap, clock);
+ 
+         protected override void LoadComplete()
+         {
+@@ -509,6 +534,15 @@ namespace osu.Game.Screens.Edit
+ 
+             Mode.Value = isNewBeatmap ? EditorScreenMode.SongSetup : EditorScreenMode.Compose;
+             Mode.BindValueChanged(onModeChanged, true);
++            Mode.BindValueChanged(_ => updatePreviewTempo());
++            PreviewMods.BindValueChanged(_ => updatePreviewTempo());
++            Mods.BindValueChanged(_ =>
++            {
++                previewModSettings?.Dispose();
++                previewModSettings = new ModSettingChangeTracker(Mods.Value);
++                previewModSettings.SettingChanged += _ => updatePreviewTempo();
++                updatePreviewTempo();
++            }, true);
+ 
+             MutationTracker.InProgress.BindValueChanged(_ =>
+             {
+@@ -522,6 +556,7 @@ namespace osu.Game.Screens.Edit
+             base.Dispose(isDisposing);
+ 
+             modSelectOverlayRegistration?.Dispose();
++            previewModSettings?.Dispose();
+ 
+             // redundant (should have happened via a `resetTrack()` call in `OnExiting()`), but done for safety
+             musicController.TrackChanged -= onTrackChanged;
+@@ -906,9 +941,17 @@ namespace osu.Game.Screens.Edit
+             onArrivingAtScreen();
+         }
+ 
++        private void updatePreviewTempo()
++        {
++            previewTempo.Value = previewEditorActive && PreviewMods.Value && Mode.Value == EditorScreenMode.Compose
++                ? osu.Game.Utils.ModUtils.CalculateRateWithMods(Mods.Value)
++                : 1;
++        }
++
+         private void onArrivingAtScreen()
+         {
+-            modSelectOverlay.Beatmap.Disabled = false;
++            previewEditorActive = true;
++            updatePreviewTempo();            modSelectOverlay.Beatmap.Disabled = false;
+             modSelectOverlay.Beatmap.BindTo(Beatmap);
+             modSelectOverlay.Ruleset.Disabled = false;
+             modSelectOverlay.Ruleset.BindTo(Ruleset);
+@@ -973,7 +1016,8 @@ namespace osu.Game.Screens.Edit
+ 
+         private void onLeavingScreen()
+         {
+-            modSelectOverlay.SelectedMods.UnbindFrom(Mods);
++            previewEditorActive = false;
++            updatePreviewTempo();            modSelectOverlay.SelectedMods.UnbindFrom(Mods);
+             modSelectOverlay.Ruleset.UnbindFrom(Ruleset);
+             modSelectOverlay.Beatmap.UnbindFrom(Beatmap);
+         }
 diff --git a/osu.Game/Screens/Play/SkipBreakBriefingOverlay.cs b/osu.Game/Screens/Play/SkipBreakBriefingOverlay.cs
 index 8199764e3e..7cc09bbc2f 100644
 --- a/osu.Game/Screens/Play/SkipBreakBriefingOverlay.cs
@@ -18822,19 +19549,24 @@ index 0000000000..1e8a5c35b5
 +}
 diff --git a/osu.Game.Tests/Visual/Navigation/TestSceneRitsuSimulation.cs b/osu.Game.Tests/Visual/Navigation/TestSceneRitsuSimulation.cs
 new file mode 100644
-index 0000000000..2bde1e26c9
+index 0000000..9af6613
 --- /dev/null
 +++ b/osu.Game.Tests/Visual/Navigation/TestSceneRitsuSimulation.cs
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,89 @@
 +// Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 +
 +using System;
++using System.Collections.Generic;
 +using System.Linq;
++using System.Threading;
 +using NUnit.Framework;
 +using osu.Framework.Testing;
 +using osu.Game.Commands;
 +using osu.Game.Graphics.UserInterface;
++using osu.Game.Rulesets.Mods;
 +using osu.Game.Rulesets.Osu;
++using osu.Game.Rulesets.Osu.Mods;
++using osu.Game.Rulesets.Scoring;
 +using osu.Game.Rulesets.Taiko;
 +using osu.Game.Tests.Visual;
 +
@@ -18865,6 +19597,11 @@ index 0000000000..2bde1e26c9
 +            AddUntilStep("accuracy updates from the edited judgement", () =>
 +                field("Target accuracy") is { } accuracy && accuracy.PlaceholderText.ToString() != perfectAccuracy);
 +
++            AddStep("use Stable scoring", () => screen.ToggleStableScoring());
++            AddUntilStep("keep the entered miss in Stable", () => field("Miss")?.Text == "1");
++            AddStep("return to Lazer scoring", () => screen.ToggleStableScoring());
++            AddUntilStep("keep the entered miss in Lazer", () => field("Miss")?.Text == "1");
++
 +            AddStep("reset to perfect with F2", () => InputManager.Key(osuTK.Input.Key.F2));
 +            AddUntilStep("restore the perfect score", () => field("Target accuracy")?.PlaceholderText.ToString() == perfectAccuracy);
 +            AddStep("open mods with F1", () => InputManager.Key(osuTK.Input.Key.F1));
@@ -18876,6 +19613,32 @@ index 0000000000..2bde1e26c9
 +            AddUntilStep("judgements follow the selected ruleset", () => field("Ok") != null && field("100") == null);
 +
 +            OsuTextBox? field(string name) => screen.ChildrenOfType<OsuTextBox>().SingleOrDefault(input => input.Name == name);
++        }
++
++        [Test]
++        public void TestStableUsesClassicJudgementsAndKeepsSelectedMods()
++        {
++            AddStep("compare Stable and Lazer simulation", () =>
++            {
++                var ruleset = new OsuRuleset().RulesetInfo;
++                var map = CreateWorkingBeatmap(ruleset);
++                Mod[] mods = { new OsuModHidden() };
++                var judgements = new Dictionary<HitResult, int> { [HitResult.Ok] = 1 };
++                using var stable = new RitsuSimulation(map, ruleset, mods, CancellationToken.None, stableScoring: true);
++                using var lazer = new RitsuSimulation(map, ruleset, mods, CancellationToken.None);
++
++                var stableScore = stable.Calculate(judgements, null, null);
++                var lazerScore = lazer.Calculate(judgements, null, null);
++
++                Assert.That(stableScore.IsLegacyScore, Is.True);
++                Assert.That(lazerScore.IsLegacyScore, Is.False);
++                Assert.That(stableScore.Mods.OfType<OsuModClassic>().Single().NoSliderHeadAccuracy.Value, Is.True);
++                Assert.That(stableScore.Mods.OfType<OsuModHidden>().Count(), Is.EqualTo(1));
++                Assert.That(lazerScore.Mods.OfType<OsuModClassic>(), Is.Empty);
++                Assert.That(stable.Groups.SelectMany(group => group.Editable), Does.Not.Contain(HitResult.LargeTickMiss));
++                Assert.That(stableScore.Statistics[HitResult.Ok], Is.EqualTo(1));
++                Assert.That(stableScore.PP, Is.GreaterThan(0));
++            });
 +        }
 +    }
 +}
@@ -19335,3 +20098,767 @@ index bcc36d3..53c53bd 100644
          [Test]
          public void TestRulesetWithNoPerformanceCalculator()
          {
+diff --git a/osu.Game/Rulesets/Objects/SliderEventGenerator.cs b/osu.Game/Rulesets/Objects/SliderEventGenerator.cs
+index e5e1504..cb726d5 100644
+--- a/osu.Game/Rulesets/Objects/SliderEventGenerator.cs
++++ b/osu.Game/Rulesets/Objects/SliderEventGenerator.cs
+@@ -23,8 +23,76 @@ namespace osu.Game.Rulesets.Objects
+         /// </summary>
+         public const double TAIL_LENIENCY = -36;
+ 
+-        public static IEnumerable<SliderEventDescriptor> Generate(double startTime, double spanDuration, double velocity, double tickDistance, double totalDistance, int spanCount,
+-                                                                  CancellationToken cancellationToken = default)
++        [ThreadStatic]
++        private static EventCache? activeCache;
++
++        internal readonly struct CacheScope : IDisposable
++        {
++            private readonly EventCache? previous;
++
++            public CacheScope(EventCache? cache)
++            {
++                previous = activeCache;
++                activeCache = cache;
++            }
++
++            public void Dispose() => activeCache = previous;
++        }
++
++        internal sealed class EventCache
++        {
++            private const int max_cached_events = 16384;
++            private readonly Dictionary<EventKey, (int Offset, int Count)> sliders = new Dictionary<EventKey, (int Offset, int Count)>();
++            private readonly List<SliderEventDescriptor> events = new List<SliderEventDescriptor>();
++
++            internal IEnumerable<SliderEventDescriptor> Generate(double startTime, double spanDuration, double velocity, double tickDistance, double totalDistance,
++                                                                  int spanCount, CancellationToken token)
++            {
++                var key = new EventKey(BitConverter.DoubleToInt64Bits(startTime), BitConverter.DoubleToInt64Bits(spanDuration),
++                    BitConverter.DoubleToInt64Bits(velocity), BitConverter.DoubleToInt64Bits(tickDistance), BitConverter.DoubleToInt64Bits(totalDistance), spanCount);
++                if (sliders.TryGetValue(key, out var range))
++                {
++                    token.ThrowIfCancellationRequested();
++                    return read(range.Offset, range.Count);
++                }
++
++                var generated = generate(startTime, spanDuration, velocity, tickDistance, totalDistance, spanCount, token);
++                int offset = events.Count;
++                if (offset == max_cached_events)
++                    return generated;
++
++                foreach (var descriptor in generated)
++                {
++                    if (events.Count == max_cached_events)
++                    {
++                        events.RemoveRange(offset, events.Count - offset);
++                        return generated;
++                    }
++
++                    events.Add(descriptor);
++                }
++
++                int count = events.Count - offset;
++                sliders.Add(key, (offset, count));
++                return read(offset, count);
++            }
++
++            private IEnumerable<SliderEventDescriptor> read(int offset, int count)
++            {
++                for (int i = offset; i < offset + count; i++)
++                    yield return events[i];
++            }
++
++            private readonly record struct EventKey(long StartTime, long SpanDuration, long Velocity, long TickDistance, long TotalDistance, int SpanCount);
++        }
++
++        public static IEnumerable<SliderEventDescriptor> Generate(double startTime, double spanDuration, double velocity, double tickDistance, double totalDistance,
++                                                                  int spanCount, CancellationToken cancellationToken = default)
++            => activeCache?.Generate(startTime, spanDuration, velocity, tickDistance, totalDistance, spanCount, cancellationToken)
++               ?? generate(startTime, spanDuration, velocity, tickDistance, totalDistance, spanCount, cancellationToken);
++
++        private static IEnumerable<SliderEventDescriptor> generate(double startTime, double spanDuration, double velocity, double tickDistance, double totalDistance,
++                                                                  int spanCount, CancellationToken cancellationToken)
+         {
+             // A very lenient maximum length of a slider for ticks to be generated.
+             // This exists for edge cases such as /b/1573664 where the beatmap has been edited by the user, and should never be reached in normal usage.
+diff --git a/osu.Game.Tests/Visual/Editing/TestSceneEditorScreenModes.cs b/osu.Game.Tests/Visual/Editing/TestSceneEditorScreenModes.cs
+index c0d64f4..cd49532 100644
+--- a/osu.Game.Tests/Visual/Editing/TestSceneEditorScreenModes.cs
++++ b/osu.Game.Tests/Visual/Editing/TestSceneEditorScreenModes.cs
+@@ -4,8 +4,13 @@
+ using System;
+ using System.Linq;
+ using NUnit.Framework;
++using osu.Framework.Testing;
+ using osu.Game.Rulesets;
++using osu.Game.Rulesets.Mods;
+ using osu.Game.Rulesets.Osu;
++using osu.Game.Rulesets.Osu.Mods;
++using osu.Game.Rulesets.Osu.Objects;
++using osu.Game.Rulesets.Osu.UI;
+ using osu.Game.Screens.Edit;
+ 
+ namespace osu.Game.Tests.Visual.Editing
+@@ -14,6 +19,31 @@ namespace osu.Game.Tests.Visual.Editing
+     {
+         protected override Ruleset CreateEditorRuleset() => new OsuRuleset();
+ 
++        [Test]
++        public void TestModPreviewUsesUnsavedMapAndKeepsEditorObjects()
++        {
++            int originalCount = 0;
++            double originalSize = 0;
++            AddStep("add an unsaved note and enable Hard Rock and Double Time", () =>
++            {
++                originalSize = EditorBeatmap.Difficulty.CircleSize;
++                EditorBeatmap.Add(new HitCircle { StartTime = 1500 });
++                originalCount = EditorBeatmap.HitObjects.Count;
++                Editor.Mods.Value = new Mod[] { new OsuModHardRock(), new OsuModDoubleTime() };
++                Editor.PreviewMods.Value = true;
++            });
++            AddUntilStep("modded preview shows the current objects",
++                () => Editor.ChildrenOfType<DrawableOsuRuleset>().Any(r => r.Mods.OfType<OsuModHardRock>().Any()
++                    && r.Beatmap.HitObjects.Count == originalCount && r.Beatmap.Difficulty.CircleSize > originalSize));
++            AddAssert("editable difficulty is unchanged", () => EditorBeatmap.Difficulty.CircleSize, () => Is.EqualTo(originalSize));
++            AddAssert("track follows Double Time", () => Beatmap.Value.Track.AggregateTempo.Value, () => Is.EqualTo(1.5));
++            AddStep("set Double Time to 1.25x", () => Editor.Mods.Value.OfType<OsuModDoubleTime>().Single().SpeedChange.Value = 1.25);
++            AddUntilStep("track follows the updated speed", () => Beatmap.Value.Track.AggregateTempo.Value == 1.25);
++            AddStep("disable preview", () => Editor.PreviewMods.Value = false);
++            AddUntilStep("only the editable composer remains", () => !Editor.ChildrenOfType<DrawableOsuRuleset>().Any(r => r.Mods.OfType<OsuModHardRock>().Any()));
++            AddAssert("track returns to normal speed", () => Beatmap.Value.Track.AggregateTempo.Value, () => Is.EqualTo(1));
++        }
++
+         [Test]
+         public void TestSwitchScreensInstantaneously()
+         {
+diff --git a/osu.Game/Graphics/Backgrounds/BeatmapBackgroundWithStoryboard.cs b/osu.Game/Graphics/Backgrounds/BeatmapBackgroundWithStoryboard.cs
+index cfc0340..881de46 100644
+--- a/osu.Game/Graphics/Backgrounds/BeatmapBackgroundWithStoryboard.cs
++++ b/osu.Game/Graphics/Backgrounds/BeatmapBackgroundWithStoryboard.cs
+@@ -25,6 +25,8 @@ namespace osu.Game.Graphics.Backgrounds
+         public readonly AudioContainer Storyboard;
+ 
+         private DrawableStoryboard? drawableStoryboard;
++        private readonly bool includeStoryboard;
++        private readonly bool includeVideo;
+         private CancellationTokenSource? loadCancellationSource = new CancellationTokenSource();
+ 
+         public Action? StoryboardLoaded { get; set; }
+@@ -37,9 +39,11 @@ namespace osu.Game.Graphics.Backgrounds
+         [Resolved]
+         private IBindable<IReadOnlyList<Mod>> mods { get; set; } = null!;
+ 
+-        public BeatmapBackgroundWithStoryboard(WorkingBeatmap beatmap, string fallbackTextureName = "Backgrounds/bg1")
++        public BeatmapBackgroundWithStoryboard(WorkingBeatmap beatmap, string fallbackTextureName = "Backgrounds/bg1", bool includeStoryboard = true, bool includeVideo = true)
+             : base(beatmap, fallbackTextureName)
+         {
++            this.includeStoryboard = includeStoryboard;
++            this.includeVideo = includeVideo;
+             storyboardClock = new InterpolatingFramedClock();
+ 
+             AddInternal(Storyboard = new AudioContainer
+@@ -59,10 +63,10 @@ namespace osu.Game.Graphics.Backgrounds
+         {
+             Debug.Assert(drawableStoryboard == null);
+ 
+-            if (!Beatmap.Storyboard.HasDrawable)
++            if ((!includeStoryboard && !includeVideo) || !Beatmap.Storyboard.HasDrawable)
+                 return;
+ 
+-            drawableStoryboard = new DrawableStoryboard(Beatmap.Storyboard, mods.Value)
++            drawableStoryboard = new DrawableStoryboard(Beatmap.Storyboard, mods.Value, includeStoryboard, includeVideo)
+             {
+                 Clock = storyboardClock
+             };
+@@ -114,7 +118,7 @@ namespace osu.Game.Graphics.Backgrounds
+         private void updateStoryboardVisibility()
+         {
+             bool showStoryboard = drawableStoryboard != null && ShowStoryboard.Value;
+-            bool showBackground = !showStoryboard || !Beatmap.Storyboard.ReplacesBackground;
++            bool showBackground = !showStoryboard || !includeStoryboard || !Beatmap.Storyboard.ReplacesBackground;
+ 
+             Storyboard.FadeTo(showStoryboard ? 1 : 0, BackgroundScreen.TRANSITION_LENGTH, Easing.OutQuint);
+             Sprite.FadeTo(showBackground ? 1 : 0, BackgroundScreen.TRANSITION_LENGTH, Easing.OutQuint);
+diff --git a/osu.Game/Screens/Backgrounds/EditorBackgroundScreen.cs b/osu.Game/Screens/Backgrounds/EditorBackgroundScreen.cs
+index e0b7115..12b1e45 100644
+--- a/osu.Game/Screens/Backgrounds/EditorBackgroundScreen.cs
++++ b/osu.Game/Screens/Backgrounds/EditorBackgroundScreen.cs
+@@ -1,6 +1,7 @@
+ // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+ // See the LICENCE file in the repository root for full licence text.
+ 
++using System;
+ using System.Threading;
+ using osu.Framework.Allocation;
+ using osu.Framework.Bindables;
+@@ -12,7 +13,10 @@ using osu.Game.Beatmaps;
+ using osu.Game.Configuration;
+ using osu.Game.Graphics;
+ using osu.Game.Graphics.Backgrounds;
++using osu.Game.Graphics.Containers;
++using osu.Game.Performance;
+ using osu.Game.Screens.Edit;
++using osuTK;
+ using osuTK.Graphics;
+ 
+ namespace osu.Game.Screens.Backgrounds
+@@ -24,6 +28,13 @@ namespace osu.Game.Screens.Backgrounds
+         private CancellationTokenSource? cancellationTokenSource;
+         private Bindable<float> dimLevel = null!;
+         private Bindable<bool> showStoryboard = null!;
++        private Bindable<bool> showVideo = null!;
++        private Bindable<float> blurLevel = null!;
++        private Bindable<bool> lightenDuringBreaks = null!;
++        private readonly EditorBeatmap editorBeatmap;
++        private float? appliedDim;
++
++        private readonly EditorClock clock;
+ 
+         private BeatmapBackgroundWithStoryboard background = null!;
+ 
+@@ -36,8 +47,10 @@ namespace osu.Game.Screens.Backgrounds
+         [Resolved]
+         private IBindable<WorkingBeatmap> beatmap { get; set; } = null!;
+ 
+-        public EditorBackgroundScreen(EditorBeatmap editorBeatmap)
++        public EditorBackgroundScreen(EditorBeatmap editorBeatmap, EditorClock clock)
+         {
++            this.editorBeatmap = editorBeatmap;
++            this.clock = clock;
+             InternalChild = dimContainer = new Container
+             {
+                 RelativeSizeAxes = Axes.Both,
+@@ -64,14 +77,49 @@ namespace osu.Game.Screens.Backgrounds
+             dimLevel = config.GetBindable<float>(OsuSetting.EditorDim);
+             showStoryboard = config.GetBindable<bool>(OsuSetting.EditorShowStoryboard);
+ 
+-            content.Child = createContent();
++            showVideo = config.GetBindable<bool>(OsuSetting.EditorShowVideo);
++            blurLevel = config.GetBindable<float>(OsuSetting.EditorBackgroundBlur);
++            lightenDuringBreaks = config.GetBindable<bool>(OsuSetting.EditorLightenDuringBreaks);
++            content.Child = background = createContent();
+         }
+ 
+         protected override void LoadComplete()
+         {
+             base.LoadComplete();
+ 
+-            dimLevel.BindValueChanged(_ => dimContainer.FadeColour(OsuColour.Gray(1 - dimLevel.Value), 500, Easing.OutQuint), true);
++            showStoryboard.BindValueChanged(_ => RefreshBackgroundAsync());
++            showVideo.BindValueChanged(_ => RefreshBackgroundAsync());
++            blurLevel.BindValueChanged(_ => updateBlur(), true);
++        }
++
++        protected override void Update()
++        {
++            base.Update();
++            float target = dimLevel.Value;
++            if (lightenDuringBreaks.Value)
++            {
++                double time = clock.CurrentTime;
++                foreach (var period in editorBeatmap.Breaks)
++                {
++                    if (time < period.StartTime)
++                        break;
++                    if (time < period.EndTime)
++                    {
++                        target = Math.Max(target - UserDimContainer.BREAK_LIGHTEN_AMOUNT, 0);
++                        break;
++                    }
++                }
++            }
++            if (appliedDim != target)
++            {
++                appliedDim = target;
++                dimContainer.FadeColour(OsuColour.Gray(1 - target), 500, Easing.OutQuint);
++            }
++        }
++
++        private void updateBlur()
++        {
++            background.BlurTo(new Vector2(PotatoMode.Active ? 0 : blurLevel.Value * BackgroundScreenBeatmap.USER_BLUR_FACTOR), 200, Easing.OutQuint);
+         }
+ 
+         public override void OnEntering(ScreenTransitionEvent e)
+@@ -82,6 +130,7 @@ namespace osu.Game.Screens.Backgrounds
+ 
+         public override bool OnExiting(ScreenExitEvent e)
+         {
++            cancellationTokenSource?.Cancel();
+             // The storyboard will do weird things with clock time changing on exit, so let's just hide it instead.
+             background.UnloadStoryboard();
+ 
+@@ -91,13 +140,18 @@ namespace osu.Game.Screens.Backgrounds
+         public void RefreshBackgroundAsync()
+         {
+             cancellationTokenSource?.Cancel();
+-            LoadComponentAsync(createContent(), d => content.Child = d, (cancellationTokenSource = new CancellationTokenSource()).Token);
++            cancellationTokenSource?.Dispose();
++            LoadComponentAsync(createContent(), d =>
++            {
++                background = d;
++                content.Child = d;
++                updateBlur();
++            }, (cancellationTokenSource = new CancellationTokenSource()).Token);
+         }
+ 
+-        private Drawable createContent() => background = new BeatmapBackgroundWithStoryboard(beatmap.Value)
++        private BeatmapBackgroundWithStoryboard createContent() => new BeatmapBackgroundWithStoryboard(beatmap.Value, includeStoryboard: showStoryboard.Value, includeVideo: showVideo.Value)
+         {
+             RelativeSizeAxes = Axes.Both,
+-            ShowStoryboard = { BindTarget = showStoryboard },
+         };
+ 
+         public override bool Equals(BackgroundScreen? other)
+diff --git a/osu.Game/Screens/Edit/BackgroundDimMenuItem.cs b/osu.Game/Screens/Edit/BackgroundDimMenuItem.cs
+index 26f2f14..b1008c8 100644
+--- a/osu.Game/Screens/Edit/BackgroundDimMenuItem.cs
++++ b/osu.Game/Screens/Edit/BackgroundDimMenuItem.cs
+@@ -4,6 +4,7 @@
+ using System.Collections.Generic;
+ using osu.Framework.Bindables;
+ using osu.Framework.Graphics.UserInterface;
++using osu.Framework.Localisation;
+ using osu.Game.Graphics.UserInterface;
+ using osu.Game.Localisation;
+ 
+@@ -15,8 +16,8 @@ namespace osu.Game.Screens.Edit
+ 
+         private readonly Dictionary<float, TernaryStateRadioMenuItem> menuItemLookup = new Dictionary<float, TernaryStateRadioMenuItem>();
+ 
+-        public BackgroundDimMenuItem(Bindable<float> backgroundDim)
+-            : base(GameplaySettingsStrings.BackgroundDim)
++        public BackgroundDimMenuItem(Bindable<float> backgroundDim, LocalisableString? caption = null)
++            : base(caption ?? GameplaySettingsStrings.BackgroundDim)
+         {
+             Items = new[]
+             {
+diff --git a/osu.Game/Screens/Edit/Compose/ComposeScreen.cs b/osu.Game/Screens/Edit/Compose/ComposeScreen.cs
+index 00690c6..32813f7 100644
+--- a/osu.Game/Screens/Edit/Compose/ComposeScreen.cs
++++ b/osu.Game/Screens/Edit/Compose/ComposeScreen.cs
+@@ -3,19 +3,31 @@
+ 
+ #nullable disable
+ 
++using System;
++using System.Collections.Generic;
+ using System.Diagnostics;
++using System.IO;
++using System.Threading;
++using System.Threading.Tasks;
+ using System.Linq;
+ using osu.Framework.Allocation;
+ using osu.Framework.Bindables;
++using osu.Framework.Logging;
++using osu.Framework.Threading;
+ using osu.Framework.Graphics;
+ using osu.Framework.Graphics.Containers;
+ using osu.Framework.Platform;
+ using osu.Game.Beatmaps;
++using osu.Game.Beatmaps.Formats;
++using osu.Game.IO;
++using osu.Game.Graphics.Sprites;
+ using osu.Game.Configuration;
+ using osu.Game.Extensions;
+ using osu.Game.IO.Serialization;
+ using osu.Game.Rulesets;
+ using osu.Game.Rulesets.Edit;
++using osu.Game.Rulesets.Mods;
++using osu.Game.Rulesets.UI;
+ using osu.Game.Screens.Edit.Compose.Components.Timeline;
+ 
+ namespace osu.Game.Screens.Edit.Compose
+@@ -37,6 +49,14 @@ namespace osu.Game.Screens.Edit.Compose
+         private Bindable<string> clipboard { get; set; }
+ 
+         private HitObjectComposer composer;
++        private ModPreviewContainer previewContainer;
++        private Editor previewEditor;
++        private ScheduledDelegate previewUpdate;
++        private CancellationTokenSource previewCancellation;
++        private ModSettingChangeTracker previewSettings;
++        private IEditorChangeHandler previewChanges;
++        private Bindable<bool> previewEnabled;
++        private Bindable<IReadOnlyList<Mod>> previewMods;
+ 
+         public ComposeScreen()
+             : base(EditorScreenMode.Compose)
+@@ -64,7 +84,15 @@ namespace osu.Game.Screens.Edit.Compose
+             if (ruleset == null || composer == null)
+                 return new ScreenWhiteBox.UnderConstructionMessage(ruleset == null ? "This beatmap" : $"{ruleset.Description}'s composer");
+ 
+-            return wrapSkinnableContent(composer);
++            return wrapSkinnableContent(new Container
++            {
++                RelativeSizeAxes = Axes.Both,
++                Children = new Drawable[]
++                {
++                    composer,
++                    previewContainer = new ModPreviewContainer { RelativeSizeAxes = Axes.Both }
++                }
++            });
+         }
+ 
+         protected override Drawable CreateTimelineContent()
+@@ -101,10 +129,12 @@ namespace osu.Game.Screens.Edit.Compose
+             return new EditorSkinProvidingContainer(EditorBeatmap).WithChild(content);
+         }
+ 
+-        [BackgroundDependencyLoader]
+-        private void load(EditorClipboard clipboard)
++        [BackgroundDependencyLoader(true)]
++        private void load(EditorClipboard clipboard, Editor editor, IEditorChangeHandler changeHandler)
+         {
+             this.clipboard = clipboard.Content.GetBoundCopy();
++            previewEditor = editor;
++            previewChanges = changeHandler;
+         }
+ 
+         protected override void LoadComplete()
+@@ -117,10 +147,196 @@ namespace osu.Game.Screens.Edit.Compose
+ 
+             EditorBeatmap.SelectedHitObjects.BindCollectionChanged((_, _) => updateClipboardActionAvailability());
+             clipboard.BindValueChanged(_ => updateClipboardActionAvailability());
+-            composer.OnLoadComplete += _ => updateClipboardActionAvailability();
++            composer.OnLoadComplete += _ =>
++            {
++                updateClipboardActionAvailability();
++                if (previewEditor != null)
++                    Scheduler.AddOnce(schedulePreview);
++            };
++            if (previewEditor != null)
++            {
++                previewEnabled = previewEditor.PreviewMods.GetBoundCopy();
++                previewMods = previewEditor.Mods.GetBoundCopy();
++                previewEnabled.BindValueChanged(_ => Scheduler.AddOnce(schedulePreview));
++                previewMods.BindValueChanged(_ =>
++                {
++                    previewSettings?.Dispose();
++                    previewSettings = new ModSettingChangeTracker(previewEditor.Mods.Value);
++                    previewSettings.SettingChanged += _ => Scheduler.AddOnce(schedulePreview);
++                    Scheduler.AddOnce(schedulePreview);
++                }, true);
++                if (previewChanges != null)
++                    previewChanges.OnStateChange += schedulePreview;
++            }
+             updateClipboardActionAvailability();
+         }
+ 
++        private void schedulePreview()
++        {
++            if (!composer.IsLoaded || !previewContainer.IsLoaded)
++                return;
++
++            previewUpdate?.Cancel();
++            previewCancellation?.Cancel();
++            previewCancellation?.Dispose();
++            previewCancellation = null;
++
++            if (!previewEditor.PreviewMods.Value || previewEditor.Mods.Value.Count == 0)
++            {
++                previewContainer.Clear();
++                composer.Show();
++                return;
++            }
++
++            previewUpdate = Scheduler.AddDelayed(startPreview, 150);
++        }
++
++        private void startPreview()
++        {
++            var mods = previewEditor.Mods.Value.Select(mod => mod.DeepClone()).ToArray();
++            var snapshot = new MemoryStream();
++            using (var writer = new StreamWriter(snapshot, leaveOpen: true))
++                new LegacyBeatmapEncoder(EditorBeatmap, EditorBeatmap.BeatmapSkin, EditorBeatmap.Storyboard).Encode(writer);
++
++            snapshot.Position = 0;
++            var rulesetInfo = EditorBeatmap.BeatmapInfo.Ruleset;
++            _ = loadPreviewAsync(snapshot, mods, rulesetInfo, (previewCancellation = new CancellationTokenSource()).Token);
++        }
++
++        private async Task loadPreviewAsync(Stream snapshot, Mod[] mods, RulesetInfo rulesetInfo, CancellationToken token)
++        {
++            try
++            {
++                using (snapshot)
++                {
++                    var map = await Task.Run(() =>
++                    {
++                        using var reader = new LineBufferedReader(snapshot);
++                        var decoded = Decoder.GetDecoder<Beatmap>(reader).Decode(reader);
++                        decoded.BeatmapInfo.Ruleset = rulesetInfo;
++                        return new FlatWorkingBeatmap(decoded).GetPlayableBeatmap(rulesetInfo, mods, token);
++                    }, token).ConfigureAwait(false);
++
++                    Schedule(() =>
++                    {
++                        if (!token.IsCancellationRequested)
++                            showPreview(map, mods, token);
++                    });
++                }
++            }
++            catch (OperationCanceledException) when (token.IsCancellationRequested)
++            {
++            }
++            catch (Exception error)
++            {
++                Schedule(() => previewFailed(error, token));
++            }
++        }
++
++        private void showPreview(IBeatmap map, Mod[] mods, CancellationToken token)
++        {
++            try
++            {
++                var preview = ruleset.CreateDrawableRulesetWith(map, mods);
++                preview.Clock = clock;
++                preview.ProcessCustomClock = false;
++                preview.FrameStablePlayback = false;
++                previewContainer.LoadPreview(new ModPreviewContent(preview), loaded =>
++                {
++                    if (loaded.LoadError != null)
++                    {
++                        previewFailed(loaded.LoadError, token);
++                        loaded.Dispose();
++                        return;
++                    }
++
++                    try
++                    {
++                        preview.Playfield.DisplayJudgements.Value = false;
++                        var autoplay = ruleset.GetAutoplayMod();
++                        if (autoplay != null)
++                            preview.SetReplayScore(autoplay.CreateScoreFromReplayData(map, mods));
++                        previewContainer.Child = loaded;
++                        composer.Hide();
++                    }
++                    catch (Exception error)
++                    {
++                        loaded.Dispose();
++                        previewFailed(error, token);
++                    }
++                }, token);
++            }
++            catch (Exception error)
++            {
++                previewFailed(error, token);
++            }
++        }
++
++        private void previewFailed(Exception error, CancellationToken token)
++        {
++            if (token.IsCancellationRequested)
++                return;
++
++            Logger.Error(error, "Could not load the editor mod preview.");
++            previewContainer.Child = new OsuSpriteText
++            {
++                Anchor = Anchor.TopCentre,
++                Origin = Anchor.TopCentre,
++                Text = "Mod preview unavailable"
++            };
++            composer.Show();
++        }
++
++        protected override void Dispose(bool isDisposing)
++        {
++            if (previewChanges != null)
++                previewChanges.OnStateChange -= schedulePreview;
++            previewUpdate?.Cancel();
++            previewCancellation?.Cancel();
++            previewCancellation?.Dispose();
++            previewSettings?.Dispose();
++            previewEnabled?.UnbindAll();
++            previewMods?.UnbindAll();
++            base.Dispose(isDisposing);
++        }
++
++        private partial class ModPreviewContainer : Container
++        {
++            public void LoadPreview(ModPreviewContent content, Action<ModPreviewContent> loaded, CancellationToken token)
++                => LoadComponentAsync(content, loaded, token);
++
++            public override bool PropagatePositionalInputSubTree => false;
++            public override bool PropagateNonPositionalInputSubTree => false;
++        }
++
++        private partial class ModPreviewContent : CompositeDrawable
++        {
++            private readonly DrawableRuleset preview;
++
++            public Exception LoadError { get; private set; }
++
++            public ModPreviewContent(DrawableRuleset preview)
++            {
++                RelativeSizeAxes = Axes.Both;
++                this.preview = preview;
++            }
++
++            [BackgroundDependencyLoader]
++            private void load()
++            {
++                try
++                {
++                    LoadComponent(preview);
++                    InternalChild = preview;
++                }
++                catch (Exception error)
++                {
++                    LoadError = error;
++                    preview.Dispose();
++                }
++            }
++        }
++
+         #region Clipboard operations
+ 
+         public override void Cut()
+diff --git a/osu.Game/Screens/OsuScreenStack.cs b/osu.Game/Screens/OsuScreenStack.cs
+index b9b8c1d..e20b798 100644
+--- a/osu.Game/Screens/OsuScreenStack.cs
++++ b/osu.Game/Screens/OsuScreenStack.cs
+@@ -63,6 +63,7 @@ namespace osu.Game.Screens
+         {
+             base.Update();
+ 
++            setParallax(CurrentScreen);
+             parallaxContainer.Y = -backgroundTopExtension;
+             parallaxContainer.Height = DrawHeight + backgroundTopExtension;
+         }
+diff --git a/osu.Game/Storyboards/Drawables/DrawableStoryboard.cs b/osu.Game/Storyboards/Drawables/DrawableStoryboard.cs
+index b40f586..4a32c7e 100644
+--- a/osu.Game/Storyboards/Drawables/DrawableStoryboard.cs
++++ b/osu.Game/Storyboards/Drawables/DrawableStoryboard.cs
+@@ -43,6 +43,8 @@ namespace osu.Game.Storyboards.Drawables
+         public override bool RemoveCompletedTransforms => false;
+ 
+         private double? lastEventEndTime;
++        private readonly bool includeStoryboard;
++        private readonly bool includeVideo;
+ 
+         [Cached(typeof(IReadOnlyList<Mod>))]
+         public IReadOnlyList<Mod> Mods { get; }
+@@ -61,14 +63,16 @@ namespace osu.Game.Storyboards.Drawables
+         protected override IReadOnlyDependencyContainer CreateChildDependencies(IReadOnlyDependencyContainer parent) =>
+             dependencies = new DependencyContainer(base.CreateChildDependencies(parent));
+ 
+-        public DrawableStoryboard(Storyboard storyboard, IReadOnlyList<Mod>? mods = null)
++        public DrawableStoryboard(Storyboard storyboard, IReadOnlyList<Mod>? mods = null, bool includeStoryboard = true, bool includeVideo = true)
+         {
+             Storyboard = storyboard;
++            this.includeStoryboard = includeStoryboard;
++            this.includeVideo = includeVideo;
+             Mods = mods ?? Array.Empty<Mod>();
+ 
+             Size = new Vector2(640, 480);
+ 
+-            bool onlyHasVideoElements = Storyboard.Layers.SelectMany(l => l.Elements).All(e => e is StoryboardVideo);
++            bool onlyHasVideoElements = !includeStoryboard || Storyboard.Layers.SelectMany(l => l.Elements).All(e => e is StoryboardVideo);
+ 
+             Width = Height * (storyboard.Beatmap.WidescreenStoryboard || onlyHasVideoElements ? 16 / 9f : 4 / 3f);
+ 
+@@ -102,7 +106,8 @@ namespace osu.Game.Storyboards.Drawables
+             {
+                 cancellationToken?.ThrowIfCancellationRequested();
+ 
+-                Add(layer.CreateDrawable());
++                if (layer is StoryboardVideoLayer ? includeVideo : includeStoryboard)
++                    Add(layer.CreateDrawable());
+             }
+ 
+             lastEventEndTime = Storyboard.LatestEventTime;
+diff --git a/osu.Game.Rulesets.Osu.Tests/TestSceneHitCircle.cs b/osu.Game.Rulesets.Osu.Tests/TestSceneHitCircle.cs
+index 269c3f6..d9ad7b1 100644
+--- a/osu.Game.Rulesets.Osu.Tests/TestSceneHitCircle.cs
++++ b/osu.Game.Rulesets.Osu.Tests/TestSceneHitCircle.cs
+@@ -6,6 +6,7 @@ using NUnit.Framework;
+ using osu.Framework.Allocation;
+ using osu.Framework.Extensions.ObjectExtensions;
+ using osu.Framework.Graphics;
++using osu.Framework.Testing;
+ using osu.Game.Beatmaps;
+ using osu.Game.Beatmaps.ControlPoints;
+ using osu.Game.Configuration;
+@@ -70,6 +71,24 @@ namespace osu.Game.Rulesets.Osu.Tests
+             AddStep("Hit Big Single", () => SetContents(_ => testSingle(2, true)));
+         }
+ 
++        [Test]
++        public void TestHitCircleNumbersFollowSkinSetting()
++        {
++            AddStep("show a circle in each skin", () =>
++            {
++                config.SetValue(OsuSetting.ShowHitCircleNumbers, true);
++                SetContents(_ => createSingle(5, false, 1000, null));
++            });
++            AddUntilStep("all five skins show the number", () => visibleNumbers(1));
++            AddStep("hide circle numbers", () => config.SetValue(OsuSetting.ShowHitCircleNumbers, false));
++            AddUntilStep("all five skins hide the number", () => visibleNumbers(0));
++            AddStep("restore circle numbers", () => config.SetValue(OsuSetting.ShowHitCircleNumbers, true));
++            AddUntilStep("all five skins show the number again", () => visibleNumbers(1));
++
++            bool visibleNumbers(float alpha) => CreatedDrawables.Count() == 5 && CreatedDrawables.All(d =>
++                d.ChildrenOfType<Drawable>().Any(child => child.Name == "Hit circle number" && child.Alpha == alpha));
++        }
++
+         private Drawable testSingle(float circleSize, bool auto = false, double timeOffset = 0, Vector2? positionOffset = null, int comboIndex = 0)
+         {
+             var playfield = new TestOsuPlayfield();
+diff --git a/osu.Game.Rulesets.Osu/Skinning/HitCircleNumberContainer.cs b/osu.Game.Rulesets.Osu/Skinning/HitCircleNumberContainer.cs
+new file mode 100644
+index 0000000..19e7592
+--- /dev/null
++++ b/osu.Game.Rulesets.Osu/Skinning/HitCircleNumberContainer.cs
+@@ -0,0 +1,32 @@
++using osu.Framework.Allocation;
++using osu.Framework.Bindables;
++using osu.Framework.Graphics;
++using osu.Framework.Graphics.Containers;
++using osu.Game.Configuration;
++
++namespace osu.Game.Rulesets.Osu.Skinning
++{
++    internal partial class HitCircleNumberContainer : Container
++    {
++        private Bindable<bool> showNumbers = null!;
++
++        public HitCircleNumberContainer(Drawable number)
++        {
++            Name = "Hit circle number";
++            Anchor = Origin = Anchor.Centre;
++            Child = number;
++        }
++
++        [BackgroundDependencyLoader]
++        private void load(OsuConfigManager config)
++        {
++            showNumbers = config.GetBindable<bool>(OsuSetting.ShowHitCircleNumbers);
++        }
++
++        protected override void LoadComplete()
++        {
++            base.LoadComplete();
++            showNumbers.BindValueChanged(value => Alpha = value.NewValue ? 1 : 0, true);
++        }
++    }
++}
+diff --git a/osu.Game/Overlays/Settings/Sections/SkinSection.cs b/osu.Game/Overlays/Settings/Sections/SkinSection.cs
+index 65a314e..77f8378 100644
+--- a/osu.Game/Overlays/Settings/Sections/SkinSection.cs
++++ b/osu.Game/Overlays/Settings/Sections/SkinSection.cs
+@@ -82,6 +82,14 @@ namespace osu.Game.Overlays.Settings.Sections
+                     }
+                 },
+                 new SkinFavouriteButton(),
++                new SettingsItemV2(new FormCheckBox
++                {
++                    Caption = "Show hit circle numbers",
++                    Current = config.GetBindable<bool>(OsuSetting.ShowHitCircleNumbers),
++                })
++                {
++                    Keywords = new[] { "skin", "numbers", "circles", "slider heads" },
++                },
+                 new SettingsButtonV2
+                 {
+                     Text = SkinSettingsStrings.SkinLayoutEditor,

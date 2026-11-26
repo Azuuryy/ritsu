@@ -4,13 +4,14 @@
 #nullable disable
 
 using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using JetBrains.Annotations;
 using osu.Framework.Audio;
 using osu.Framework.Audio.Track;
-using osu.Framework.Extensions;
 using osu.Framework.Graphics.Rendering;
 using osu.Framework.Graphics.Rendering.Dummy;
 using osu.Framework.Graphics.Textures;
@@ -166,7 +167,7 @@ namespace osu.Game.Beatmaps
                 {
                     string fileStorePath = BeatmapSetInfo.GetPathForFile(BeatmapInfo.Path);
 
-                    var stream = GetStream(fileStorePath);
+                    using var stream = GetStream(fileStorePath);
 
                     if (stream == null)
                     {
@@ -174,8 +175,7 @@ namespace osu.Game.Beatmaps
                         return null;
                     }
 
-                    string streamMD5 = stream.ComputeMD5Hash();
-                    string streamSHA2 = stream.ComputeSHA2Hash();
+                    var (streamMD5, streamSHA2) = computeBeatmapHashes(stream);
 
                     if (streamMD5 != BeatmapInfo.MD5Hash)
                     {
@@ -198,6 +198,32 @@ namespace osu.Game.Beatmaps
                 {
                     Logger.Error(e, "Beatmap failed to load");
                     return null;
+                }
+            }
+
+            private static (string Md5, string Sha256) computeBeatmapHashes(Stream stream)
+            {
+                using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+                using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(8192);
+
+                try
+                {
+                    stream.Seek(0, SeekOrigin.Begin);
+                    int read;
+                    while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        var bytes = buffer.AsSpan(0, read);
+                        md5.AppendData(bytes);
+                        sha256.AppendData(bytes);
+                    }
+
+                    stream.Seek(0, SeekOrigin.Begin);
+                    return (Convert.ToHexStringLower(md5.GetHashAndReset()), Convert.ToHexStringLower(sha256.GetHashAndReset()));
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
                 }
             }
 

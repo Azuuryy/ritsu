@@ -63,6 +63,7 @@ namespace osu.Game.Screens
         {
             base.Update();
 
+            setParallax(CurrentScreen);
             parallaxContainer.Y = -backgroundTopExtension;
             parallaxContainer.Height = DrawHeight + backgroundTopExtension;
         }

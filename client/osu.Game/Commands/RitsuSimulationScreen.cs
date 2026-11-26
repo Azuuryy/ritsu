@@ -99,6 +99,11 @@ namespace osu.Game.Commands
         private readonly OsuSpriteText modsHeader;
         private ScreenFooterButton? resetButton;
         private ScreenFooterButton? modsButton;
+        private ScreenFooterButton? scoringButton;
+        private bool stableScoring;
+        private SimulationInputs? pendingScoringInputs;
+
+        private sealed record SimulationInputs(string Accuracy, string Combo, Dictionary<HitResult, string> Judgements);
         private bool resetEnabled;
         private readonly RoundedButton applyMods;
         private readonly Dictionary<HitResult, OsuTextBox> fields = new Dictionary<HitResult, OsuTextBox>();
@@ -160,6 +165,12 @@ namespace osu.Game.Commands
                 Action = resetScore,
             };
             resetButton.Enabled.Value = resetEnabled;
+            scoringButton = new ScreenFooterButton
+            {
+                Icon = FontAwesome.Solid.ExchangeAlt,
+                Action = ToggleStableScoring,
+            };
+            updateScoringButton();
 
             return new[]
             {
@@ -172,6 +183,7 @@ namespace osu.Game.Commands
                     Action = toggleMods,
                 },
                 resetButton,
+                scoringButton,
             };
         }
 
@@ -483,11 +495,39 @@ namespace osu.Game.Commands
                     return;
 
                 mode = next;
+                stableScoring = false;
+                pendingScoringInputs = null;
+                updateScoringButton();
                 mods = mode.Equals(selected) ? Mods.Value.Select(mod => mod.DeepClone()).ToArray() : Array.Empty<Mod>();
                 modPicker.Ruleset.Value = mode;
                 modPicker.SelectedMods.Value = mods.Select(mod => mod.DeepClone()).ToArray();
                 prepare();
             }, true);
+        }
+
+        private void updateScoringButton()
+        {
+            if (scoringButton == null)
+                return;
+
+            scoringButton.Enabled.Value = mode?.ShortName == "osu";
+            scoringButton.Text = stableScoring ? "PP: Stable" : "PP: Lazer";
+            scoringButton.AccentColour = stableScoring ? colours.Orange1 : colours.Blue1;
+            scoringButton.TooltipText = mode?.ShortName != "osu"
+                ? "Stable scoring is available for osu!standard"
+                : stableScoring ? "Switch to Lazer scoring" : "Switch to Stable scoring";
+        }
+
+        internal void ToggleStableScoring()
+        {
+            if (mode?.ShortName != "osu")
+                return;
+
+            pendingScoringInputs ??= new SimulationInputs(accuracy?.Text ?? string.Empty, combo?.Text ?? string.Empty,
+                fields.ToDictionary(pair => pair.Key, pair => pair.Value.Text));
+            stableScoring = !stableScoring;
+            updateScoringButton();
+            prepare();
         }
 
         private async void prepare()
@@ -497,6 +537,7 @@ namespace osu.Game.Commands
             var token = preparation.Token;
             var selectedMode = mode;
             var selectedMods = mods;
+            bool useStableScoring = stableScoring;
             model?.Dispose();
             model = null;
             queuedCalculation?.Cancel();
@@ -518,7 +559,7 @@ namespace osu.Game.Commands
             setResetEnabled(false);
             try
             {
-                var prepared = await Task.Run(() => new RitsuSimulation(working, selectedMode, selectedMods, token), token).ConfigureAwait(false);
+                var prepared = await Task.Run(() => new RitsuSimulation(working, selectedMode, selectedMods, token, useStableScoring), token).ConfigureAwait(false);
                 if (token.IsCancellationRequested)
                 {
                     prepared.Dispose();
@@ -638,6 +679,21 @@ namespace osu.Game.Commands
                     judgementFlow.Add(cell(field.Input.Name, judgement, field, separator()));
                     index++;
                 }
+            }
+
+            if (pendingScoringInputs is { } inputs)
+            {
+                pendingScoringInputs = null;
+                accuracy!.Text = inputs.Accuracy;
+                if (combo != null)
+                    combo.Text = inputs.Combo;
+                foreach (var (hit, value) in inputs.Judgements)
+                {
+                    if (fields.TryGetValue(hit, out var field))
+                        field.Text = value;
+                }
+
+                queuedCalculation?.Cancel();
             }
 
             calculateScore();
@@ -1051,6 +1107,7 @@ namespace osu.Game.Commands
         private readonly DifficultyAttributes difficulty;
         private readonly Dictionary<HitResult, int> maximum;
         private readonly double accuracyMaximum;
+        private readonly bool stableScoring;
         public IReadOnlyList<JudgementGroup> Groups { get; }
         public int MaxCombo => processor.MaximumCombo;
         public double PerfectPP { get; }
@@ -1061,13 +1118,20 @@ namespace osu.Game.Commands
         public IReadOnlyList<BeatmapTitleWedge.StatisticDifficulty.Data> Attributes { get; }
         public double StarRating => difficulty.StarRating;
 
-        public RitsuSimulation(WorkingBeatmap working, RulesetInfo mode, Mod[] mods, CancellationToken token)
+        public RitsuSimulation(WorkingBeatmap working, RulesetInfo mode, Mod[] mods, CancellationToken token, bool stableScoring = false)
         {
             this.working = working;
             this.mode = mode;
-            this.mods = mods;
+            this.stableScoring = stableScoring;
 
             var ruleset = mode.CreateInstance();
+            if (stableScoring)
+            {
+                if (mode.ShortName != "osu" || ruleset.CreateMod<ModClassic>() is not ModClassic classic)
+                    throw new ArgumentException("Stable scoring is available for osu!standard.");
+                mods = mods.Where(mod => mod is not ModClassic).Append(classic).ToArray();
+            }
+            this.mods = mods;
             if (!ModUtils.CheckValidForGameplay(mods, out _))
                 throw new ArgumentException("The selected mods are incompatible.");
 
@@ -1092,8 +1156,11 @@ namespace osu.Game.Commands
             {
                 case "osu":
                     group(HitResult.Great, HitResult.Ok, HitResult.Meh, HitResult.Miss);
-                    group(HitResult.LargeTickHit, HitResult.LargeTickMiss);
-                    group(HitResult.SliderTailHit, HitResult.IgnoreMiss);
+                    if (!stableScoring)
+                    {
+                        group(HitResult.LargeTickHit, HitResult.LargeTickMiss);
+                        group(HitResult.SliderTailHit, HitResult.IgnoreMiss);
+                    }
                     break;
 
                 case "taiko":
@@ -1253,7 +1320,7 @@ namespace osu.Game.Commands
             var score = new ScoreInfo(working.BeatmapInfo, mode)
             {
                 Passed = true, Accuracy = accuracy, Rank = rank, Mods = mods, MaxCombo = combo, Combo = combo,
-                Statistics = stats, MaximumStatistics = maximum,
+                Statistics = stats, MaximumStatistics = maximum, IsLegacyScore = stableScoring,
             };
             double pp = calculator.Calculate(score, difficulty).Total;
             if (!double.IsFinite(pp))

@@ -43,6 +43,8 @@ namespace osu.Game.Storyboards.Drawables
         public override bool RemoveCompletedTransforms => false;
 
         private double? lastEventEndTime;
+        private readonly bool includeStoryboard;
+        private readonly bool includeVideo;
 
         [Cached(typeof(IReadOnlyList<Mod>))]
         public IReadOnlyList<Mod> Mods { get; }
@@ -61,14 +63,16 @@ namespace osu.Game.Storyboards.Drawables
         protected override IReadOnlyDependencyContainer CreateChildDependencies(IReadOnlyDependencyContainer parent) =>
             dependencies = new DependencyContainer(base.CreateChildDependencies(parent));
 
-        public DrawableStoryboard(Storyboard storyboard, IReadOnlyList<Mod>? mods = null)
+        public DrawableStoryboard(Storyboard storyboard, IReadOnlyList<Mod>? mods = null, bool includeStoryboard = true, bool includeVideo = true)
         {
             Storyboard = storyboard;
+            this.includeStoryboard = includeStoryboard;
+            this.includeVideo = includeVideo;
             Mods = mods ?? Array.Empty<Mod>();
 
             Size = new Vector2(640, 480);
 
-            bool onlyHasVideoElements = Storyboard.Layers.SelectMany(l => l.Elements).All(e => e is StoryboardVideo);
+            bool onlyHasVideoElements = !includeStoryboard || Storyboard.Layers.SelectMany(l => l.Elements).All(e => e is StoryboardVideo);
 
             Width = Height * (storyboard.Beatmap.WidescreenStoryboard || onlyHasVideoElements ? 16 / 9f : 4 / 3f);
 
@@ -102,7 +106,8 @@ namespace osu.Game.Storyboards.Drawables
             {
                 cancellationToken?.ThrowIfCancellationRequested();
 
-                Add(layer.CreateDrawable());
+                if (layer is StoryboardVideoLayer ? includeVideo : includeStoryboard)
+                    Add(layer.CreateDrawable());
             }
 
             lastEventEndTime = Storyboard.LatestEventTime;

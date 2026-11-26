@@ -46,6 +46,7 @@ using osu.Game.Overlays.OSD;
 using osu.Game.Overlays.Settings.Sections.Gameplay;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Edit;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
 using osu.Game.Screens.Backgrounds;
@@ -83,7 +84,7 @@ namespace osu.Game.Screens.Edit
         /// </remarks>
         public const float WAVEFORM_VISUAL_OFFSET = 20;
 
-        public override float BackgroundParallaxAmount => 0.1f;
+        public override float BackgroundParallaxAmount => editorParallax?.Value == false ? 0 : 0.1f;
 
         public override bool HideOverlaysOnEnter => true;
 
@@ -218,6 +219,11 @@ namespace osu.Game.Screens.Edit
 
         private Bindable<float> editorBackgroundDim;
         private Bindable<bool> editorShowStoryboard;
+        private Bindable<bool> editorParallax;
+        internal BindableBool PreviewMods { get; } = new BindableBool();
+        private readonly BindableDouble previewTempo = new BindableDouble(1);
+        private ModSettingChangeTracker? previewModSettings;
+        private bool previewEditorActive;
         private Bindable<bool> editorHitMarkers;
         private Bindable<bool> editorAutoSeekOnPlacement;
         private Bindable<bool> editorLimitedDistanceSnap;
@@ -298,6 +304,7 @@ namespace osu.Game.Screens.Edit
             clock.ChangeSource(loadableBeatmap.Track);
 
             dependencies.CacheAs(clock);
+            clock.AudioAdjustments.AddAdjustment(AdjustableProperty.Tempo, previewTempo);
             AddInternal(clock);
 
             clock.SeekingOrStopped.BindValueChanged(_ => updateSampleDisabledState());
@@ -340,6 +347,7 @@ namespace osu.Game.Screens.Edit
 
             editorBackgroundDim = config.GetBindable<float>(OsuSetting.EditorDim);
             editorShowStoryboard = config.GetBindable<bool>(OsuSetting.EditorShowStoryboard);
+            editorParallax = config.GetBindable<bool>(OsuSetting.EditorBackgroundParallax);
             editorHitMarkers = config.GetBindable<bool>(OsuSetting.EditorShowHitMarkers);
             editorAutoSeekOnPlacement = config.GetBindable<bool>(OsuSetting.EditorAutoSeekOnPlacement);
             editorLimitedDistanceSnap = config.GetBindable<bool>(OsuSetting.EditorLimitedDistanceSnap);
@@ -437,10 +445,20 @@ namespace osu.Game.Screens.Edit
                                                 ]
                                             },
                                             new OsuMenuItemSpacer(),
-                                            new BackgroundDimMenuItem(editorBackgroundDim),
-                                            new ToggleMenuItem(EditorStrings.ShowStoryboard)
+                                            new MenuItem(GameplaySettingsStrings.BackgroundHeader)
                                             {
-                                                State = { BindTarget = editorShowStoryboard },
+                                                Items = new MenuItem[]
+                                                {
+                                                    new BackgroundDimMenuItem(editorBackgroundDim),
+                                                    new BackgroundDimMenuItem(config.GetBindable<float>(OsuSetting.EditorBackgroundBlur), GameplaySettingsStrings.BackgroundBlur),
+                                                    new ToggleMenuItem("Background parallax") { State = { BindTarget = editorParallax } },
+                                                    new ToggleMenuItem("Show video") { State = { BindTarget = config.GetBindable<bool>(OsuSetting.EditorShowVideo) } },
+                                                    new ToggleMenuItem(EditorStrings.ShowStoryboard) { State = { BindTarget = editorShowStoryboard } },
+                                                    new ToggleMenuItem(GameplaySettingsStrings.LightenDuringBreaks)
+                                                    {
+                                                        State = { BindTarget = config.GetBindable<bool>(OsuSetting.EditorLightenDuringBreaks) }
+                                                    },
+                                                }
                                             },
                                             new OsuMenuItemSpacer(),
                                             new ToggleMenuItem(EditorStrings.ShowHitMarkers)
@@ -474,7 +492,14 @@ namespace osu.Game.Screens.Edit
                                             bookmarkController.Menu,
                                         }
                                     },
-                                    new EditorMenuItem(EditorStrings.TestGameplayModSelect, MenuItemType.Standard, modSelectOverlay.ToggleVisibility),
+                                    new MenuItem("Mods")
+                                    {
+                                        Items = new MenuItem[]
+                                        {
+                                            new EditorMenuItem(EditorStrings.TestGameplayModSelect, MenuItemType.Standard, modSelectOverlay.ToggleVisibility),
+                                            new ToggleMenuItem("Preview mods in Compose") { State = { BindTarget = PreviewMods } },
+                                        },
+                                    },
                                 }
                             },
                             screenSwitcher = new EditorScreenSwitcherControl
@@ -498,7 +523,7 @@ namespace osu.Game.Screens.Edit
         [Resolved]
         private MusicController musicController { get; set; }
 
-        protected override BackgroundScreen CreateBackground() => new EditorBackgroundScreen(editorBeatmap);
+        protected override BackgroundScreen CreateBackground() => new EditorBackgroundScreen(editorBeatmap, clock);
 
         protected override void LoadComplete()
         {
@@ -509,6 +534,15 @@ namespace osu.Game.Screens.Edit
 
             Mode.Value = isNewBeatmap ? EditorScreenMode.SongSetup : EditorScreenMode.Compose;
             Mode.BindValueChanged(onModeChanged, true);
+            Mode.BindValueChanged(_ => updatePreviewTempo());
+            PreviewMods.BindValueChanged(_ => updatePreviewTempo());
+            Mods.BindValueChanged(_ =>
+            {
+                previewModSettings?.Dispose();
+                previewModSettings = new ModSettingChangeTracker(Mods.Value);
+                previewModSettings.SettingChanged += _ => updatePreviewTempo();
+                updatePreviewTempo();
+            }, true);
 
             MutationTracker.InProgress.BindValueChanged(_ =>
             {
@@ -522,6 +556,7 @@ namespace osu.Game.Screens.Edit
             base.Dispose(isDisposing);
 
             modSelectOverlayRegistration?.Dispose();
+            previewModSettings?.Dispose();
 
             // redundant (should have happened via a `resetTrack()` call in `OnExiting()`), but done for safety
             musicController.TrackChanged -= onTrackChanged;
@@ -906,9 +941,17 @@ namespace osu.Game.Screens.Edit
             onArrivingAtScreen();
         }
 
+        private void updatePreviewTempo()
+        {
+            previewTempo.Value = previewEditorActive && PreviewMods.Value && Mode.Value == EditorScreenMode.Compose
+                ? osu.Game.Utils.ModUtils.CalculateRateWithMods(Mods.Value)
+                : 1;
+        }
+
         private void onArrivingAtScreen()
         {
-            modSelectOverlay.Beatmap.Disabled = false;
+            previewEditorActive = true;
+            updatePreviewTempo();            modSelectOverlay.Beatmap.Disabled = false;
             modSelectOverlay.Beatmap.BindTo(Beatmap);
             modSelectOverlay.Ruleset.Disabled = false;
             modSelectOverlay.Ruleset.BindTo(Ruleset);
@@ -973,7 +1016,8 @@ namespace osu.Game.Screens.Edit
 
         private void onLeavingScreen()
         {
-            modSelectOverlay.SelectedMods.UnbindFrom(Mods);
+            previewEditorActive = false;
+            updatePreviewTempo();            modSelectOverlay.SelectedMods.UnbindFrom(Mods);
             modSelectOverlay.Ruleset.UnbindFrom(Ruleset);
             modSelectOverlay.Beatmap.UnbindFrom(Beatmap);
         }

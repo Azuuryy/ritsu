@@ -263,7 +263,7 @@ namespace osu.Game.Screens.Select
                 // torii: el wedge del mapa seleccionado SI calcula mod-aware via difficultyCache (es uno
                 // solo, debounced + cacheado). arranca en el SR guardado al instante y lo refina con los mods.
                 // las filas del carousel quedan en el SR guardado (nomod) para no recalcular por panel.
-                starRatingDisplay.Current = (Bindable<StarDifficulty>)difficultyCache.GetBindableDifficulty(beatmap.Value.BeatmapInfo, cancellationSource.Token, SongSelect.DIFFICULTY_CALCULATION_DEBOUNCE);
+                starRatingDisplay.Current = (Bindable<StarDifficulty>)difficultyCache.GetBindableDifficultyPreview(beatmap.Value.BeatmapInfo, cancellationSource.Token, SongSelect.DIFFICULTY_CALCULATION_DEBOUNCE);
 
                 updateCountStatistics();
                 updateDifficultyStatistics();

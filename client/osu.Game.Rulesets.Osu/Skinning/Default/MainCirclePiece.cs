@@ -33,7 +33,7 @@ namespace osu.Game.Rulesets.Osu.Skinning.Default
             {
                 glow = new GlowPiece(),
                 circle = new CirclePiece(),
-                number = new NumberPiece(),
+                new HitCircleNumberContainer(number = new NumberPiece()),
                 ring = new RingPiece(),
                 flash = new FlashPiece(),
                 explode = new ExplodePiece(),

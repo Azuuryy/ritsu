@@ -99,14 +99,14 @@ namespace osu.Game.Rulesets.Osu.Skinning.Argon
                         RelativeSizeAxes = Axes.Both,
                     }
                 },
-                number = new OsuSpriteText
+                new HitCircleNumberContainer(number = new OsuSpriteText
                 {
                     Font = OsuFont.Default.With(size: 52, weight: FontWeight.Bold),
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
                     Y = -2,
                     Text = @"1",
-                },
+                }),
                 flash = new FlashPiece(),
                 border = new RingPiece(BORDER_THICKNESS),
             };

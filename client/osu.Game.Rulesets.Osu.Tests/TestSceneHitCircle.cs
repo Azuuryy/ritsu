@@ -6,6 +6,7 @@ using NUnit.Framework;
 using osu.Framework.Allocation;
 using osu.Framework.Extensions.ObjectExtensions;
 using osu.Framework.Graphics;
+using osu.Framework.Testing;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Configuration;
@@ -68,6 +69,24 @@ namespace osu.Game.Rulesets.Osu.Tests
             AddToggleStep("toggle hit lighting", v => config.SetValue(OsuSetting.HitLighting, v));
             AddToggleStep("toggle hit animation", v => ((OsuRulesetConfigManager)RulesetConfigs.GetConfigFor(Ruleset.Value.CreateInstance()).AsNonNull()).SetValue(OsuRulesetSetting.HitAnimations, v));
             AddStep("Hit Big Single", () => SetContents(_ => testSingle(2, true)));
+        }
+
+        [Test]
+        public void TestHitCircleNumbersFollowSkinSetting()
+        {
+            AddStep("show a circle in each skin", () =>
+            {
+                config.SetValue(OsuSetting.ShowHitCircleNumbers, true);
+                SetContents(_ => createSingle(5, false, 1000, null));
+            });
+            AddUntilStep("all five skins show the number", () => visibleNumbers(1));
+            AddStep("hide circle numbers", () => config.SetValue(OsuSetting.ShowHitCircleNumbers, false));
+            AddUntilStep("all five skins hide the number", () => visibleNumbers(0));
+            AddStep("restore circle numbers", () => config.SetValue(OsuSetting.ShowHitCircleNumbers, true));
+            AddUntilStep("all five skins show the number again", () => visibleNumbers(1));
+
+            bool visibleNumbers(float alpha) => CreatedDrawables.Count() == 5 && CreatedDrawables.All(d =>
+                d.ChildrenOfType<Drawable>().Any(child => child.Name == "Hit circle number" && child.Alpha == alpha));
         }
 
         private Drawable testSingle(float circleSize, bool auto = false, double timeOffset = 0, Vector2? positionOffset = null, int comboIndex = 0)

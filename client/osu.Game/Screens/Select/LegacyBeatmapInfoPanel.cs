@@ -211,7 +211,7 @@ namespace osu.Game.Screens.Select
             var info = beatmap.Value.BeatmapInfo;
             var token = (baselineCancellation = new CancellationTokenSource()).Token;
 
-            difficultyCache.GetDifficultyAsync(info, ruleset.Value, null, token).ContinueWith(task =>
+            difficultyCache.GetDifficultyPreviewAsync(info, ruleset.Value, null, token).ContinueWith(task =>
             {
                 if (task.GetResultSafely() is StarDifficulty diff)
                 {
@@ -240,7 +240,7 @@ namespace osu.Game.Screens.Select
             // con los cambios de mod/ruleset.
             starCancellation?.Cancel();
             starDifficulty?.UnbindAll();
-            starDifficulty = difficultyCache.GetBindableDifficulty(info, (starCancellation = new CancellationTokenSource()).Token);
+            starDifficulty = difficultyCache.GetBindableDifficultyPreview(info, (starCancellation = new CancellationTokenSource()).Token);
             starDifficulty.BindValueChanged(_ => Scheduler.AddOnce(refreshStatsLine));
 
             refreshBaselineStars();

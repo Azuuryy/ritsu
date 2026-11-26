@@ -25,6 +25,8 @@ namespace osu.Game.Graphics.Backgrounds
         public readonly AudioContainer Storyboard;
 
         private DrawableStoryboard? drawableStoryboard;
+        private readonly bool includeStoryboard;
+        private readonly bool includeVideo;
         private CancellationTokenSource? loadCancellationSource = new CancellationTokenSource();
 
         public Action? StoryboardLoaded { get; set; }
@@ -37,9 +39,11 @@ namespace osu.Game.Graphics.Backgrounds
         [Resolved]
         private IBindable<IReadOnlyList<Mod>> mods { get; set; } = null!;
 
-        public BeatmapBackgroundWithStoryboard(WorkingBeatmap beatmap, string fallbackTextureName = "Backgrounds/bg1")
+        public BeatmapBackgroundWithStoryboard(WorkingBeatmap beatmap, string fallbackTextureName = "Backgrounds/bg1", bool includeStoryboard = true, bool includeVideo = true)
             : base(beatmap, fallbackTextureName)
         {
+            this.includeStoryboard = includeStoryboard;
+            this.includeVideo = includeVideo;
             storyboardClock = new InterpolatingFramedClock();
 
             AddInternal(Storyboard = new AudioContainer
@@ -59,10 +63,10 @@ namespace osu.Game.Graphics.Backgrounds
         {
             Debug.Assert(drawableStoryboard == null);
 
-            if (!Beatmap.Storyboard.HasDrawable)
+            if ((!includeStoryboard && !includeVideo) || !Beatmap.Storyboard.HasDrawable)
                 return;
 
-            drawableStoryboard = new DrawableStoryboard(Beatmap.Storyboard, mods.Value)
+            drawableStoryboard = new DrawableStoryboard(Beatmap.Storyboard, mods.Value, includeStoryboard, includeVideo)
             {
                 Clock = storyboardClock
             };
@@ -114,7 +118,7 @@ namespace osu.Game.Graphics.Backgrounds
         private void updateStoryboardVisibility()
         {
             bool showStoryboard = drawableStoryboard != null && ShowStoryboard.Value;
-            bool showBackground = !showStoryboard || !Beatmap.Storyboard.ReplacesBackground;
+            bool showBackground = !showStoryboard || !includeStoryboard || !Beatmap.Storyboard.ReplacesBackground;
 
             Storyboard.FadeTo(showStoryboard ? 1 : 0, BackgroundScreen.TRANSITION_LENGTH, Easing.OutQuint);
             Sprite.FadeTo(showBackground ? 1 : 0, BackgroundScreen.TRANSITION_LENGTH, Easing.OutQuint);

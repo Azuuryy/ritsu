@@ -11,6 +11,11 @@ namespace osu.Game.Rulesets.Difficulty.Skills
 {
     public abstract class HarmonicSkill : Skill
     {
+        private const int cached_weight_count = 8192;
+        private const double default_decay_exponent = 0.9;
+        private static readonly Lazy<double[]> default_weights = new Lazy<double[]>(() => createWeightTable(1));
+        private static readonly Lazy<double[]> speed_weights = new Lazy<double[]>(() => createWeightTable(20));
+
         /// <summary>
         /// The sum of note weights, calculated during summation.
         /// Required for any calculations which need to normalise difficulty value.
@@ -27,7 +32,7 @@ namespace osu.Game.Rulesets.Difficulty.Skills
         /// Exponent that controls the rate of which decay increases as the index increases.
         /// Values closer to 1 decay faster whilst lower values give more weight to lower object difficulties.
         /// </summary>
-        protected virtual double DecayExponent => 0.9;
+        protected virtual double DecayExponent => default_decay_exponent;
 
         protected HarmonicSkill(Mod[] mods)
             : base(mods)
@@ -64,21 +69,43 @@ namespace osu.Game.Rulesets.Difficulty.Skills
 
             ApplyDifficultyTransformation(difficulties);
 
+            Array.Sort(difficulties);
+
+            double scale = HarmonicScale;
+            double exponent = DecayExponent;
+            double[]? weights = exponent == default_decay_exponent
+                ? scale switch
+                {
+                    1 => default_weights.Value,
+                    20 => speed_weights.Value,
+                    _ => null
+                }
+                : null;
+
             double difficulty = 0;
-            int index = 0;
-
-            foreach (double note in difficulties.OrderDescending())
+            for (int rank = 0; rank < difficulties.Length; rank++)
             {
-                // Use a harmonic sum that considers each note of the map according to a predefined weight.
-                double weight = (1 + (HarmonicScale / (1 + index))) / (Math.Pow(index, DecayExponent) + 1 + (HarmonicScale / (1 + index)));
-
+                double weight = weights != null && rank < weights.Length ? weights[rank] : calculateWeight(rank, scale, exponent);
                 NoteWeightSum += weight;
-
-                difficulty += note * weight;
-                index += 1;
+                difficulty += difficulties[difficulties.Length - 1 - rank] * weight;
             }
 
             return difficulty;
+        }
+
+        private static double[] createWeightTable(double scale)
+        {
+            var weights = new double[cached_weight_count];
+            for (int rank = 0; rank < weights.Length; rank++)
+                weights[rank] = calculateWeight(rank, scale, default_decay_exponent);
+
+            return weights;
+        }
+
+        private static double calculateWeight(int rank, double scale, double exponent)
+        {
+            double harmonic = scale / (1 + rank);
+            return (1 + harmonic) / (Math.Pow(rank, exponent) + 1 + harmonic);
         }
 
         /// <summary>

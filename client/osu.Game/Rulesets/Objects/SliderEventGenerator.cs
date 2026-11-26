@@ -23,8 +23,76 @@ namespace osu.Game.Rulesets.Objects
         /// </summary>
         public const double TAIL_LENIENCY = -36;
 
-        public static IEnumerable<SliderEventDescriptor> Generate(double startTime, double spanDuration, double velocity, double tickDistance, double totalDistance, int spanCount,
-                                                                  CancellationToken cancellationToken = default)
+        [ThreadStatic]
+        private static EventCache? activeCache;
+
+        internal readonly struct CacheScope : IDisposable
+        {
+            private readonly EventCache? previous;
+
+            public CacheScope(EventCache? cache)
+            {
+                previous = activeCache;
+                activeCache = cache;
+            }
+
+            public void Dispose() => activeCache = previous;
+        }
+
+        internal sealed class EventCache
+        {
+            private const int max_cached_events = 16384;
+            private readonly Dictionary<EventKey, (int Offset, int Count)> sliders = new Dictionary<EventKey, (int Offset, int Count)>();
+            private readonly List<SliderEventDescriptor> events = new List<SliderEventDescriptor>();
+
+            internal IEnumerable<SliderEventDescriptor> Generate(double startTime, double spanDuration, double velocity, double tickDistance, double totalDistance,
+                                                                  int spanCount, CancellationToken token)
+            {
+                var key = new EventKey(BitConverter.DoubleToInt64Bits(startTime), BitConverter.DoubleToInt64Bits(spanDuration),
+                    BitConverter.DoubleToInt64Bits(velocity), BitConverter.DoubleToInt64Bits(tickDistance), BitConverter.DoubleToInt64Bits(totalDistance), spanCount);
+                if (sliders.TryGetValue(key, out var range))
+                {
+                    token.ThrowIfCancellationRequested();
+                    return read(range.Offset, range.Count);
+                }
+
+                var generated = generate(startTime, spanDuration, velocity, tickDistance, totalDistance, spanCount, token);
+                int offset = events.Count;
+                if (offset == max_cached_events)
+                    return generated;
+
+                foreach (var descriptor in generated)
+                {
+                    if (events.Count == max_cached_events)
+                    {
+                        events.RemoveRange(offset, events.Count - offset);
+                        return generated;
+                    }
+
+                    events.Add(descriptor);
+                }
+
+                int count = events.Count - offset;
+                sliders.Add(key, (offset, count));
+                return read(offset, count);
+            }
+
+            private IEnumerable<SliderEventDescriptor> read(int offset, int count)
+            {
+                for (int i = offset; i < offset + count; i++)
+                    yield return events[i];
+            }
+
+            private readonly record struct EventKey(long StartTime, long SpanDuration, long Velocity, long TickDistance, long TotalDistance, int SpanCount);
+        }
+
+        public static IEnumerable<SliderEventDescriptor> Generate(double startTime, double spanDuration, double velocity, double tickDistance, double totalDistance,
+                                                                  int spanCount, CancellationToken cancellationToken = default)
+            => activeCache?.Generate(startTime, spanDuration, velocity, tickDistance, totalDistance, spanCount, cancellationToken)
+               ?? generate(startTime, spanDuration, velocity, tickDistance, totalDistance, spanCount, cancellationToken);
+
+        private static IEnumerable<SliderEventDescriptor> generate(double startTime, double spanDuration, double velocity, double tickDistance, double totalDistance,
+                                                                  int spanCount, CancellationToken cancellationToken)
         {
             // A very lenient maximum length of a slider for ticks to be generated.
             // This exists for edge cases such as /b/1573664 where the beatmap has been edited by the user, and should never be reached in normal usage.

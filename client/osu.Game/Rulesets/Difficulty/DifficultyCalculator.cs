@@ -33,6 +33,8 @@ namespace osu.Game.Rulesets.Difficulty
         /// </summary>
         protected readonly IWorkingBeatmap WorkingBeatmap;
 
+        protected internal Dictionary<double, object>? SharedSkillResults { get; set; }
+
         private Mod[] playableMods;
 
         private readonly IRulesetInfo ruleset;

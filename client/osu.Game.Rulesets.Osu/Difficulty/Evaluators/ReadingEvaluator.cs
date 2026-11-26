@@ -2,7 +2,6 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
-using System.Collections.Generic;
 using osu.Framework.Extensions.ObjectExtensions;
 using osu.Game.Rulesets.Difficulty.Preprocessing;
 using osu.Game.Rulesets.Difficulty.Utils;
@@ -23,7 +22,11 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
         private const double minimum_angle_relevancy_time = 2000; // 2 seconds
         private const double maximum_angle_relevancy_time = 200;
 
-        public static double EvaluateDifficultyOf(DifficultyHitObject current, bool hidden)
+        internal readonly record struct Visibility(double Density, double PastInfluence, double AngleFactor);
+
+        public static double EvaluateDifficultyOf(DifficultyHitObject current, bool hidden) => EvaluateDifficultyOf(current, hidden, null);
+
+        internal static double EvaluateDifficultyOf(DifficultyHitObject current, bool hidden, Visibility[]? sharedVisibility)
         {
             if (current.BaseObject is Spinner || current.Index == 0)
                 return 0;
@@ -33,10 +36,16 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
 
             double velocity = Math.Max(1, currObj.LazyJumpDistance / currObj.AdjustedDeltaTime); // Only allow velocity to buff
 
-            double currentVisibleObjectDensity = retrieveCurrentVisibleObjectDensity(currObj);
-            double pastObjectDifficultyInfluence = getPastObjectDifficultyInfluence(currObj);
+            var visibility = sharedVisibility?[currObj.Index] ?? default;
+            if (visibility.AngleFactor == 0)
+            {
+                visibility = new Visibility(retrieveCurrentVisibleObjectDensity(currObj),
+                    getPastObjectDifficultyInfluence(currObj), getConstantAngleNerfFactor(currObj));
+                if (sharedVisibility != null)
+                    sharedVisibility[currObj.Index] = visibility;
+            }
 
-            double constantAngleNerfFactor = getConstantAngleNerfFactor(currObj);
+            var (currentVisibleObjectDensity, pastObjectDifficultyInfluence, constantAngleNerfFactor) = visibility;
 
             double noteDensityDifficulty = calculateDensityDifficulty(nextObj, velocity, constantAngleNerfFactor, pastObjectDifficultyInfluence, currentVisibleObjectDensity);
 
@@ -144,8 +153,13 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
         {
             double pastObjectDifficultyInfluence = 0;
 
-            foreach (var loopObj in retrievePastVisibleObjects(currObj))
+            for (int i = 0; i < currObj.Index; i++)
             {
+                var loopObj = (OsuDifficultyHitObject)currObj.Previous(i);
+                if (loopObj.IsNull() || currObj.StartTime - loopObj.StartTime > reading_window_size ||
+                    loopObj.StartTime < currObj.StartTime - currObj.Preempt)
+                    break;
+
                 double loopDifficulty = currObj.OpacityAt(loopObj.BaseObject.StartTime, false);
 
                 // When aiming an object small distances mean previous objects may be cheesed, so it doesn't matter whether they were arranged confusingly.
@@ -162,23 +176,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Evaluators
             return pastObjectDifficultyInfluence;
         }
 
-        // Returns a list of objects that are visible on screen at the point in time the current object becomes visible.
-        private static IEnumerable<OsuDifficultyHitObject> retrievePastVisibleObjects(OsuDifficultyHitObject current)
-        {
-            for (int i = 0; i < current.Index; i++)
-            {
-                OsuDifficultyHitObject hitObject = (OsuDifficultyHitObject)current.Previous(i);
-
-                if (hitObject.IsNull() ||
-                    current.StartTime - hitObject.StartTime > reading_window_size ||
-                    hitObject.StartTime < current.StartTime - current.Preempt) // Current object not visible at the time object needs to be clicked
-                    break;
-
-                yield return hitObject;
-            }
-        }
-
-        // Returns the density of objects visible at the point in time the current object needs to be clicked capped by the reading window.
+        // Returns a list of objecobjects visible at the point in time the current object needs to be clicked capped by the reading window.
         private static double retrieveCurrentVisibleObjectDensity(OsuDifficultyHitObject current)
         {
             double visibleObjectCount = 0;

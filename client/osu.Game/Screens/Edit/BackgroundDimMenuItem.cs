@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics.UserInterface;
+using osu.Framework.Localisation;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Localisation;
 
@@ -15,8 +16,8 @@ namespace osu.Game.Screens.Edit
 
         private readonly Dictionary<float, TernaryStateRadioMenuItem> menuItemLookup = new Dictionary<float, TernaryStateRadioMenuItem>();
 
-        public BackgroundDimMenuItem(Bindable<float> backgroundDim)
-            : base(GameplaySettingsStrings.BackgroundDim)
+        public BackgroundDimMenuItem(Bindable<float> backgroundDim, LocalisableString? caption = null)
+            : base(caption ?? GameplaySettingsStrings.BackgroundDim)
         {
             Items = new[]
             {

@@ -118,6 +118,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.Ruleset, string.Empty);
             SetDefault(OsuSetting.Skin, SkinInfo.ARGON_SKIN.ToString());
             SetDefault(OsuSetting.CycleSkinsThroughFavoritesOnly, false);
+            SetDefault(OsuSetting.ShowHitCircleNumbers, true);
 
             SetDefault(OsuSetting.RitsuLeaderboardScope, BeatmapLeaderboardScope.Local);
             SetDefault(OsuSetting.BeatmapDetailTab, BeatmapDetailTab.Local);
@@ -459,6 +460,10 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.AlwaysShowHoldForMenuButton, false);
             SetDefault(OsuSetting.AlwaysRequireHoldingForPause, false);
             SetDefault(OsuSetting.EditorShowStoryboard, true);
+            SetDefault(OsuSetting.EditorShowVideo, true);
+            SetDefault(OsuSetting.EditorBackgroundParallax, true);
+            SetDefault(OsuSetting.EditorBackgroundBlur, 0f, 0f, 1f, 0.05f);
+            SetDefault(OsuSetting.EditorLightenDuringBreaks, false);
 
             SetDefault(OsuSetting.EditorSubmissionNotifyOnDiscussionReplies, true);
             SetDefault(OsuSetting.EditorSubmissionLoadInBrowserAfterSubmission, true);
@@ -634,6 +639,7 @@ namespace osu.Game.Configuration
         ShowConvertedBeatmaps,
         Skin,
         CycleSkinsThroughFavoritesOnly,
+        ShowHitCircleNumbers,
         ScreenshotFormat,
         ScreenshotCaptureMenuCursor,
         BeatmapSkins,
@@ -702,6 +708,10 @@ namespace osu.Game.Configuration
         BeatmapListingAiFilter,
         ShowMobileDisclaimer,
         EditorShowStoryboard,
+        EditorShowVideo,
+        EditorBackgroundParallax,
+        EditorBackgroundBlur,
+        EditorLightenDuringBreaks,
         EditorSubmissionNotifyOnDiscussionReplies,
         EditorSubmissionLoadInBrowserAfterSubmission,
 

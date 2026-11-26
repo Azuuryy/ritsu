@@ -26,6 +26,7 @@ using osu.Game.IO;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Difficulty;
 using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.UI;
 using osu.Game.Scoring;
@@ -75,29 +76,44 @@ namespace osu.Game.Beatmaps
         private const int performance_algorithm_version = 1;
         private Dictionary<string, double> legacyPerformanceCache = new Dictionary<string, double>();
         private readonly object performanceCacheLock = new object();
-        private readonly Dictionary<string, double> performanceCache = new Dictionary<string, double>();
-        private readonly Dictionary<string, double> pendingPerformance = new Dictionary<string, double>();
+        private readonly Dictionary<string, PerfectPerformanceStorage.Entry> performanceCache = new Dictionary<string, PerfectPerformanceStorage.Entry>();
+        private readonly Dictionary<string, PerfectPerformanceStorage.Entry> pendingPerformance = new Dictionary<string, PerfectPerformanceStorage.Entry>();
         private PerfectPerformanceStorage? performanceStorage;
         private readonly ThreadedTaskScheduler backgroundScheduler = new ThreadedTaskScheduler(Math.Min(8, Math.Max(1, Environment.ProcessorCount - 2)), "Ritsu PP background");
         private const int performance_save_threshold = 200;
         private readonly object performanceCacheWriteLock = new object();
         private bool performanceSaveQueued;
 
+        internal int? BenchmarkWorkers { get; private set; }
+
         [BackgroundDependencyLoader]
         private void load(Storage storage, GameHost host)
         {
             Storage local = storage is OsuStorage osuStorage ? host.GetStorage(osuStorage.DefaultStoragePath) : storage;
-            legacyPerformanceCache = loadPerformanceCache(storage, legacy_performance_cache_file);
+            string path = "ritsu/perfect-pp-cache.db";
+            if (int.TryParse(Environment.GetEnvironmentVariable("RITSU_PP_BENCHMARK_WORKERS"), out int workers) && workers is 1 or 2 or 4 or 8)
+            {
+                BenchmarkWorkers = Math.Min(workers, Math.Max(1, Environment.ProcessorCount - 2));
+                path = $"ritsu/pp-benchmark/{workers}-{Guid.NewGuid():N}.db";
+                Logger.Log($"Ritsu Max PP benchmark: {BenchmarkWorkers} worker(s), cold cache at {local.GetFullPath(path)}");
+            }
+            else
+                legacyPerformanceCache = loadPerformanceCache(storage, legacy_performance_cache_file);
+
             try
             {
-                performanceStorage = new PerfectPerformanceStorage(local.GetFullPath("ritsu/perfect-pp-cache.db", true));
-                performanceStorage.ImportJson(() => loadPerformanceCache(storage, performance_cache_file));
+                performanceStorage = new PerfectPerformanceStorage(local.GetFullPath(path, true));
+                if (!BenchmarkWorkers.HasValue)
+                    performanceStorage.ImportJson(() => loadPerformanceCache(storage, performance_cache_file));
             }
             catch (Exception e) when (e is Microsoft.Data.Sqlite.SqliteException or IOException or UnauthorizedAccessException)
             {
                 Logger.Error(e, "Failed to open the Ritsu PP cache");
-                foreach (var pair in loadPerformanceCache(storage, performance_cache_file))
-                    performanceCache[pair.Key] = pair.Value;
+                if (!BenchmarkWorkers.HasValue)
+                {
+                    foreach (var pair in loadPerformanceCache(storage, performance_cache_file))
+                        performanceCache[pair.Key] = new PerfectPerformanceStorage.Entry(pair.Value);
+                }
             }
         }
 
@@ -157,9 +173,9 @@ namespace osu.Game.Beatmaps
                 ModKey = CreatePerfectPerformanceModKey(this.mods);
             }
 
-            private readonly Dictionary<string, Dictionary<string, double>> loadedPresets = new Dictionary<string, Dictionary<string, double>>();
+            private readonly Dictionary<string, Dictionary<string, PerfectPerformanceStorage.Entry>> loadedPresets = new Dictionary<string, Dictionary<string, PerfectPerformanceStorage.Entry>>();
 
-            private (string? stable, string? legacy) getKeys(BeatmapInfo beatmap)
+            private (string? stable, string? legacy) getKeys(BeatmapInfo beatmap, bool includeLegacy = true)
             {
                 if (string.IsNullOrEmpty(beatmap.Hash)) return (null, null);
                 var info = ruleset ?? beatmap.Ruleset;
@@ -169,50 +185,90 @@ namespace osu.Game.Beatmaps
                     if (!versions.TryGetValue(info.ShortName, out version))
                     {
                         var instance = info.CreateInstance();
-                        version = (instance.CreateDifficultyCalculator(owner.beatmapManager.GetWorkingBeatmap(beatmap)).Version, instance.GetType().Assembly.ManifestModule.ModuleVersionId.ToString());
+                        version = (instance.CreateDifficultyCalculator(owner.beatmapManager.DefaultBeatmap).Version, instance.GetType().Assembly.ManifestModule.ModuleVersionId.ToString());
                         versions[info.ShortName] = version;
                     }
                 }
                 string stable = CreateStablePerformanceKey(version.difficultyVersion, info.ShortName, beatmap.Hash, ModKey);
-                string legacy = JsonConvert.SerializeObject(new[] { gameVersion, version.legacyVersion, info.ShortName, beatmap.Hash, ModKey });
+                string? legacy = includeLegacy && owner.legacyPerformanceCache.Count > 0
+                    ? JsonConvert.SerializeObject(new[] { gameVersion, version.legacyVersion, info.ShortName, beatmap.Hash, ModKey })
+                    : null;
                 return (stable, legacy);
             }
 
             internal bool TryGet(BeatmapInfo beatmap, out double value)
             {
-                using var measurement = FrameProfileCapture.Measure("PerfectPP.Lookup");
                 var (stable, legacy) = getKeys(beatmap);
+                var cached = getCached(stable, legacy);
+                value = cached?.PP ?? 0;
+                return cached.HasValue;
+            }
+
+            private PerfectPerformanceStorage.Entry? getCached(string? stable, string? legacy)
+            {
+                using var measurement = FrameProfileCapture.Measure("PerfectPP.Lookup");
                 lock (owner.performanceCacheLock)
                 {
-                    if (stable != null && owner.performanceCache.TryGetValue(stable, out value) && double.IsFinite(value) && value >= 0)
+                    if (stable != null && owner.performanceCache.TryGetValue(stable, out var entry) && double.IsFinite(entry.PP) && entry.PP >= 0)
                     {
                         FrameProfileCapture.Count("PerfectPP.hit", 1);
-                        return true;
+                        return entry;
                     }
-                    if (stable != null && legacy != null && owner.legacyPerformanceCache.TryGetValue(legacy, out value) && double.IsFinite(value) && value >= 0)
+
+                    if (stable != null && legacy != null && owner.legacyPerformanceCache.TryGetValue(legacy, out double value) && double.IsFinite(value) && value >= 0)
                     {
                         FrameProfileCapture.Count("PerfectPP.hit", 1);
-                        owner.performanceCache[stable] = value;
+                        owner.rememberPerformance(stable, entry = new PerfectPerformanceStorage.Entry(value));
                         FrameProfileCapture.Count("PerfectPP.size", owner.performanceCache.Count);
-                        owner.rememberPerformance(stable, value);
-                        return true;
+                        return entry;
                     }
                 }
                 FrameProfileCapture.Count("PerfectPP.miss", 1);
-                value = 0;
-                return false;
+                return null;
             }
 
-            internal double? ReadPersisted(BeatmapInfo beatmap, bool loadPreset)
+            internal double? ReadPersisted(BeatmapInfo beatmap, bool loadPreset) => readPersisted(getKeys(beatmap, includeLegacy: false).stable, loadPreset)?.PP;
+
+            internal StarDifficulty? ReadPreview(BeatmapInfo beatmap, bool loadPreset)
             {
-                var (stable, _) = getKeys(beatmap);
+                if (beatmap.Ruleset.ShortName != "osu")
+                    return null;
+
+                string? stable = getKeys(beatmap, includeLegacy: false).stable;
+                if (stable == null)
+                    return null;
+
+                lock (owner.performanceCacheLock)
+                {
+                    if (owner.performanceCache.TryGetValue(stable, out var cached) && cached.Preview is StarDifficulty preview)
+                        return preview;
+                }
+
+                return readPersisted(stable, loadPreset)?.Preview;
+            }
+
+            internal void RememberPreview(BeatmapInfo beatmap, StarDifficulty difficulty)
+            {
+                string? stable = getKeys(beatmap, includeLegacy: false).stable;
+                if (stable != null)
+                    rememberDifficulty(stable, difficulty);
+            }
+
+            private void rememberDifficulty(string stable, StarDifficulty difficulty)
+            {
+                if (difficulty.PerformanceAttributes?.Total is double value && double.IsFinite(value) && value >= 0)
+                    owner.rememberPerformance(stable, new PerfectPerformanceStorage.Entry(value, difficulty.Stars, difficulty.MaxCombo));
+            }
+
+            private PerfectPerformanceStorage.Entry? readPersisted(string? stable, bool loadPreset)
+            {
                 if (stable == null || owner.performanceStorage == null)
                     return null;
 
                 try
                 {
                     if (!loadPreset)
-                        return owner.performanceStorage.Read(stable);
+                        return owner.performanceStorage.ReadEntry(stable);
 
                     string preset = PerfectPerformanceStorage.Preset(JsonConvert.DeserializeObject<string[]>(stable)!);
                     lock (loadedPresets)
@@ -220,7 +276,7 @@ namespace osu.Game.Beatmaps
                         if (!loadedPresets.TryGetValue(preset, out var entries))
                             loadedPresets.Add(preset, entries = owner.performanceStorage.ReadPreset(preset));
 
-                        return entries.TryGetValue(stable, out double pp) ? pp : null;
+                        return entries.TryGetValue(stable, out var entry) ? entry : null;
                     }
                 }
                 catch (Microsoft.Data.Sqlite.SqliteException e)
@@ -233,29 +289,44 @@ namespace osu.Game.Beatmaps
             internal double? Calculate(BeatmapInfo beatmap, CancellationToken cancellationToken) =>
                 CalculateAsync(beatmap, cancellationToken, background: false).GetAwaiter().GetResult();
 
-            internal async Task<double?> CalculateAsync(BeatmapInfo beatmap, CancellationToken cancellationToken, bool background, bool loadPreset = true)
+            internal async Task<double?> CalculateAsync(BeatmapInfo beatmap, CancellationToken cancellationToken, bool background, bool loadPreset = true, Lazy<WorkingBeatmap>? workingBeatmap = null, Action? onCacheMiss = null,
+                                                            Lazy<PlayableCachedWorkingBeatmap>? sharedPlayableBeatmap = null)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (TryGet(beatmap, out double cached))
-                    return cached;
+                var (stable, legacy) = getKeys(beatmap);
+                var cached = getCached(stable, legacy);
+                if (cached is { } memory && (!background || memory.Stars.HasValue))
+                    return memory.PP;
 
-                var (stable, _) = getKeys(beatmap);
-                if (ReadPersisted(beatmap, loadPreset) is double persisted)
-                    return persisted;
+                var persisted = readPersisted(stable, loadPreset);
+                if (persisted is { } stored && (!background || stored.Stars.HasValue))
+                    return stored.PP;
 
+                onCacheMiss?.Invoke();
                 using var measurement = FrameProfileCapture.Measure("PerfectPP.Calculate");
-                var key = new DifficultyCacheLookup(beatmap, ruleset ?? beatmap.Ruleset, mods) { Background = background, WarmupOnly = background };
-                double? pp = (await owner.GetAsync(key, cancellationToken).ConfigureAwait(false))?.PerformanceAttributes?.Total;
-                if (stable != null && pp is double value && double.IsFinite(value) && value >= 0)
-                    owner.rememberPerformance(stable, value);
+                var key = new DifficultyCacheLookup(beatmap, ruleset ?? beatmap.Ruleset, mods)
+                {
+                    Background = background,
+                    WarmupOnly = background,
+                    WorkingBeatmap = workingBeatmap,
+                    SharedPlayableBeatmap = sharedPlayableBeatmap,
+                };
+                var difficulty = await owner.GetAsync(key, cancellationToken).ConfigureAwait(false);
+                if (stable != null && difficulty.HasValue)
+                    rememberDifficulty(stable, difficulty.Value);
+
+                double? pp = difficulty?.PerformanceAttributes?.Total;
                 return pp is double result && double.IsFinite(result) && result >= 0 ? result : null;
             }
         }
 
-        private void rememberPerformance(string key, double value)
+        private void rememberPerformance(string key, PerfectPerformanceStorage.Entry value)
         {
             lock (performanceCacheLock)
             {
+                if (performanceCache.TryGetValue(key, out var existing) && existing.Stars.HasValue)
+                    return;
+
                 performanceCache[key] = value;
                 if (performanceCache.Count > 65536)
                     performanceCache.Remove(performanceCache.Keys.First());
@@ -299,13 +370,13 @@ namespace osu.Game.Beatmaps
         {
             lock (performanceCacheWriteLock)
             {
-                Dictionary<string, double> snapshot;
+                Dictionary<string, PerfectPerformanceStorage.Entry> snapshot;
                 lock (performanceCacheLock)
                 {
                     if (pendingPerformance.Count == 0)
                         return true;
 
-                    snapshot = new Dictionary<string, double>(pendingPerformance);
+                    snapshot = new Dictionary<string, PerfectPerformanceStorage.Entry>(pendingPerformance);
                     pendingPerformance.Clear();
                 }
 
@@ -319,7 +390,10 @@ namespace osu.Game.Beatmaps
                     lock (performanceCacheLock)
                     {
                         foreach (var pair in snapshot)
-                            pendingPerformance.TryAdd(pair.Key, pair.Value);
+                        {
+                            if (!pendingPerformance.TryGetValue(pair.Key, out var pending) || pending.Stars == null)
+                                pendingPerformance[pair.Key] = pair.Value;
+                        }
                     }
                     Logger.Error(e, "Failed to save the Ritsu PP cache");
                     return false;
@@ -399,8 +473,14 @@ namespace osu.Game.Beatmaps
         /// <param name="computationDelay">A delay in milliseconds before performing the </param>
         /// <returns>A bindable that is updated to contain the star difficulty when it becomes available. May be an approximation while in an initial calculating state.</returns>
         public IBindable<StarDifficulty> GetBindableDifficulty(IBeatmapInfo beatmapInfo, CancellationToken cancellationToken = default, int computationDelay = 0)
+            => getBindableDifficulty(beatmapInfo, cancellationToken, computationDelay, usePreview: false);
+
+        internal IBindable<StarDifficulty> GetBindableDifficultyPreview(IBeatmapInfo beatmapInfo, CancellationToken cancellationToken, int computationDelay = 0)
+            => getBindableDifficulty(beatmapInfo, cancellationToken, computationDelay, usePreview: true);
+
+        private IBindable<StarDifficulty> getBindableDifficulty(IBeatmapInfo beatmapInfo, CancellationToken cancellationToken, int computationDelay, bool usePreview)
         {
-            var bindable = new BindableStarDifficulty(beatmapInfo, cancellationToken)
+            var bindable = new BindableStarDifficulty(beatmapInfo, cancellationToken, usePreview)
             {
                 // Start with the mod-adjusted star rating (cached exact value or approximation) instead of zero.
                 Value = new StarDifficulty(getEffectiveStarRating(beatmapInfo), 0)
@@ -593,6 +673,38 @@ namespace osu.Game.Beatmaps
         /// </list>
         /// </param>
         /// <param name="computationDelay">In the case a cached lookup was not possible, a value in milliseconds of to wait until performing potentially intensive lookup.</param>
+        private PerfectPerformanceLookup? createPreviewLookup(IRulesetInfo? rulesetInfo, Mod[] mods)
+            => (rulesetInfo == null || rulesetInfo is RulesetInfo { ShortName: "osu" })
+               && FilterPerformanceMods(mods).Count() == mods.Length
+                ? new PerfectPerformanceLookup(this, (RulesetInfo?)rulesetInfo, mods)
+                : null;
+
+        internal async Task<StarDifficulty?> GetDifficultyPreviewAsync(IBeatmapInfo beatmap, IRulesetInfo? ruleset, IEnumerable<Mod>? mods, CancellationToken token, int computationDelay = 0)
+        {
+            if (beatmap is not BeatmapInfo local || local.Ruleset.ShortName != "osu")
+                return await GetDifficultyAsync(beatmap, ruleset, mods, token, computationDelay).ConfigureAwait(false);
+
+            ruleset ??= local.Ruleset;
+            var orderedMods = DifficultyCacheLookup.OrderMods(mods);
+            if (ruleset is RulesetInfo localRuleset &&
+                CheckExists(DifficultyCacheLookup.FromOrderedMods(local, localRuleset, orderedMods), out var existing) &&
+                existing.HasValue)
+                return existing;
+
+            var (lookup, preview) = await Task.Factory.StartNew(() =>
+            {
+                var previewLookup = createPreviewLookup(ruleset, orderedMods);
+                return (previewLookup, previewLookup?.ReadPreview(local, loadPreset: false));
+            }, token, TaskCreationOptions.HideScheduler | TaskCreationOptions.RunContinuationsAsynchronously, updateScheduler).ConfigureAwait(false);
+            if (preview.HasValue)
+                return preview;
+
+            var difficulty = await GetDifficultyAsync(local, ruleset, orderedMods, token, computationDelay).ConfigureAwait(false);
+            if (difficulty is { DifficultyAttributes: not null } computed)
+                lookup?.RememberPreview(local, computed);
+            return difficulty;
+        }
+
         private void updateBindable(BindableStarDifficulty bindable, IRulesetInfo? rulesetInfo, IEnumerable<Mod>? mods, CancellationTokenSource linkedCancellationTokenSource, int computationDelay = 0)
         {
             // The bindable's beatmap may be replaced by Invalidate() before this completes, so report the beatmap this computation was for.
@@ -600,8 +712,10 @@ namespace osu.Game.Beatmaps
 
             // GetDifficultyAsync will fall back to existing data from IBeatmapInfo if not locally available
             // (contrary to GetAsync)
-            GetDifficultyAsync(beatmapInfo, rulesetInfo, mods, linkedCancellationTokenSource.Token, computationDelay)
-                .ContinueWith(task =>
+            var calculation = bindable.UsePreview
+                ? GetDifficultyPreviewAsync(beatmapInfo, rulesetInfo, mods, linkedCancellationTokenSource.Token, computationDelay)
+                : GetDifficultyAsync(beatmapInfo, rulesetInfo, mods, linkedCancellationTokenSource.Token, computationDelay);
+            calculation.ContinueWith(task =>
                     {
                         // We're on a threadpool thread, but we should exit back to the update thread so consumers can safely handle value-changed events.
                         Schedule(() =>
@@ -649,10 +763,16 @@ namespace osu.Game.Beatmaps
                 Debug.Assert(ruleset != null);
 
                 using var measurement = FrameProfileCapture.Measure("DifficultyCache.Calculate");
-                PlayableCachedWorkingBeatmap workingBeatmap = new PlayableCachedWorkingBeatmap(beatmapManager.GetWorkingBeatmap(key.BeatmapInfo));
+                var source = key.WorkingBeatmap?.Value ?? beatmapManager.GetWorkingBeatmap(beatmapInfo);
+                if (key.WorkingBeatmap != null && source.BeatmapInfo.Hash != beatmapInfo.Hash)
+                    return null;
+
+                var workingBeatmap = key.SharedPlayableBeatmap?.Value ?? new PlayableCachedWorkingBeatmap(source);
                 IBeatmap playableBeatmap = workingBeatmap.GetPlayableBeatmap(ruleset.RulesetInfo, key.OrderedMods, cancellationToken);
 
-                var difficulty = ruleset.CreateDifficultyCalculator(workingBeatmap).Calculate(key.OrderedMods, cancellationToken);
+                var difficultyCalculator = ruleset.CreateDifficultyCalculator(workingBeatmap);
+                difficultyCalculator.SharedSkillResults = workingBeatmap.SharedSkillResults;
+                var difficulty = difficultyCalculator.Calculate(key.OrderedMods, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var performanceCalculator = ruleset.CreatePerformanceCalculator();
@@ -723,6 +843,8 @@ namespace osu.Game.Beatmaps
             public readonly Mod[] OrderedMods;
             internal bool Background { get; init; }
             internal bool WarmupOnly { get; init; }
+            internal Lazy<WorkingBeatmap>? WorkingBeatmap { get; init; }
+            internal Lazy<PlayableCachedWorkingBeatmap>? SharedPlayableBeatmap { get; init; }
 
             public DifficultyCacheLookup(BeatmapInfo beatmapInfo, RulesetInfo? ruleset, IEnumerable<Mod>? mods)
                 : this(beatmapInfo, ruleset, OrderMods(mods))
@@ -785,6 +907,7 @@ namespace osu.Game.Beatmaps
             private readonly Mod[] flattenedMods;
             private readonly double rate;
             private readonly bool modsAffectDifficulty;
+            private readonly PerfectPerformanceLookup? previewLookup;
 
             public EffectiveStarRatingLookup(BeatmapDifficultyCache cache, IRulesetInfo? rulesetInfo, IEnumerable<Mod>? mods)
             {
@@ -805,6 +928,8 @@ namespace osu.Game.Beatmaps
                 }
 
                 orderedMods = modsAffectDifficulty ? DifficultyCacheLookup.OrderMods(mods) : Array.Empty<Mod>();
+                if (modsAffectDifficulty)
+                    previewLookup = cache.createPreviewLookup(rulesetInfo, orderedMods);
             }
 
             public double GetEffectiveStarRating(BeatmapInfo beatmapInfo)
@@ -818,7 +943,8 @@ namespace osu.Game.Beatmaps
                     && existing != null)
                     return existing.Value.Stars;
 
-                return StarRatingApproximator.Approximate(beatmapInfo, rulesetInfo, rate, flattenedMods);
+                return previewLookup?.ReadPreview(beatmapInfo, loadPreset: true)?.Stars
+                       ?? StarRatingApproximator.Approximate(beatmapInfo, rulesetInfo, rate, flattenedMods);
             }
         }
 
@@ -826,33 +952,58 @@ namespace osu.Game.Beatmaps
         {
             public IBeatmapInfo BeatmapInfo;
             public readonly CancellationToken CancellationToken;
+            public readonly bool UsePreview;
 
-            public BindableStarDifficulty(IBeatmapInfo beatmapInfo, CancellationToken cancellationToken)
+            public BindableStarDifficulty(IBeatmapInfo beatmapInfo, CancellationToken cancellationToken, bool usePreview)
             {
                 BeatmapInfo = beatmapInfo;
                 CancellationToken = cancellationToken;
+                UsePreview = usePreview;
             }
         }
 
         /// <summary>
         /// A working beatmap that caches its playable representation.
-        /// This is intended as single-use for when it is guaranteed that the playable beatmap can be reused.
         /// </summary>
-        private class PlayableCachedWorkingBeatmap : IWorkingBeatmap
+        internal sealed class PlayableCachedWorkingBeatmap : IWorkingBeatmap
         {
             private readonly IWorkingBeatmap working;
+            private readonly bool shareHidden;
+            private readonly SliderEventGenerator.EventCache? sliderEvents;
             private IBeatmap? playable;
+            private bool hiddenApplied;
 
-            public PlayableCachedWorkingBeatmap(IWorkingBeatmap working)
+            internal Dictionary<double, object>? SharedSkillResults { get; }
+
+            public PlayableCachedWorkingBeatmap(IWorkingBeatmap working, bool shareHidden = false, SliderEventGenerator.EventCache? sliderEvents = null)
             {
                 this.working = working;
+                this.shareHidden = shareHidden;
+                this.sliderEvents = sliderEvents;
+                if (shareHidden)
+                    SharedSkillResults = new Dictionary<double, object>(2);
             }
 
             public IBeatmap GetPlayableBeatmap(IRulesetInfo ruleset, IReadOnlyList<Mod> mods)
-                => playable ??= working.GetPlayableBeatmap(ruleset, mods);
+                => shareHidden ? GetPlayableBeatmap(ruleset, mods, default) : playable ??= working.GetPlayableBeatmap(ruleset, mods);
 
             public IBeatmap GetPlayableBeatmap(IRulesetInfo ruleset, IReadOnlyList<Mod> mods, CancellationToken cancellationToken)
-                => playable ??= working.GetPlayableBeatmap(ruleset, mods, cancellationToken);
+            {
+                if (playable == null)
+                {
+                    using var scope = new SliderEventGenerator.CacheScope(sliderEvents);
+                    playable = working.GetPlayableBeatmap(ruleset, mods, cancellationToken);
+                    hiddenApplied = shareHidden && mods.Any(mod => mod is ModHidden);
+                }
+                else if (shareHidden && !hiddenApplied && mods.OfType<ModHidden>().FirstOrDefault() is { } hidden)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    hidden.ApplyToBeatmap(playable);
+                    hiddenApplied = true;
+                }
+
+                return playable;
+            }
 
             IBeatmapInfo IWorkingBeatmap.BeatmapInfo => working.BeatmapInfo;
             bool IWorkingBeatmap.BeatmapLoaded => working.BeatmapLoaded;

@@ -123,7 +123,7 @@ namespace osu.Game.Database
                 Logger.Log("Finished background data store processing!");
 
                 if (t.IsCompletedSuccessfully && performanceWarmup != null && currentDifficultyVersions.TryGetValue("osu", out int version))
-                    Schedule(() => performanceWarmup.StartAutomatic(version, storage.GetFullPath(".")));
+                    Schedule(() => performanceWarmup.StartAutomatic(version, storage.GetFullPath("."), notificationOverlay));
             });
         }
 

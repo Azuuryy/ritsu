@@ -512,8 +512,6 @@ namespace osu.Game.Screens.Select
             base.HandleFilterCompleted();
             PerformanceProgressChanged?.Invoke();
 
-            attemptSelectSingleFilteredResult();
-
             if (CurrentSelection is GroupedBeatmap selection)
             {
                 // Check whether the selection-group mapping is still valid post-filter.
@@ -531,6 +529,8 @@ namespace osu.Game.Screens.Select
                         CurrentSelection = newSelection;
                 }
             }
+
+            attemptSelectSingleFilteredResult();
 
             // Transfer the previous flag states across to the new models.
             if (ExpandedBeatmapSet != null) setExpandedSet(ExpandedBeatmapSet);

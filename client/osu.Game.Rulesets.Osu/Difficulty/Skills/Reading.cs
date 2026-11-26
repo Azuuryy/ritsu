@@ -19,10 +19,17 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
         private readonly List<DifficultyHitObject> objectList = new List<DifficultyHitObject>();
 
         private readonly bool hasHiddenMod;
+        private readonly ReadingEvaluator.Visibility[]? sharedVisibility;
 
         public Reading(Mod[] mods)
+            : this(mods, null)
+        {
+        }
+
+        internal Reading(Mod[] mods, ReadingEvaluator.Visibility[]? sharedVisibility)
             : base(mods)
         {
+            this.sharedVisibility = sharedVisibility;
             hasHiddenMod = mods.OfType<OsuModHidden>().Any(m => !m.OnlyFadeApproachCircles.Value);
         }
 
@@ -47,7 +54,7 @@ namespace osu.Game.Rulesets.Osu.Difficulty.Skills
 
         private double calculateModAdjustedDifficulty(DifficultyHitObject current)
         {
-            double difficulty = ReadingEvaluator.EvaluateDifficultyOf(current, hasHiddenMod);
+            double difficulty = ReadingEvaluator.EvaluateDifficultyOf(current, hasHiddenMod, sharedVisibility);
 
             if (Mods.Any(m => m is OsuModTouchDevice))
                 difficulty = Math.Pow(difficulty, 0.89);

@@ -82,6 +82,14 @@ namespace osu.Game.Overlays.Settings.Sections
                     }
                 },
                 new SkinFavouriteButton(),
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = "Show hit circle numbers",
+                    Current = config.GetBindable<bool>(OsuSetting.ShowHitCircleNumbers),
+                })
+                {
+                    Keywords = new[] { "skin", "numbers", "circles", "slider heads" },
+                },
                 new SettingsButtonV2
                 {
                     Text = SkinSettingsStrings.SkinLayoutEditor,

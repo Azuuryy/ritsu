@@ -25,6 +25,16 @@ namespace osu.Game.Tests.Visual.SongSelect
         }
 
         [Test]
+        public void SpacingOvertimeSettingsGetTheirOwnCacheKey()
+        {
+            Mod[] mods = { new OsuModSpacingOvertime() };
+            string defaultKey = BeatmapDifficultyCache.CreatePerfectPerformanceModKey(mods);
+            Assert.That(defaultKey, Is.Not.EqualTo(BeatmapDifficultyCache.CreatePerfectPerformanceModKey(null)));
+            ((OsuModSpacingOvertime)mods[0]).EndSpacing.Value = 2.5f;
+            Assert.That(BeatmapDifficultyCache.CreatePerfectPerformanceModKey(mods), Is.Not.EqualTo(defaultKey));
+        }
+
+        [Test]
         public void CacheSurvivesReopenAndSeparatesConfigurations()
         {
             using var storage = new TemporaryNativeStorage("ritsu-perfect-pp-test");

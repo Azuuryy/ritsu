@@ -1,12 +1,17 @@
 // Copyright (c) 2026 Ritsu contributors. Licensed under the MIT Licence.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using NUnit.Framework;
 using osu.Framework.Testing;
 using osu.Game.Commands;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Osu;
+using osu.Game.Rulesets.Osu.Mods;
+using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.Taiko;
 using osu.Game.Tests.Visual;
 
@@ -37,6 +42,11 @@ namespace osu.Game.Tests.Visual.Navigation
             AddUntilStep("accuracy updates from the edited judgement", () =>
                 field("Target accuracy") is { } accuracy && accuracy.PlaceholderText.ToString() != perfectAccuracy);
 
+            AddStep("use Stable scoring", () => screen.ToggleStableScoring());
+            AddUntilStep("keep the entered miss in Stable", () => field("Miss")?.Text == "1");
+            AddStep("return to Lazer scoring", () => screen.ToggleStableScoring());
+            AddUntilStep("keep the entered miss in Lazer", () => field("Miss")?.Text == "1");
+
             AddStep("reset to perfect with F2", () => InputManager.Key(osuTK.Input.Key.F2));
             AddUntilStep("restore the perfect score", () => field("Target accuracy")?.PlaceholderText.ToString() == perfectAccuracy);
             AddStep("open mods with F1", () => InputManager.Key(osuTK.Input.Key.F1));
@@ -48,6 +58,32 @@ namespace osu.Game.Tests.Visual.Navigation
             AddUntilStep("judgements follow the selected ruleset", () => field("Ok") != null && field("100") == null);
 
             OsuTextBox? field(string name) => screen.ChildrenOfType<OsuTextBox>().SingleOrDefault(input => input.Name == name);
+        }
+
+        [Test]
+        public void TestStableUsesClassicJudgementsAndKeepsSelectedMods()
+        {
+            AddStep("compare Stable and Lazer simulation", () =>
+            {
+                var ruleset = new OsuRuleset().RulesetInfo;
+                var map = CreateWorkingBeatmap(ruleset);
+                Mod[] mods = { new OsuModHidden() };
+                var judgements = new Dictionary<HitResult, int> { [HitResult.Ok] = 1 };
+                using var stable = new RitsuSimulation(map, ruleset, mods, CancellationToken.None, stableScoring: true);
+                using var lazer = new RitsuSimulation(map, ruleset, mods, CancellationToken.None);
+
+                var stableScore = stable.Calculate(judgements, null, null);
+                var lazerScore = lazer.Calculate(judgements, null, null);
+
+                Assert.That(stableScore.IsLegacyScore, Is.True);
+                Assert.That(lazerScore.IsLegacyScore, Is.False);
+                Assert.That(stableScore.Mods.OfType<OsuModClassic>().Single().NoSliderHeadAccuracy.Value, Is.True);
+                Assert.That(stableScore.Mods.OfType<OsuModHidden>().Count(), Is.EqualTo(1));
+                Assert.That(lazerScore.Mods.OfType<OsuModClassic>(), Is.Empty);
+                Assert.That(stable.Groups.SelectMany(group => group.Editable), Does.Not.Contain(HitResult.LargeTickMiss));
+                Assert.That(stableScore.Statistics[HitResult.Ok], Is.EqualTo(1));
+                Assert.That(stableScore.PP, Is.GreaterThan(0));
+            });
         }
     }
 }

@@ -726,7 +726,10 @@ namespace osu.Game.Tests.Visual.SongSelect
             ImportBeatmapForRuleset(0);
             LoadSongSelect();
             applyDifficultyCriterion(DifficultyCriterion.Sort);
+            applyDifficultyCriterion(DifficultyCriterion.Group);
             Guid setId = Guid.Empty;
+            Guid difficultyId = Guid.Empty;
+            GroupDefinition? originalGroup = null;
             AddStep("scope selected set", () =>
             {
                 var set = Beatmap.Value.BeatmapInfo.BeatmapSet!;
@@ -734,11 +737,29 @@ namespace osu.Game.Tests.Visual.SongSelect
                 SongSelect.ScopeToBeatmapSet(set);
             });
             WaitForFiltering();
-            ChangeMods(new OsuModDoubleTime());
+            AddStep("select the last difficulty in the scoped view", () =>
+            {
+                var selected = Carousel.GetCarouselItems()!.Select(item => item.Model).OfType<GroupedBeatmap>().Last();
+                difficultyId = selected.Beatmap.ID;
+                originalGroup = selected.Group;
+                Assert.That(originalGroup, Is.Not.Null);
+                Beatmap.Value = Beatmaps.GetWorkingBeatmap(selected.Beatmap);
+                Carousel.CurrentGroupedBeatmap = selected;
+            });
+            ChangeMods(new OsuModDoubleTime { SpeedChange = { Value = 2 } });
+            AddUntilStep("Double Time moves the difficulty to another star group", () => !SongSelect.IsFiltering &&
+                Carousel.GetCarouselItems()!.Select(item => item.Model).OfType<GroupedBeatmap>()
+                        .Any(beatmap => beatmap.Beatmap.ID == difficultyId && beatmap.Group is { } group && !group.Equals(originalGroup)));
+            AddAssert("Double Time keeps the selected difficulty", () => Beatmap.Value.BeatmapInfo.ID, () => Is.EqualTo(difficultyId));
+            AddAssert("the carousel keeps the selected difficulty", () => Carousel.CurrentBeatmap?.ID, () => Is.EqualTo(difficultyId));
             AddAssert("mod toggle keeps the set", () => SongSelect.ScopedBeatmapSet.Value?.ID, () => Is.EqualTo(setId));
             changeModSetting("change rate", () => selectedDoubleTime.SpeedChange.Value = 1.25);
+            WaitForFiltering();
+            AddAssert("rate change keeps the selected difficulty", () => Beatmap.Value.BeatmapInfo.ID, () => Is.EqualTo(difficultyId));
             AddAssert("rate change keeps the set", () => SongSelect.ScopedBeatmapSet.Value?.ID, () => Is.EqualTo(setId));
             ChangeMods();
+            WaitForFiltering();
+            AddAssert("removing the mod keeps the selected difficulty", () => Beatmap.Value.BeatmapInfo.ID, () => Is.EqualTo(difficultyId));
             AddAssert("removing the mod keeps the set", () => SongSelect.ScopedBeatmapSet.Value?.ID, () => Is.EqualTo(setId));
             AddStep("go back", () => SongSelect.UnscopeBeatmapSet());
             WaitForFiltering();
